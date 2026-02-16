@@ -1,19 +1,5 @@
-import { spawn } from "node:child_process";
 import { log, logError } from "./logger.js";
-
-function runCommand(command: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
-  return new Promise((resolve) => {
-    const proc = spawn(command, args);
-    let stdout = "";
-    let stderr = "";
-    proc.stdout.on("data", (d) => (stdout += d));
-    proc.stderr.on("data", (d) => (stderr += d));
-    proc.on("error", (err) => {
-      resolve({ code: 1, stdout, stderr: stderr || err.message });
-    });
-    proc.on("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
-  });
-}
+import { runCommand } from "./utils.js";
 
 export async function checkPrerequisites(): Promise<void> {
   // Check claude CLI
