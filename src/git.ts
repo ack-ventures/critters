@@ -85,6 +85,12 @@ export async function commitFile(
   if (addResult.code !== 0) {
     throw new Error(`git add failed for ${filePath}: ${addResult.stderr}`);
   }
+  // Check if anything is actually staged (handles already-committed case)
+  const diffResult = await run(["diff", "--cached", "--quiet"], workDir);
+  if (diffResult.code === 0) {
+    logTask(identifier, `Nothing to commit for ${filePath}, skipping`);
+    return;
+  }
   const commitResult = await run(["commit", "-m", message], workDir);
   if (commitResult.code !== 0) {
     throw new Error(`git commit failed: ${commitResult.stderr}`);
