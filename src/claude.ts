@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { writeFileSync, readFileSync, existsSync } from "fs";
+import { writeFileSync, readFileSync, existsSync, chmodSync } from "fs";
 import type { SpawnResult } from "./types.js";
 import { logTask, logTaskError } from "./logger.js";
 import { sleep } from "./utils.js";
@@ -16,33 +16,34 @@ export async function spawnClaude(
   signal?: AbortSignal,
 ): Promise<SpawnResult> {
   const windowName = `${identifier}-${phase}`;
-  const promptFile = `${workDir}/.critter-prompt`;
+  const promptFile = `${workDir}/.critter-prompt-${phase}`;
   const exitCodeFile = `${workDir}/.critter-exit-code-${phase}`;
   const logFile = `${workDir}/.critter-log-${phase}`;
+  const scriptFile = `${workDir}/.critter-run-${phase}.sh`;
 
   // Write prompt to file to avoid shell quoting issues
   writeFileSync(promptFile, prompt);
 
-  // Build the command that runs inside the tmux window
-  const claudeCmd = [
-    `cd ${shellEscape(workDir)}`,
-    [
-      "claude",
-      "-p", `"$(cat ${shellEscape(promptFile)})"`,
-      "--model", "opus",
-      "--allowedTools", `"${allowedTools.join(",")}"`,
-      "--max-turns", String(maxTurns),
-    ].join(" "),
-  ].join(" && ");
+  // Write a bash script that runs claude and captures the exit code
+  const script = `#!/bin/bash
+export PATH="$HOME/.bun/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+cd ${shellEscape(workDir)}
+claude -p "$(cat ${shellEscape(promptFile)})" \\
+  --model opus \\
+  --allowedTools ${shellEscape(allowedTools.join(","))} \\
+  --max-turns ${maxTurns} \\
+  2>&1 | tee ${shellEscape(logFile)}
+echo \${PIPESTATUS[0]} > ${shellEscape(exitCodeFile)}
+`;
 
-  // Wrap: run claude, capture exit code, tee output to log
-  const wrappedCmd = `{ ${claudeCmd} ; } 2>&1 | tee ${shellEscape(logFile)}; echo \${PIPESTATUS[0]} > ${shellEscape(exitCodeFile)}`;
+  writeFileSync(scriptFile, script);
+  chmodSync(scriptFile, 0o755);
 
   logTask(identifier, `Spawning Claude in tmux window "${windowName}" (${phase})`);
 
-  // Create tmux window
+  // Create tmux window running the bash script
   const tmuxResult = await runCommand("tmux", [
-    "new-window", "-t", TMUX_SESSION, "-n", windowName, wrappedCmd,
+    "new-window", "-t", TMUX_SESSION, "-n", windowName, `/bin/bash ${scriptFile}`,
   ]);
 
   if (tmuxResult.code !== 0) {
@@ -55,7 +56,6 @@ export async function spawnClaude(
   while (!existsSync(exitCodeFile)) {
     if (signal?.aborted) {
       timedOut = true;
-      // Kill the tmux window
       await runCommand("tmux", ["kill-window", "-t", `${TMUX_SESSION}:${windowName}`]);
       break;
     }
