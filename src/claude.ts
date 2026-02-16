@@ -206,6 +206,70 @@ function parseClaudeJsonLog(filePath: string, identifier: string): { numTurns?: 
   return {};
 }
 
+export async function spawnClaudeSubprocess(
+  prompt: string,
+  allowedTools: string[],
+  workDir: string,
+  maxTurns: number,
+  identifier: string,
+  phase: string,
+  signal?: AbortSignal,
+): Promise<SpawnResult> {
+  const promptFile = `${workDir}/.critter-prompt-${phase}`;
+  const jsonLogFile = `${workDir}/.critter-output-${phase}.json`;
+  const errLog = `${workDir}/.critter-err-${phase}.log`;
+
+  // Write prompt to file (avoids ARG_MAX limits for large prompts)
+  writeFileSync(promptFile, prompt);
+
+  logTask(identifier, `Spawning Claude subprocess (${phase})`);
+
+  const currentPath = process.env.PATH || "/usr/local/bin:/usr/bin:/bin";
+  const bashCmd = [
+    `export PATH="$HOME/.bun/bin:$HOME/.local/bin:${currentPath}"`,
+    "unset CLAUDECODE",
+    `cd ${shellEscape(workDir)}`,
+    `claude -p "$(cat ${shellEscape(promptFile)})"` +
+      ` --model opus` +
+      ` --allowedTools ${shellEscape(allowedTools.join(","))}` +
+      ` --max-turns ${maxTurns}` +
+      ` --verbose` +
+      ` --output-format stream-json` +
+      ` 2>${shellEscape(errLog)}` +
+      ` >${shellEscape(jsonLogFile)}`,
+  ].join("\n");
+
+  const proc = Bun.spawn(["/bin/bash", "-c", bashCmd], {
+    cwd: workDir,
+    stdout: "ignore",
+    stderr: "ignore",
+  });
+
+  const onAbort = () => proc.kill();
+  signal?.addEventListener("abort", onAbort, { once: true });
+
+  let timedOut = false;
+  const exitCode = await proc.exited;
+
+  if (signal?.aborted) {
+    timedOut = true;
+  }
+
+  signal?.removeEventListener("abort", onAbort);
+
+  const { numTurns, inputTokens, outputTokens, cacheReadTokens, costUsd } = parseClaudeJsonLog(jsonLogFile, identifier);
+
+  // Read stderr for error reporting
+  let stderr = "";
+  if (existsSync(errLog)) {
+    try {
+      stderr = readFileSync(errLog, "utf-8");
+    } catch {}
+  }
+
+  return { exitCode, stdout: "", stderr, timedOut, numTurns, inputTokens, outputTokens, cacheReadTokens, costUsd };
+}
+
 function shellEscape(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
 }

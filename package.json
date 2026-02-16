@@ -2,6 +2,9 @@
   "name": "critters",
   "version": "0.1.0",
   "private": true,
+  "bin": {
+    "critters": "src/index.ts"
+  },
   "type": "module",
   "scripts": {
     "start": "bun run src/index.ts",
