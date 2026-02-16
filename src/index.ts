@@ -30,6 +30,7 @@ async function main() {
   // Create spawner + cleanup stale work dirs
   const spawner = new Spawner(config, teamStatuses);
   spawner.cleanupStale();
+  spawner.startPeriodicCleanup();
   log("Cleaned up stale work directories");
 
   // Create watcher
