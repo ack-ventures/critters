@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { spawnClaude } from "./claude.js";
 import {
@@ -21,7 +20,7 @@ import {
 } from "./prompt.js";
 import { formatFailure, formatSuccess, sendSlackNotification } from "./slack.js";
 import type { Config, CritterResult, CritterTask, TeamStatuses } from "./types.js";
-import { branchName, formatDuration, formatPhaseStats, tailLines } from "./utils.js";
+import { branchName, formatDuration, formatPhaseStats, runCommand, sleep, tailLines } from "./utils.js";
 
 interface QueuedTask {
   task: CritterTask;
@@ -302,28 +301,35 @@ async function detectPr(
   branch: string,
   identifier: string,
 ): Promise<string | null> {
-  return new Promise((resolve) => {
-    const proc = spawn("gh", ["pr", "list", "--head", branch, "--json", "url", "--limit", "1"], {
-      cwd: workDir,
-    });
-    let stdout = "";
-    proc.stdout.on("data", (d) => (stdout += d));
-    proc.on("close", (code) => {
-      if (code !== 0) {
-        logTaskError(identifier, "gh pr list failed");
-        resolve(null);
-        return;
-      }
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY_MS = 3000;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const { code, stdout, stderr } = await runCommand(
+      "gh",
+      ["pr", "list", "--head", branch, "--json", "url", "--limit", "1"],
+      { cwd: workDir },
+    );
+
+    if (code !== 0) {
+      logTaskError(identifier, `gh pr list failed (attempt ${attempt}/${MAX_RETRIES}): ${stderr}`);
+    } else {
       try {
         const prs = JSON.parse(stdout);
         if (prs.length > 0) {
-          resolve(prs[0].url);
-        } else {
-          resolve(null);
+          return prs[0].url;
         }
       } catch {
-        resolve(null);
+        logTaskError(identifier, `Failed to parse gh pr list output: ${stdout}`);
       }
-    });
-  });
+    }
+
+    if (attempt < MAX_RETRIES) {
+      logTask(identifier, `PR not found yet, retrying in ${RETRY_DELAY_MS / 1000}s (attempt ${attempt}/${MAX_RETRIES})`);
+      await sleep(RETRY_DELAY_MS);
+    }
+  }
+
+  logTaskError(identifier, `PR not detected after ${MAX_RETRIES} attempts`);
+  return null;
 }
