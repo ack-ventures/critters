@@ -24,6 +24,7 @@ export interface Config {
   defaultAllowedTools: string[];
   repos: Record<string, RepoConfig>;
   teamRepos: Record<string, string>;
+  tmuxSession: string;
   linearApiKey: string;
   slackWebhookUrl?: string;
 }

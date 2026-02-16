@@ -7,8 +7,6 @@ import { runCommand, sleep } from "./utils.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const TMUX_SESSION = "critters";
-
 // Rotating colors for critter panes — each critter gets a distinct look
 const PANE_COLORS = [
   { bg: "colour17",  fg: "colour39",  label: "\x1b[1;36m" },  // deep blue bg, cyan text
@@ -25,6 +23,7 @@ export async function spawnClaude(
   maxTurns: number,
   identifier: string,
   phase: string,
+  tmuxSession: string,
   signal?: AbortSignal,
 ): Promise<SpawnResult> {
   const windowName = `${identifier}-${phase}`;
@@ -45,9 +44,10 @@ export async function spawnClaude(
   const errLog = `${workDir}/.critter-err-${phase}.log`;
 
   // Write a bash script that streams Claude's output via stream-json + jq
+  const currentPath = process.env.PATH || "/usr/local/bin:/usr/bin:/bin";
   const script = `#!/bin/bash
 set -o pipefail
-export PATH="$HOME/.bun/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+export PATH="$HOME/.bun/bin:$HOME/.local/bin:${currentPath}"
 unset CLAUDECODE
 echo -e "${color.label}━━━ ${identifier} / ${phase} ━━━${reset}"
 echo ""
@@ -77,9 +77,20 @@ sleep 5
 
   logTask(identifier, `Spawning Claude in tmux pane "${windowName}" (${phase})`);
 
+  // Ensure tmux session exists
+  const checkSession = await runCommand("tmux", ["has-session", "-t", tmuxSession]);
+  if (checkSession.code !== 0) {
+    logTask(identifier, `tmux session "${tmuxSession}" not found, creating it`);
+    const createResult = await runCommand("tmux", ["new-session", "-d", "-s", tmuxSession]);
+    if (createResult.code !== 0) {
+      logTaskError(identifier, `Failed to create tmux session: ${createResult.stderr}`);
+      return { exitCode: 1, stdout: "", stderr: createResult.stderr, timedOut: false };
+    }
+  }
+
   // Split a new pane in the critters session for this critter
   const tmuxResult = await runCommand("tmux", [
-    "split-window", "-t", TMUX_SESSION, "-h", "-d",
+    "split-window", "-t", tmuxSession, "-h", "-d",
     "-P", "-F", "#{pane_id}",
     `/bin/bash ${scriptFile}`,
   ]);
@@ -90,7 +101,7 @@ sleep 5
   }
 
   // Apply main-horizontal layout so the watcher stays on top
-  await runCommand("tmux", ["select-layout", "-t", TMUX_SESSION, "main-horizontal"]).catch(() => {});
+  await runCommand("tmux", ["select-layout", "-t", tmuxSession, "main-horizontal"]).catch(() => {});
 
   const paneId = tmuxResult.stdout.trim();
 

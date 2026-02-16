@@ -13,12 +13,12 @@ async function main() {
   // Verify required CLI tools are available
   await checkPrerequisites();
 
-  // Enable pane titles in the tmux session (best-effort — may fail if not running in tmux)
-  await runCommand("tmux", ["set", "-t", "critters", "pane-border-status", "top"]).catch(() => {});
-  await runCommand("tmux", ["set", "-t", "critters", "pane-border-format", "#{pane_title}"]).catch(() => {});
-
   // Load config
   const config = loadConfig();
+
+  // Enable pane titles in the tmux session (best-effort — may fail if not running in tmux)
+  await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-status", "top"]).catch(() => {});
+  await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-format", "#{pane_title}"]).catch(() => {});
   log(`Config loaded: concurrency=${config.concurrency}, timeout=${config.timeoutMinutes}min, poll=${config.pollIntervalSeconds}s`);
 
   // Init Linear client
