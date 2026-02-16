@@ -56,12 +56,13 @@ export function formatTokenCount(tokens: number): string {
   return `${tokens}`;
 }
 
-export function formatPhaseStats(result: { numTurns?: number; inputTokens?: number; outputTokens?: number; cacheReadTokens?: number }): string {
+export function formatPhaseStats(result: { numTurns?: number; inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; costUsd?: number }): string {
   if (result.numTurns == null) return "";
   const parts: string[] = [];
   if (result.inputTokens != null) parts.push(`${formatTokenCount(result.inputTokens)} in`);
   if (result.outputTokens != null) parts.push(`${formatTokenCount(result.outputTokens)} out`);
   if (result.cacheReadTokens != null) parts.push(`${formatTokenCount(result.cacheReadTokens)} cached`);
   const tokens = parts.length > 0 ? `, ${parts.join(" / ")}` : "";
-  return ` (${result.numTurns} turns${tokens})`;
+  const cost = result.costUsd != null ? `, $${result.costUsd.toFixed(2)}` : "";
+  return ` (${result.numTurns} turns${tokens}${cost})`;
 }

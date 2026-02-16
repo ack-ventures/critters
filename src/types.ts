@@ -45,6 +45,7 @@ export interface SpawnResult {
   inputTokens?: number;
   outputTokens?: number;
   cacheReadTokens?: number;
+  costUsd?: number;
 }
 
 export interface CritterResult {
