@@ -1,0 +1,31 @@
+pollIntervalSeconds: 30
+concurrency: 2
+timeoutMinutes: 30
+workDir: /tmp/critters-work
+triggerLabel: "Critter"
+maxTurns: 50
+
+defaultAllowedTools:
+  - "Read"
+  - "Write"
+  - "Edit"
+  - "Glob"
+  - "Grep"
+  - "Bash(git:*)"
+  - "Bash(gh:*)"
+  - "Bash(npm:*)"
+  - "Bash(npx:*)"
+  - "Bash(node:*)"
+  - "Bash(tsc:*)"
+  - "Bash(ls:*)"
+  - "Bash(mkdir:*)"
+
+repos:
+  # Linear project ID → repo config
+  # "project-uuid-1":
+  #   url: "git@github.com:ackventures/some-repo.git"
+  #   extraAllowedTools: ["Bash(poetry:*)"]
+
+teamRepos:
+  # Fallback: Linear team ID → repo URL
+  # "a1f75c61-6db2-41fb-a5c3-988d9d2d82dd": "git@github.com:ackventures/default-repo.git"

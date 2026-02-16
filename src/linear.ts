@@ -1,0 +1,118 @@
+import { LinearClient } from "@linear/sdk";
+import type { Config, CritterTask, TeamStatuses } from "./types.js";
+import { log, logError } from "./logger.js";
+
+let client: LinearClient;
+
+export function initLinear(config: Config): void {
+  client = new LinearClient({ apiKey: config.linearApiKey });
+}
+
+export function getClient(): LinearClient {
+  return client;
+}
+
+export async function ensureLabel(labelName: string): Promise<string> {
+  const labels = await client.issueLabels({
+    filter: { name: { eq: labelName } },
+  });
+
+  if (labels.nodes.length > 0) {
+    log(`Label "${labelName}" already exists`);
+    return labels.nodes[0].id;
+  }
+
+  log(`Creating label "${labelName}"...`);
+  const result = await client.createIssueLabel({
+    name: labelName,
+    color: "#8B5CF6",
+  });
+  const label = await result.issueLabel;
+  if (!label) throw new Error(`Failed to create label "${labelName}"`);
+  log(`Created label "${labelName}" (${label.id})`);
+  return label.id;
+}
+
+export async function loadTeamStatuses(): Promise<TeamStatuses> {
+  const teamStatuses: TeamStatuses = {};
+  const teams = await client.teams();
+
+  for (const team of teams.nodes) {
+    const states = await team.states();
+    const map: Record<string, string> = {};
+    for (const state of states.nodes) {
+      map[state.name] = state.id;
+    }
+    teamStatuses[team.id] = map;
+    log(`Loaded ${states.nodes.length} statuses for team ${team.name} (${team.key})`);
+  }
+
+  return teamStatuses;
+}
+
+export async function ensureCritterFailedStatus(teamStatuses: TeamStatuses): Promise<TeamStatuses> {
+  const teams = await client.teams();
+
+  for (const team of teams.nodes) {
+    if (!teamStatuses[team.id]?.["Critter Failed"]) {
+      log(`Creating "Critter Failed" status for team ${team.name}...`);
+      const result = await client.createWorkflowState({
+        teamId: team.id,
+        name: "Critter Failed",
+        type: "started",
+        color: "#EF4444",
+      });
+      const state = await result.workflowState;
+      if (state) {
+        if (!teamStatuses[team.id]) teamStatuses[team.id] = {};
+        teamStatuses[team.id]["Critter Failed"] = state.id;
+        log(`Created "Critter Failed" status for team ${team.name}`);
+      }
+    }
+  }
+
+  return teamStatuses;
+}
+
+export async function findCritterIssues(triggerLabel: string): Promise<CritterTask[]> {
+  const issues = await client.issues({
+    filter: {
+      labels: { some: { name: { eq: triggerLabel } } },
+      state: { type: { eq: "unstarted" } },
+    },
+    first: 20,
+  });
+
+  const tasks: CritterTask[] = [];
+  for (const issue of issues.nodes) {
+    const team = await issue.team;
+    const project = await issue.project;
+    if (!team) continue;
+
+    tasks.push({
+      issueId: issue.id,
+      identifier: issue.identifier,
+      title: issue.title,
+      description: issue.description ?? "",
+      repoUrl: "",
+      teamId: team.id,
+      projectId: project?.id,
+    });
+  }
+
+  return tasks;
+}
+
+export async function updateIssueStatus(
+  issueId: string,
+  statusId: string,
+): Promise<void> {
+  await client.updateIssue(issueId, { stateId: statusId });
+}
+
+export async function commentOnIssue(
+  issueId: string,
+  body: string,
+): Promise<void> {
+  await client.createComment({ issueId, body });
+}
