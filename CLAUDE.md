@@ -20,7 +20,7 @@ TypeScript daemon that watches Linear for issues labeled "Critter", spawns Claud
 
 ```
 Linear (issues with "Critter" label in "Todo")
-    │  ← polls every 30s
+    │  ← polls every 120s
     ▼
   Watcher (src/watcher.ts)
     │  → dedup by issue ID, resolve repo URL
@@ -48,13 +48,13 @@ Optional but recommended:
 - **Project**: assign to the relevant Linear project
 - Put implementation guidance in the description — the critter reads it as its task spec
 
-The watcher picks up matching issues every 30 seconds. Once picked up, status moves to "In Progress" → "In Review" (on PR) or "Critter Failed" (on error).
+The watcher picks up matching issues every 120 seconds. Once picked up, status moves to "In Progress" → "In Review" (on PR) or "Critter Failed" (on error).
 
 ## Config (`critters.config.yaml`)
 
 | Field | Default | Description |
 |---|---|---|
-| `pollIntervalSeconds` | 30 | How often to poll Linear |
+| `pollIntervalSeconds` | 120 | How often to poll Linear |
 | `concurrency` | 2 | Max parallel critters |
 | `timeoutMinutes` | 30 | Total timeout per task (both phases) |
 | `workDir` | /tmp/critters-work | Temp clone directory |
