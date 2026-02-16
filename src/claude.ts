@@ -94,6 +94,9 @@ sleep 5
 
   const paneId = tmuxResult.stdout.trim();
 
+  // Label the pane so it's identifiable in the tmux UI
+  await runCommand("tmux", ["select-pane", "-t", paneId, "-T", windowName]);
+
   // Poll for completion
   let timedOut = false;
   while (!existsSync(exitCodeFile)) {

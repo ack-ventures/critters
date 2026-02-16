@@ -3,6 +3,7 @@ import { ensureCritterFailedStatus, ensureLabel, initLinear, loadTeamStatuses } 
 import { log, logError } from "./logger.js";
 import { checkPrerequisites } from "./prerequisites.js";
 import { Spawner } from "./spawner.js";
+import { runCommand } from "./utils.js";
 import { Watcher } from "./watcher.js";
 
 async function main() {
@@ -11,6 +12,10 @@ async function main() {
 
   // Verify required CLI tools are available
   await checkPrerequisites();
+
+  // Enable pane titles in the tmux session (best-effort — may fail if not running in tmux)
+  await runCommand("tmux", ["set", "-t", "critters", "pane-border-status", "top"]).catch(() => {});
+  await runCommand("tmux", ["set", "-t", "critters", "pane-border-format", "#{pane_title}"]).catch(() => {});
 
   // Load config
   const config = loadConfig();
