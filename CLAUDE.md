@@ -13,4 +13,5 @@ TypeScript daemon that watches Linear for issues labeled "Critter", spawns Claud
 - No default exports — use named exports
 - Use `console` via `src/logger.ts` wrapper (timestamped)
 - Config loaded from `critters.config.yaml` + `.env`
-- Run with `bun run src/index.ts`
+- Run with `bun run start` (or `bun run src/index.ts`)
+- Dev mode with hot reload: `bun run dev`
