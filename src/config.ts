@@ -31,7 +31,7 @@ export function loadConfig(configPath = "critters.config.yaml"): Config {
     }
   }
 
-  return {
+  const config: Config = {
     pollIntervalSeconds: (yaml.pollIntervalSeconds as number) ?? 30,
     concurrency: (yaml.concurrency as number) ?? 2,
     timeoutMinutes: (yaml.timeoutMinutes as number) ?? 30,
@@ -45,4 +45,25 @@ export function loadConfig(configPath = "critters.config.yaml"): Config {
     linearApiKey,
     slackWebhookUrl,
   };
+
+  validateConfig(config);
+  return config;
+}
+
+function validateConfig(config: Config): void {
+  if (config.concurrency < 1) {
+    throw new Error(`Invalid config: concurrency must be >= 1, got ${config.concurrency}`);
+  }
+  if (config.timeoutMinutes <= 0) {
+    throw new Error(`Invalid config: timeoutMinutes must be > 0, got ${config.timeoutMinutes}`);
+  }
+  if (config.pollIntervalSeconds < 5) {
+    throw new Error(`Invalid config: pollIntervalSeconds must be >= 5, got ${config.pollIntervalSeconds}`);
+  }
+  if (config.maxPlanningTurns <= 0) {
+    throw new Error(`Invalid config: maxPlanningTurns must be > 0, got ${config.maxPlanningTurns}`);
+  }
+  if (config.maxExecutionTurns <= 0) {
+    throw new Error(`Invalid config: maxExecutionTurns must be > 0, got ${config.maxExecutionTurns}`);
+  }
 }
