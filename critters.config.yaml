@@ -1,4 +1,4 @@
-pollIntervalSeconds: 30
+pollIntervalSeconds: 120
 concurrency: 5
 timeoutMinutes: 30
 workDir: /tmp/critters-work
