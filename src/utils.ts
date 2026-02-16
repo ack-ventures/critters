@@ -12,7 +12,7 @@ export function runCommand(
     proc.stdout?.on("data", (d) => (stdout += d));
     proc.stderr?.on("data", (d) => (stderr += d));
     proc.on("error", (err) => {
-      resolve({ code: 1, stdout, stderr: stderr || err.message });
+      resolve({ code: 1, stdout, stderr: stderr ? `${stderr}\n${err.message}` : err.message });
     });
     proc.on("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
   });
