@@ -19,12 +19,14 @@ export async function spawnClaude(
   const promptFile = `${workDir}/.critter-prompt-${phase}`;
   const exitCodeFile = `${workDir}/.critter-exit-code-${phase}`;
   const scriptFile = `${workDir}/.critter-run-${phase}.sh`;
+  const jsonLogFile = `${workDir}/.critter-output-${phase}.json`;
 
   // Write prompt to file to avoid shell quoting issues
   writeFileSync(promptFile, prompt);
 
   // Write a bash script that runs claude directly with TTY
   const script = `#!/bin/bash
+set -o pipefail
 export PATH="$HOME/.bun/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 echo "=== Critter ${identifier} (${phase}) ==="
 echo "Working in: ${workDir}"
@@ -34,8 +36,9 @@ cd ${shellEscape(workDir)}
 claude -p "$(cat ${shellEscape(promptFile)})" \\
   --model opus \\
   --allowedTools ${shellEscape(allowedTools.join(","))} \\
-  --max-turns ${maxTurns}
-EXIT_CODE=$?
+  --max-turns ${maxTurns} \\
+  --output-format stream-json | tee ${shellEscape(jsonLogFile)}
+EXIT_CODE=\${PIPESTATUS[0]}
 echo $EXIT_CODE > ${shellEscape(exitCodeFile)}
 echo ""
 echo "=== Claude exited with code $EXIT_CODE ==="
@@ -84,7 +87,38 @@ sleep 5
   // Clean up the pane (it may already be gone after the script exits)
   await runCommand("tmux", ["kill-pane", "-t", paneId]).catch(() => {});
 
-  return { exitCode, stdout: "", stderr: "", timedOut };
+  const { numTurns, totalTokens } = parseClaudeJsonLog(jsonLogFile);
+
+  return { exitCode, stdout: "", stderr: "", timedOut, numTurns, totalTokens };
+}
+
+function parseClaudeJsonLog(filePath: string): { numTurns?: number; totalTokens?: number } {
+  if (!existsSync(filePath)) return {};
+  try {
+    const content = readFileSync(filePath, "utf-8");
+    const lines = content.trim().split("\n").filter(Boolean);
+    // Parse lines in reverse to find the result message
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const obj = JSON.parse(lines[i]);
+        if (obj.type === "result") {
+          const numTurns = typeof obj.num_turns === "number" ? obj.num_turns : undefined;
+          // Try multiple paths for token counts
+          let totalTokens: number | undefined;
+          if (obj.usage?.input_tokens != null && obj.usage?.output_tokens != null) {
+            totalTokens = obj.usage.input_tokens + obj.usage.output_tokens;
+          }
+          return { numTurns, totalTokens };
+        }
+      } catch {
+        // Skip non-JSON lines
+        continue;
+      }
+    }
+  } catch {
+    // File read error — non-fatal
+  }
+  return {};
 }
 
 function shellEscape(s: string): string {

@@ -18,3 +18,17 @@ export function tailLines(text: string, n: number): string {
   const lines = text.split("\n");
   return lines.slice(-n).join("\n");
 }
+
+export function formatDuration(ms: number): string {
+  const totalSeconds = Math.round(ms / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${seconds}s`;
+}
+
+export function formatTokenCount(tokens: number | undefined | null): string {
+  if (tokens == null || isNaN(tokens)) return "0 tokens";
+  if (tokens >= 1000) return `${Math.round(tokens / 1000)}k tokens`;
+  return `${tokens} tokens`;
+}
