@@ -1,7 +1,7 @@
 import { chmodSync, copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { logTask, logTaskError } from "./logger.js";
+import { logTask, logTaskError, logTaskWarn } from "./logger.js";
 import type { SpawnResult } from "./types.js";
 import { runCommand, sleep } from "./utils.js";
 
@@ -117,12 +117,12 @@ sleep 5
   // Clean up the pane (it may already be gone after the script exits)
   await runCommand("tmux", ["kill-pane", "-t", paneId]).catch(() => {});
 
-  const { numTurns, totalTokens } = parseClaudeJsonLog(jsonLogFile);
+  const { numTurns, totalTokens } = parseClaudeJsonLog(jsonLogFile, identifier);
 
   return { exitCode, stdout: "", stderr: "", timedOut, numTurns, totalTokens };
 }
 
-function parseClaudeJsonLog(filePath: string): { numTurns?: number; totalTokens?: number } {
+function parseClaudeJsonLog(filePath: string, identifier: string): { numTurns?: number; totalTokens?: number } {
   if (!existsSync(filePath)) return {};
   try {
     const content = readFileSync(filePath, "utf-8");
@@ -146,6 +146,10 @@ function parseClaudeJsonLog(filePath: string): { numTurns?: number; totalTokens?
       } catch {
         // Skip non-JSON lines
       }
+    }
+
+    if (numTurns === undefined || (totalInput === 0 && totalOutput === 0)) {
+      logTaskWarn(identifier, "Could not parse usage data from Claude output");
     }
 
     const totalTokens = totalInput + totalOutput || undefined;

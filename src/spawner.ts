@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { spawnClaude } from "./claude.js";
 import {
@@ -12,7 +11,7 @@ import {
   shallowClone,
 } from "./git.js";
 import { commentOnIssue, updateIssueStatus, uploadFileToIssue } from "./linear.js";
-import { logTask, logTaskError } from "./logger.js";
+import { log, logTask, logTaskError } from "./logger.js";
 import {
   buildExecutionPrompt,
   buildPlanningPrompt,
@@ -21,7 +20,7 @@ import {
 } from "./prompt.js";
 import { formatFailure, formatSuccess, sendSlackNotification } from "./slack.js";
 import type { Config, CritterResult, CritterTask, TeamStatuses } from "./types.js";
-import { branchName, formatDuration, formatPhaseStats, tailLines } from "./utils.js";
+import { branchName, formatDuration, formatPhaseStats, runCommand, sleep, tailLines } from "./utils.js";
 
 interface QueuedTask {
   task: CritterTask;
@@ -35,6 +34,8 @@ export class Spawner {
   private running = 0;
   private activeProcesses: Set<AbortController> = new Set();
   private stopped = false;
+  private cleanupInterval: Timer | null = null;
+  private activeWorkDirs = new Set<string>();
 
   constructor(config: Config, teamStatuses: TeamStatuses) {
     this.config = config;
@@ -42,7 +43,17 @@ export class Spawner {
   }
 
   cleanupStale(): void {
-    cleanupStaleWorkDirs(this.config.workDir);
+    cleanupStaleWorkDirs(this.config.workDir, this.activeWorkDirs);
+  }
+
+  startPeriodicCleanup(): void {
+    const intervalMs = 60 * 60 * 1000; // 1 hour
+    this.cleanupInterval = setInterval(() => {
+      log("Running periodic stale work directory cleanup");
+      this.cleanupStale();
+    }, intervalMs);
+    // Allow the process to exit even if the interval is still active
+    this.cleanupInterval.unref();
   }
 
   async dispatch(task: CritterTask): Promise<CritterResult> {
@@ -55,6 +66,10 @@ export class Spawner {
 
   stop(): void {
     this.stopped = true;
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
     for (const ac of this.activeProcesses) {
       ac.abort();
     }
@@ -78,6 +93,7 @@ export class Spawner {
   private async runTask(task: CritterTask): Promise<CritterResult> {
     const branch = branchName(task.identifier, task.title);
     const workDir = `${this.config.workDir}/${task.identifier}-${Date.now()}`;
+    this.activeWorkDirs.add(workDir);
     const abortController = new AbortController();
     this.activeProcesses.add(abortController);
     const taskStart = Date.now();
@@ -115,10 +131,13 @@ export class Spawner {
       await commentOnIssue(task.issueId, "Planning...");
       logTask(task.identifier, "Starting Phase 1: Planning");
 
+      const planAllowedTools = getPlanningAllowedTools();
+      logTask(task.identifier, `Planning phase allowed tools: ${planAllowedTools.join(", ")}`);
+
       const planStart = Date.now();
       const planResult = await spawnClaude(
         buildPlanningPrompt(task),
-        getPlanningAllowedTools(),
+        planAllowedTools,
         workDir,
         this.config.maxPlanningTurns,
         task.identifier,
@@ -160,6 +179,7 @@ export class Spawner {
 
       const execStart = Date.now();
       const execAllowedTools = getExecutionAllowedTools(this.config, task);
+      logTask(task.identifier, `Execution phase allowed tools: ${execAllowedTools.join(", ")}`);
       const execResult = await spawnClaude(
         buildExecutionPrompt(task, execAllowedTools),
         execAllowedTools,
@@ -254,6 +274,7 @@ export class Spawner {
     } finally {
       clearTimeout(timeout);
       this.activeProcesses.delete(abortController);
+      this.activeWorkDirs.delete(workDir);
       cleanupWorkDir(workDir);
       logTask(task.identifier, "Cleaned up work directory");
     }
@@ -302,28 +323,35 @@ async function detectPr(
   branch: string,
   identifier: string,
 ): Promise<string | null> {
-  return new Promise((resolve) => {
-    const proc = spawn("gh", ["pr", "list", "--head", branch, "--json", "url", "--limit", "1"], {
-      cwd: workDir,
-    });
-    let stdout = "";
-    proc.stdout.on("data", (d) => (stdout += d));
-    proc.on("close", (code) => {
-      if (code !== 0) {
-        logTaskError(identifier, "gh pr list failed");
-        resolve(null);
-        return;
-      }
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY_MS = 3000;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const { code, stdout, stderr } = await runCommand(
+      "gh",
+      ["pr", "list", "--head", branch, "--json", "url", "--limit", "1"],
+      { cwd: workDir },
+    );
+
+    if (code !== 0) {
+      logTaskError(identifier, `gh pr list failed (attempt ${attempt}/${MAX_RETRIES}): ${stderr}`);
+    } else {
       try {
         const prs = JSON.parse(stdout);
         if (prs.length > 0) {
-          resolve(prs[0].url);
-        } else {
-          resolve(null);
+          return prs[0].url;
         }
       } catch {
-        resolve(null);
+        logTaskError(identifier, `Failed to parse gh pr list output: ${stdout}`);
       }
-    });
-  });
+    }
+
+    if (attempt < MAX_RETRIES) {
+      logTask(identifier, `PR not found yet, retrying in ${RETRY_DELAY_MS / 1000}s (attempt ${attempt}/${MAX_RETRIES})`);
+      await sleep(RETRY_DELAY_MS);
+    }
+  }
+
+  logTaskError(identifier, `PR not detected after ${MAX_RETRIES} attempts`);
+  return null;
 }

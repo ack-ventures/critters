@@ -17,3 +17,7 @@ export function logTask(identifier: string, message: string, ...args: unknown[])
 export function logTaskError(identifier: string, message: string, ...args: unknown[]): void {
   console.error(`[${timestamp()}] [${identifier}] ERROR: ${message}`, ...args);
 }
+
+export function logTaskWarn(identifier: string, message: string, ...args: unknown[]): void {
+  console.warn(`[${timestamp()}] [${identifier}] WARN: ${message}`, ...args);
+}

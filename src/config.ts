@@ -131,5 +131,8 @@ function validateConfig(config: Config): void {
   if (config.maxExecutionTurns <= 0) {
     throw new Error(`Invalid config: maxExecutionTurns must be > 0, got ${config.maxExecutionTurns}`);
   }
+  if (!Array.isArray(config.defaultAllowedTools) || config.defaultAllowedTools.length === 0) {
+    throw new Error("Invalid config: defaultAllowedTools must be a non-empty array of tool patterns");
+  }
   validateRepoUrls(config);
 }

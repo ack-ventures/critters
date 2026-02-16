@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { loadConfig } from "./config.js";
 
 const tmpDir = "/tmp/critters-config-test";
+const validToolsYaml = 'defaultAllowedTools:\n  - "Read"\n';
 
 function writeYaml(filename: string, content: string): string {
   const path = `${tmpDir}/${filename}`;
@@ -70,27 +71,45 @@ describe("validateWorkDir", () => {
   });
 
   test("accepts /tmp/critters-work", () => {
-    const path = writeYaml("tmp.yaml", "workDir: /tmp/critters-work\n");
+    const path = writeYaml("tmp.yaml", `workDir: /tmp/critters-work\n${validToolsYaml}`);
     const config = loadConfig(path);
     expect(config.workDir).toBe("/tmp/critters-work");
   });
 
   test("accepts /private/tmp/critters-work (macOS)", () => {
-    const path = writeYaml("private-tmp.yaml", "workDir: /private/tmp/critters-work\n");
+    const path = writeYaml("private-tmp.yaml", `workDir: /private/tmp/critters-work\n${validToolsYaml}`);
     const config = loadConfig(path);
     expect(config.workDir).toBe("/private/tmp/critters-work");
   });
 
   test("accepts /data/critters-workspace (contains critters)", () => {
-    const path = writeYaml("critters-path.yaml", "workDir: /data/critters-workspace\n");
+    const path = writeYaml("critters-path.yaml", `workDir: /data/critters-workspace\n${validToolsYaml}`);
     const config = loadConfig(path);
     expect(config.workDir).toBe("/data/critters-workspace");
   });
 
   test("default workDir (/tmp/critters-work) passes validation", () => {
-    const path = writeYaml("default.yaml", "concurrency: 2\n");
+    const path = writeYaml("default.yaml", `concurrency: 2\n${validToolsYaml}`);
     const config = loadConfig(path);
     expect(config.workDir).toBe("/tmp/critters-work");
+  });
+});
+
+describe("validateConfig - defaultAllowedTools", () => {
+  test("rejects empty defaultAllowedTools array", () => {
+    const path = writeYaml("empty-tools.yaml", "workDir: /tmp/critters-work\ndefaultAllowedTools: []\n");
+    expect(() => loadConfig(path)).toThrow("defaultAllowedTools must be a non-empty array of tool patterns");
+  });
+
+  test("rejects missing defaultAllowedTools (defaults to empty array)", () => {
+    const path = writeYaml("no-tools.yaml", "workDir: /tmp/critters-work\n");
+    expect(() => loadConfig(path)).toThrow("defaultAllowedTools must be a non-empty array of tool patterns");
+  });
+
+  test("accepts non-empty defaultAllowedTools", () => {
+    const path = writeYaml("valid-tools.yaml", `workDir: /tmp/critters-work\n${validToolsYaml}`);
+    const config = loadConfig(path);
+    expect(config.defaultAllowedTools).toEqual(["Read"]);
   });
 });
 
@@ -98,7 +117,7 @@ describe("validateRepoUrls", () => {
   test("valid SSH URL accepted in repos", () => {
     const path = writeYaml(
       "repo-ssh.yaml",
-      `repos:\n  "proj-1":\n    url: "git@github.com:org/repo.git"\n`,
+      `repos:\n  "proj-1":\n    url: "git@github.com:org/repo.git"\n${validToolsYaml}`,
     );
     const config = loadConfig(path);
     expect(config.repos["proj-1"].url).toBe("git@github.com:org/repo.git");
@@ -107,7 +126,7 @@ describe("validateRepoUrls", () => {
   test("valid HTTPS URL accepted in repos", () => {
     const path = writeYaml(
       "repo-https.yaml",
-      `repos:\n  "proj-2":\n    url: "https://github.com/org/repo.git"\n`,
+      `repos:\n  "proj-2":\n    url: "https://github.com/org/repo.git"\n${validToolsYaml}`,
     );
     const config = loadConfig(path);
     expect(config.repos["proj-2"].url).toBe("https://github.com/org/repo.git");
@@ -116,7 +135,7 @@ describe("validateRepoUrls", () => {
   test("invalid URL rejected (missing .git suffix)", () => {
     const path = writeYaml(
       "repo-no-git.yaml",
-      `repos:\n  "proj-3":\n    url: "git@github.com:org/repo"\n`,
+      `repos:\n  "proj-3":\n    url: "git@github.com:org/repo"\n${validToolsYaml}`,
     );
     expect(() => loadConfig(path)).toThrow("Invalid git URL for repo");
   });
@@ -124,7 +143,7 @@ describe("validateRepoUrls", () => {
   test("invalid URL rejected (plain HTTP without .git)", () => {
     const path = writeYaml(
       "repo-http.yaml",
-      `repos:\n  "proj-4":\n    url: "http://example.com/repo"\n`,
+      `repos:\n  "proj-4":\n    url: "http://example.com/repo"\n${validToolsYaml}`,
     );
     expect(() => loadConfig(path)).toThrow("Invalid git URL for repo");
   });
@@ -132,7 +151,7 @@ describe("validateRepoUrls", () => {
   test("invalid URL rejected (random string)", () => {
     const path = writeYaml(
       "repo-random.yaml",
-      `repos:\n  "proj-5":\n    url: "not-a-url"\n`,
+      `repos:\n  "proj-5":\n    url: "not-a-url"\n${validToolsYaml}`,
     );
     expect(() => loadConfig(path)).toThrow("Invalid git URL for repo");
   });
@@ -140,7 +159,7 @@ describe("validateRepoUrls", () => {
   test("teamRepos valid SSH URL accepted", () => {
     const path = writeYaml(
       "team-ssh.yaml",
-      `teamRepos:\n  "team-1": "git@github.com:org/repo.git"\n`,
+      `teamRepos:\n  "team-1": "git@github.com:org/repo.git"\n${validToolsYaml}`,
     );
     const config = loadConfig(path);
     expect(config.teamRepos["team-1"]).toBe("git@github.com:org/repo.git");
@@ -149,13 +168,13 @@ describe("validateRepoUrls", () => {
   test("teamRepos invalid URL rejected", () => {
     const path = writeYaml(
       "team-invalid.yaml",
-      `teamRepos:\n  "team-2": "not-a-url"\n`,
+      `teamRepos:\n  "team-2": "not-a-url"\n${validToolsYaml}`,
     );
     expect(() => loadConfig(path)).toThrow("Invalid git URL for teamRepo");
   });
 
   test("empty repos and teamRepos passes validation", () => {
-    const path = writeYaml("repo-empty.yaml", "concurrency: 2\n");
+    const path = writeYaml("repo-empty.yaml", `concurrency: 2\n${validToolsYaml}`);
     const config = loadConfig(path);
     expect(Object.keys(config.repos)).toHaveLength(0);
     expect(Object.keys(config.teamRepos)).toHaveLength(0);
