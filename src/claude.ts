@@ -23,15 +23,23 @@ export async function spawnClaude(
   // Write prompt to file to avoid shell quoting issues
   writeFileSync(promptFile, prompt);
 
-  // Write a bash script that runs claude directly (no pipe, keeps TTY for interactive output)
+  // Write a bash script that runs claude directly with TTY
   const script = `#!/bin/bash
 export PATH="$HOME/.bun/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+echo "=== Critter ${identifier} (${phase}) ==="
+echo "Working in: ${workDir}"
+echo "Starting Claude..."
+echo ""
 cd ${shellEscape(workDir)}
 claude -p "$(cat ${shellEscape(promptFile)})" \\
   --model opus \\
   --allowedTools ${shellEscape(allowedTools.join(","))} \\
   --max-turns ${maxTurns}
-echo $? > ${shellEscape(exitCodeFile)}
+EXIT_CODE=$?
+echo $EXIT_CODE > ${shellEscape(exitCodeFile)}
+echo ""
+echo "=== Claude exited with code $EXIT_CODE ==="
+sleep 5
 `;
 
   writeFileSync(scriptFile, script);
