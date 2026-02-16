@@ -123,12 +123,12 @@ sleep 5
     logTaskWarn(identifier, `Failed to kill tmux pane during cleanup: ${cleanupResult.stderr}`);
   }
 
-  const { numTurns, inputTokens, outputTokens, cacheReadTokens } = parseClaudeJsonLog(jsonLogFile, identifier);
+  const { numTurns, inputTokens, outputTokens, cacheReadTokens, costUsd } = parseClaudeJsonLog(jsonLogFile, identifier);
 
-  return { exitCode, stdout: "", stderr: "", timedOut, numTurns, inputTokens, outputTokens, cacheReadTokens };
+  return { exitCode, stdout: "", stderr: "", timedOut, numTurns, inputTokens, outputTokens, cacheReadTokens, costUsd };
 }
 
-function parseClaudeJsonLog(filePath: string, identifier: string): { numTurns?: number; inputTokens?: number; outputTokens?: number; cacheReadTokens?: number } {
+function parseClaudeJsonLog(filePath: string, identifier: string): { numTurns?: number; inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; costUsd?: number } {
   if (!existsSync(filePath)) return {};
   try {
     const content = readFileSync(filePath, "utf-8");
@@ -138,19 +138,31 @@ function parseClaudeJsonLog(filePath: string, identifier: string): { numTurns?: 
     let inputTokens = 0;
     let outputTokens = 0;
     let cacheReadTokens = 0;
+    let costUsd: number | undefined;
 
     for (const line of lines) {
       try {
         const obj = JSON.parse(line);
-        if (obj.type === "result" && typeof obj.num_turns === "number") {
-          numTurns = obj.num_turns;
-        }
-        // Sum tokens from each assistant message (result.usage only has the last turn)
-        if (obj.type === "assistant" && obj.message?.usage) {
-          const u = obj.message.usage;
-          inputTokens += (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
-          outputTokens += u.output_tokens ?? 0;
-          cacheReadTokens += u.cache_read_input_tokens ?? 0;
+        if (obj.type === "result") {
+          if (typeof obj.num_turns === "number") {
+            numTurns = obj.num_turns;
+          }
+          if (typeof obj.total_cost_usd === "number") {
+            costUsd = obj.total_cost_usd;
+          }
+          // Use modelUsage from the result event — it has accurate cumulative totals.
+          // The assistant event's usage.output_tokens is reported at stream start
+          // (before content is generated) so it's nearly always ~1 per turn.
+          if (obj.modelUsage && typeof obj.modelUsage === "object") {
+            inputTokens = 0;
+            outputTokens = 0;
+            cacheReadTokens = 0;
+            for (const model of Object.values(obj.modelUsage) as Record<string, number>[]) {
+              inputTokens += (model.inputTokens ?? 0) + (model.cacheCreationInputTokens ?? 0);
+              outputTokens += model.outputTokens ?? 0;
+              cacheReadTokens += model.cacheReadInputTokens ?? 0;
+            }
+          }
         }
       } catch {
         // Skip non-JSON lines
@@ -166,6 +178,7 @@ function parseClaudeJsonLog(filePath: string, identifier: string): { numTurns?: 
       inputTokens: inputTokens || undefined,
       outputTokens: outputTokens || undefined,
       cacheReadTokens: cacheReadTokens || undefined,
+      costUsd,
     };
   } catch {
     // File read error — non-fatal
