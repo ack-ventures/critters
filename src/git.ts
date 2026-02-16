@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, rmSync } from "node:fs";
-import { logTask, logTaskError } from "./logger.js";
+import { logTask, logTaskError, logTaskWarn } from "./logger.js";
 import { runCommand } from "./utils.js";
 
 export async function shallowClone(
@@ -30,8 +30,8 @@ export async function createBranch(
   }
 }
 
-export async function hasCommitsOnBranch(workDir: string, branch: string): Promise<boolean> {
-  const defaultBranch = await getDefaultBranch(workDir);
+export async function hasCommitsOnBranch(workDir: string, branch: string, identifier: string): Promise<boolean> {
+  const defaultBranch = await getDefaultBranch(workDir, identifier);
   const { code, stdout } = await runCommand(
     "git",
     ["log", `${defaultBranch}..${branch}`, "--oneline"],
@@ -41,10 +41,14 @@ export async function hasCommitsOnBranch(workDir: string, branch: string): Promi
   return stdout.trim().length > 0;
 }
 
-export async function getDefaultBranch(workDir: string): Promise<string> {
+export async function getDefaultBranch(workDir: string, identifier: string): Promise<string> {
   const { stdout } = await runCommand("git", ["rev-parse", "--abbrev-ref", "origin/HEAD"], { cwd: workDir });
   const branch = stdout.trim().replace("origin/", "");
-  return branch || "main";
+  if (!branch) {
+    logTaskWarn(identifier, "Could not detect default branch, falling back to 'main'");
+    return "main";
+  }
+  return branch;
 }
 
 export async function hasUncommittedChanges(workDir: string): Promise<boolean> {

@@ -198,7 +198,7 @@ export class Spawner {
         await autoCommit(workDir, task.identifier, `[${task.identifier}] Auto-commit remaining changes`);
       }
 
-      if (!(await hasCommitsOnBranch(workDir, branch))) {
+      if (!(await hasCommitsOnBranch(workDir, branch, task.identifier))) {
         throw new Error("Execution completed but no commits were made");
       }
 
