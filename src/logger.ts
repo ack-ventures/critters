@@ -14,6 +14,10 @@ export function logTask(identifier: string, message: string, ...args: unknown[])
   console.log(`[${timestamp()}] [${identifier}] ${message}`, ...args);
 }
 
+export function logTaskWarn(identifier: string, message: string, ...args: unknown[]): void {
+  console.warn(`[${timestamp()}] [${identifier}] WARN: ${message}`, ...args);
+}
+
 export function logTaskError(identifier: string, message: string, ...args: unknown[]): void {
   console.error(`[${timestamp()}] [${identifier}] ERROR: ${message}`, ...args);
 }
