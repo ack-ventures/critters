@@ -89,6 +89,29 @@ export async function findCritterIssues(triggerLabel: string): Promise<CritterTa
     const project = await issue.project;
     if (!team) continue;
 
+    // Fetch inverse relations to find issues that block this one.
+    // inverseRelations() returns relations where this issue is the relatedIssue (object).
+    // A relation with type "blocks" means: relation.issue blocks relation.relatedIssue.
+    // So relation.issue is the blocker.
+    const relations = await issue.inverseRelations();
+    const blockedBy: { identifier: string; status: string }[] = [];
+
+    for (const relation of relations.nodes) {
+      if (relation.type === "blocks") {
+        const blocker = await relation.issue;
+        if (!blocker) continue;
+        const blockerState = await blocker.state;
+        if (!blockerState) continue;
+
+        if (blockerState.type !== "completed" && blockerState.type !== "canceled") {
+          blockedBy.push({
+            identifier: blocker.identifier,
+            status: blockerState.name,
+          });
+        }
+      }
+    }
+
     tasks.push({
       issueId: issue.id,
       identifier: issue.identifier,
@@ -97,6 +120,7 @@ export async function findCritterIssues(triggerLabel: string): Promise<CritterTa
       repoUrl: "",
       teamId: team.id,
       projectId: project?.id,
+      ...(blockedBy.length > 0 ? { blockedBy } : {}),
     });
   }
 
