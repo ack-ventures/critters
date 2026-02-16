@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { parse as parseYaml } from "yaml";
 import type { Config, RepoConfig } from "./types.js";
 
@@ -81,11 +81,15 @@ export function loadConfig(configPath = "critters.config.yaml"): Config {
   const workDir = (yaml.workDir as string) ?? "/tmp/critters-work";
   validateWorkDir(workDir);
 
+  // Ensure the directory exists and resolve symlinks (e.g. /tmp → /private/tmp on macOS)
+  mkdirSync(workDir, { recursive: true });
+  const resolvedWorkDir = realpathSync(workDir);
+
   const config: Config = {
     pollIntervalSeconds: (yaml.pollIntervalSeconds as number) ?? 30,
     concurrency: (yaml.concurrency as number) ?? 2,
     timeoutMinutes: (yaml.timeoutMinutes as number) ?? 30,
-    workDir,
+    workDir: resolvedWorkDir,
     triggerLabel: (yaml.triggerLabel as string) ?? "Critter",
     maxPlanningTurns: (yaml.maxPlanningTurns as number) ?? 50,
     maxExecutionTurns: (yaml.maxExecutionTurns as number) ?? 75,

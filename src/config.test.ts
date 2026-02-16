@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { loadConfig } from "./config.js";
 
 const tmpDir = "/tmp/critters-config-test";
@@ -73,7 +73,7 @@ describe("validateWorkDir", () => {
   test("accepts /tmp/critters-work", () => {
     const path = writeYaml("tmp.yaml", `workDir: /tmp/critters-work\n${validToolsYaml}`);
     const config = loadConfig(path);
-    expect(config.workDir).toBe("/tmp/critters-work");
+    expect(config.workDir).toBe(realpathSync("/tmp/critters-work"));
   });
 
   test("accepts /private/tmp/critters-work (macOS)", () => {
@@ -82,16 +82,16 @@ describe("validateWorkDir", () => {
     expect(config.workDir).toBe("/private/tmp/critters-work");
   });
 
-  test("accepts /data/critters-workspace (contains critters)", () => {
-    const path = writeYaml("critters-path.yaml", `workDir: /data/critters-workspace\n${validToolsYaml}`);
+  test("accepts path containing 'critters' keyword", () => {
+    const path = writeYaml("critters-path.yaml", `workDir: /tmp/critters-test-workspace\n${validToolsYaml}`);
     const config = loadConfig(path);
-    expect(config.workDir).toBe("/data/critters-workspace");
+    expect(config.workDir).toBe(realpathSync("/tmp/critters-test-workspace"));
   });
 
   test("default workDir (/tmp/critters-work) passes validation", () => {
     const path = writeYaml("default.yaml", `concurrency: 2\n${validToolsYaml}`);
     const config = loadConfig(path);
-    expect(config.workDir).toBe("/tmp/critters-work");
+    expect(config.workDir).toBe(realpathSync("/tmp/critters-work"));
   });
 });
 
