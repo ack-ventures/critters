@@ -143,6 +143,8 @@ function parseClaudeJsonLog(filePath: string, identifier: string): { numTurns?: 
     let cacheReadTokens = 0;
     let costUsd: number | undefined;
 
+    let skippedLines = 0;
+
     for (const line of lines) {
       try {
         const obj = JSON.parse(line);
@@ -168,8 +170,12 @@ function parseClaudeJsonLog(filePath: string, identifier: string): { numTurns?: 
           }
         }
       } catch {
-        // Skip non-JSON lines
+        skippedLines++;
       }
+    }
+
+    if (skippedLines > 0) {
+      logTaskWarn(identifier, `Skipped ${skippedLines} unparseable lines in Claude output`);
     }
 
     if (numTurns === undefined || (inputTokens === 0 && outputTokens === 0)) {
@@ -183,8 +189,8 @@ function parseClaudeJsonLog(filePath: string, identifier: string): { numTurns?: 
       cacheReadTokens: cacheReadTokens || undefined,
       costUsd,
     };
-  } catch {
-    // File read error — non-fatal
+  } catch (err) {
+    logTaskWarn(identifier, `Failed to read Claude output log: ${err}`);
   }
   return {};
 }
