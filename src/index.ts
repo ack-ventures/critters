@@ -14,6 +14,10 @@ async function main() {
   // Parse CLI flags early so file logging captures all output
   const noTmux = Bun.argv.includes("--no-tmux");
   if (noTmux) {
+    // Ignore SIGHUP (terminal disconnect) and SIGPIPE so the process
+    // survives when backgrounded (e.g., `critters --no-tmux &`)
+    process.on("SIGHUP", () => {});
+    process.on("SIGPIPE", () => {});
     initFileLogging();
   }
 
