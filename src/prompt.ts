@@ -100,7 +100,7 @@ Read critters/plans/${task.identifier}.md — it contains an approved implementa
 Execute the plan completely. Then:
 - Commit your changes with a message referencing ${task.identifier}
 - Push your branch
-- Create a draft PR with title "[${task.identifier}] ${task.title}" and body that includes a link to the Linear issue and "Automated by Critters"
+- Create a PR with title "[${task.identifier}] ${task.title}" and body that includes a link to the Linear issue and "Automated by Critters"
 
 ## Tool Restrictions
 You have a limited set of tools. Only these Bash commands are available: ${bashTools.join(", ")}.
