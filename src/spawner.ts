@@ -12,7 +12,7 @@ import {
   shallowClone,
 } from "./git.js";
 import { commentOnIssue, updateIssueStatus, uploadFileToIssue } from "./linear.js";
-import { logTask, logTaskError } from "./logger.js";
+import { log, logTask, logTaskError } from "./logger.js";
 import {
   buildExecutionPrompt,
   buildPlanningPrompt,
@@ -35,6 +35,8 @@ export class Spawner {
   private running = 0;
   private activeProcesses: Set<AbortController> = new Set();
   private stopped = false;
+  private cleanupInterval: Timer | null = null;
+  private activeWorkDirs = new Set<string>();
 
   constructor(config: Config, teamStatuses: TeamStatuses) {
     this.config = config;
@@ -42,7 +44,17 @@ export class Spawner {
   }
 
   cleanupStale(): void {
-    cleanupStaleWorkDirs(this.config.workDir);
+    cleanupStaleWorkDirs(this.config.workDir, this.activeWorkDirs);
+  }
+
+  startPeriodicCleanup(): void {
+    const intervalMs = 60 * 60 * 1000; // 1 hour
+    this.cleanupInterval = setInterval(() => {
+      log("Running periodic stale work directory cleanup");
+      this.cleanupStale();
+    }, intervalMs);
+    // Allow the process to exit even if the interval is still active
+    this.cleanupInterval.unref();
   }
 
   async dispatch(task: CritterTask): Promise<CritterResult> {
@@ -55,6 +67,10 @@ export class Spawner {
 
   stop(): void {
     this.stopped = true;
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
     for (const ac of this.activeProcesses) {
       ac.abort();
     }
@@ -78,6 +94,7 @@ export class Spawner {
   private async runTask(task: CritterTask): Promise<CritterResult> {
     const branch = branchName(task.identifier, task.title);
     const workDir = `${this.config.workDir}/${task.identifier}-${Date.now()}`;
+    this.activeWorkDirs.add(workDir);
     const abortController = new AbortController();
     this.activeProcesses.add(abortController);
     const taskStart = Date.now();
@@ -254,6 +271,7 @@ export class Spawner {
     } finally {
       clearTimeout(timeout);
       this.activeProcesses.delete(abortController);
+      this.activeWorkDirs.delete(workDir);
       cleanupWorkDir(workDir);
       logTask(task.identifier, "Cleaned up work directory");
     }

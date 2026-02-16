@@ -94,11 +94,12 @@ export function cleanupWorkDir(dir: string): void {
   }
 }
 
-export function cleanupStaleWorkDirs(baseDir: string): void {
+export function cleanupStaleWorkDirs(baseDir: string, activeWorkDirs?: Set<string>): void {
   if (!existsSync(baseDir)) return;
   const entries = readdirSync(baseDir, { encoding: "utf-8" });
   for (const entry of entries) {
     const fullPath = `${baseDir}/${entry}`;
+    if (activeWorkDirs?.has(fullPath)) continue;
     cleanupWorkDir(fullPath);
   }
 }
