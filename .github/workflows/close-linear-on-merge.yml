@@ -1,0 +1,87 @@
+name: Close Linear issue on merge
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  close-linear-issue:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract Linear issue identifier
+        id: extract
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          TITLE="$PR_TITLE"
+          if [[ "$TITLE" =~ \[([A-Z]+-[0-9]+)\] ]]; then
+            echo "identifier=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          else
+            echo "No Linear identifier found in PR title: $TITLE"
+            exit 0
+          fi
+
+      - name: Move Linear issue to Done
+        if: steps.extract.outputs.identifier != ''
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+        run: |
+          IDENTIFIER="${{ steps.extract.outputs.identifier }}"
+
+          # Step 1: Look up the issue by identifier to get its ID and team ID
+          ISSUE_RESPONSE=$(curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: $LINEAR_API_KEY" \
+            -d "{\"query\": \"{ issue(id: \\\"$IDENTIFIER\\\") { id team { id } } }\"}" \
+            https://api.linear.app/graphql)
+
+          ISSUE_ID=$(echo "$ISSUE_RESPONSE" | jq -r '.data.issue.id // empty')
+          TEAM_ID=$(echo "$ISSUE_RESPONSE" | jq -r '.data.issue.team.id // empty')
+
+          if [ -z "$ISSUE_ID" ] || [ -z "$TEAM_ID" ]; then
+            echo "Could not find Linear issue for identifier: $IDENTIFIER"
+            echo "Response: $ISSUE_RESPONSE"
+            exit 0
+          fi
+
+          echo "Found issue $IDENTIFIER (ID: $ISSUE_ID, Team: $TEAM_ID)"
+
+          # Step 2: Find the "Done" state ID for the issue's team
+          STATES_RESPONSE=$(curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: $LINEAR_API_KEY" \
+            -d "{\"query\": \"{ workflowStates(filter: { team: { id: { eq: \\\"$TEAM_ID\\\" } }, type: { eq: \\\"completed\\\" } }) { nodes { id name } } }\"}" \
+            https://api.linear.app/graphql)
+
+          DONE_STATE_ID=$(echo "$STATES_RESPONSE" | jq -r '.data.workflowStates.nodes[] | select(.name == "Done") | .id // empty')
+
+          # Fall back to the first "completed" type state if no state named "Done" exists
+          if [ -z "$DONE_STATE_ID" ]; then
+            DONE_STATE_ID=$(echo "$STATES_RESPONSE" | jq -r '.data.workflowStates.nodes[0].id // empty')
+          fi
+
+          if [ -z "$DONE_STATE_ID" ]; then
+            echo "Could not find a completed state for team $TEAM_ID"
+            echo "Response: $STATES_RESPONSE"
+            exit 1
+          fi
+
+          echo "Using Done state ID: $DONE_STATE_ID"
+
+          # Step 3: Update the issue status to Done
+          UPDATE_RESPONSE=$(curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: $LINEAR_API_KEY" \
+            -d "{\"query\": \"mutation { issueUpdate(id: \\\"$ISSUE_ID\\\", input: { stateId: \\\"$DONE_STATE_ID\\\" }) { success } }\"}" \
+            https://api.linear.app/graphql)
+
+          SUCCESS=$(echo "$UPDATE_RESPONSE" | jq -r '.data.issueUpdate.success')
+
+          if [ "$SUCCESS" = "true" ]; then
+            echo "Successfully moved $IDENTIFIER to Done"
+          else
+            echo "Failed to update issue $IDENTIFIER"
+            echo "Response: $UPDATE_RESPONSE"
+            exit 1
+          fi
