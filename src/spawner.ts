@@ -48,6 +48,7 @@ export class Spawner {
   async dispatch(task: CritterTask): Promise<CritterResult> {
     return new Promise((resolve) => {
       this.queue.push({ task, resolve });
+      logTask(task.identifier, `Task queued (queue: ${this.queue.length}, running: ${this.running})`);
       this.processQueue();
     });
   }
@@ -64,8 +65,10 @@ export class Spawner {
       const item = this.queue.shift();
       if (!item) break;
       this.running++;
+      logTask(item.task.identifier, `Task started (queue: ${this.queue.length}, running: ${this.running})`);
       this.runTask(item.task).then((result) => {
         this.running--;
+        logTask(item.task.identifier, `Task finished (queue: ${this.queue.length}, running: ${this.running})`);
         item.resolve(result);
         this.processQueue();
       });
