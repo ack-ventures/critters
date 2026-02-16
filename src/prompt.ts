@@ -100,11 +100,16 @@ Read critters/plans/${task.identifier}.md — it contains an approved implementa
 Execute the plan completely. Then:
 - Commit your changes with a message referencing ${task.identifier}
 - Push your branch
-- Create a PR with title "[${task.identifier}] ${task.title}" and body that includes a link to the Linear issue and "Automated by Critters"
+- Create a PR using \`gh pr create --head <branch-name>\` with title "[${task.identifier}] ${task.title}" and body that includes a link to the Linear issue and "Automated by Critters". Always use the --head flag.
+
+## Editing Files
+- Always read a file before editing it. Pay attention to whether it uses tabs or spaces for indentation — the Read tool's line numbers can make tabs look like spaces.
+- Do not fire more than 3-4 Edit calls in parallel. If one fails, all sibling parallel edits are cancelled too.
 
 ## Tool Restrictions
 You have a limited set of tools. Only these Bash commands are available: ${bashTools.join(", ")}.
 Commands like chmod, bunx, perl, python3, curl, and others are NOT available.
 Use "bun x" instead of "bunx" to run package binaries.
+You are running on macOS — some GNU-specific flags (like \`cat -A\`, \`grep -P\`) are not available.
 If a command is blocked or requires approval, do NOT retry it — move on and find an alternative approach or skip that step. Never retry a blocked command more than once.`;
 }
