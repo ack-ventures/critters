@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check src/",
     "test": "bun test",
+    "build": "bun build --compile src/index.ts --outfile dist/critters",
     "prepare": "husky"
   },
   "lint-staged": {

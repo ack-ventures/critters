@@ -180,3 +180,17 @@ describe("validateRepoUrls", () => {
     expect(Object.keys(config.teamRepos)).toHaveLength(0);
   });
 });
+
+describe("resolveConfigPath", () => {
+  test("throws helpful error when no config file found", () => {
+    const origCwd = process.cwd();
+    const emptyDir = `${tmpDir}/empty`;
+    mkdirSync(emptyDir, { recursive: true });
+    process.chdir(emptyDir);
+    try {
+      expect(() => loadConfig()).toThrow(/config.*not found/i);
+    } finally {
+      process.chdir(origCwd);
+    }
+  });
+});
