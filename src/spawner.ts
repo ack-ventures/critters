@@ -115,10 +115,13 @@ export class Spawner {
       await commentOnIssue(task.issueId, "Planning...");
       logTask(task.identifier, "Starting Phase 1: Planning");
 
+      const planAllowedTools = getPlanningAllowedTools();
+      logTask(task.identifier, `Planning phase allowed tools: ${planAllowedTools.join(", ")}`);
+
       const planStart = Date.now();
       const planResult = await spawnClaude(
         buildPlanningPrompt(task),
-        getPlanningAllowedTools(),
+        planAllowedTools,
         workDir,
         this.config.maxPlanningTurns,
         task.identifier,
@@ -160,6 +163,7 @@ export class Spawner {
 
       const execStart = Date.now();
       const execAllowedTools = getExecutionAllowedTools(this.config, task);
+      logTask(task.identifier, `Execution phase allowed tools: ${execAllowedTools.join(", ")}`);
       const execResult = await spawnClaude(
         buildExecutionPrompt(task, execAllowedTools),
         execAllowedTools,
