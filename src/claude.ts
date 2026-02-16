@@ -1,10 +1,9 @@
-import { spawn } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { logTask, logTaskError } from "./logger.js";
 import type { SpawnResult } from "./types.js";
-import { sleep } from "./utils.js";
+import { runCommand, sleep } from "./utils.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -90,6 +89,9 @@ sleep 5
     return { exitCode: 1, stdout: "", stderr: tmuxResult.stderr, timedOut: false };
   }
 
+  // Apply main-horizontal layout so the watcher stays on top
+  await runCommand("tmux", ["select-layout", "-t", TMUX_SESSION, "main-horizontal"]).catch(() => {});
+
   const paneId = tmuxResult.stdout.trim();
 
   // Poll for completion
@@ -156,15 +158,4 @@ function parseClaudeJsonLog(filePath: string): { numTurns?: number; totalTokens?
 
 function shellEscape(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
-}
-
-function runCommand(cmd: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
-  return new Promise((resolve) => {
-    const proc = spawn(cmd, args);
-    let stdout = "";
-    let stderr = "";
-    proc.stdout?.on("data", (d) => (stdout += d));
-    proc.stderr?.on("data", (d) => (stderr += d));
-    proc.on("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
-  });
 }
