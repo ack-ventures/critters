@@ -9,6 +9,7 @@ import {
   hasCommitsOnBranch,
   hasUncommittedChanges,
   autoCommit,
+  commitFile,
   cleanupWorkDir,
   cleanupStaleWorkDirs,
 } from "./git.js";
@@ -134,6 +135,14 @@ export class Spawner {
       if (!existsSync(planFile)) {
         throw new Error("Planning failed to produce a plan file");
       }
+
+      // Commit plan file to branch
+      await commitFile(
+        workDir,
+        `critters/plans/${task.identifier}.md`,
+        `[${task.identifier}] Add implementation plan`,
+        task.identifier,
+      );
 
       // 4. Phase 2: Execution
       await commentOnIssue(task.issueId, "Plan approved, executing...");
