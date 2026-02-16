@@ -19,7 +19,8 @@ export interface Config {
   timeoutMinutes: number;
   workDir: string;
   triggerLabel: string;
-  maxTurns: number;
+  maxPlanningTurns: number;
+  maxExecutionTurns: number;
   defaultAllowedTools: string[];
   repos: Record<string, RepoConfig>;
   teamRepos: Record<string, string>;

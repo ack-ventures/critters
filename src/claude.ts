@@ -125,23 +125,29 @@ function parseClaudeJsonLog(filePath: string): { numTurns?: number; totalTokens?
   try {
     const content = readFileSync(filePath, "utf-8");
     const lines = content.trim().split("\n").filter(Boolean);
-    // Parse lines in reverse to find the result message
-    for (let i = lines.length - 1; i >= 0; i--) {
+
+    let numTurns: number | undefined;
+    let totalInput = 0;
+    let totalOutput = 0;
+
+    for (const line of lines) {
       try {
-        const obj = JSON.parse(lines[i]);
-        if (obj.type === "result") {
-          const numTurns = typeof obj.num_turns === "number" ? obj.num_turns : undefined;
-          // Try multiple paths for token counts
-          let totalTokens: number | undefined;
-          if (obj.usage?.input_tokens != null && obj.usage?.output_tokens != null) {
-            totalTokens = obj.usage.input_tokens + obj.usage.output_tokens;
-          }
-          return { numTurns, totalTokens };
+        const obj = JSON.parse(line);
+        if (obj.type === "result" && typeof obj.num_turns === "number") {
+          numTurns = obj.num_turns;
+        }
+        // Sum tokens from each assistant message (result.usage only has the last turn)
+        if (obj.type === "assistant" && obj.message?.usage) {
+          totalInput += obj.message.usage.input_tokens ?? 0;
+          totalOutput += obj.message.usage.output_tokens ?? 0;
         }
       } catch {
         // Skip non-JSON lines
       }
     }
+
+    const totalTokens = totalInput + totalOutput || undefined;
+    return { numTurns, totalTokens };
   } catch {
     // File read error — non-fatal
   }

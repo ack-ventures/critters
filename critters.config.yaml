@@ -3,7 +3,8 @@ concurrency: 2
 timeoutMinutes: 30
 workDir: /tmp/critters-work
 triggerLabel: "Critter"
-maxTurns: 50
+maxPlanningTurns: 50
+maxExecutionTurns: 75
 
 defaultAllowedTools:
   - "Read"
