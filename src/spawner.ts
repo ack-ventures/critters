@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from "fs";
 import { spawn } from "child_process";
 import type { Config, CritterTask, CritterResult, TeamStatuses } from "./types.js";
-import { branchName } from "./utils.js";
+import { branchName, formatDuration, formatPhaseStats } from "./utils.js";
 import { logTask, logTaskError } from "./logger.js";
 import {
   shallowClone,
@@ -77,6 +77,7 @@ export class Spawner {
     const workDir = `${this.config.workDir}/${task.identifier}-${Date.now()}`;
     const abortController = new AbortController();
     this.activeProcesses.add(abortController);
+    const taskStart = Date.now();
 
     // Timeout for the entire task (both phases)
     const timeout = setTimeout(() => {
@@ -111,6 +112,7 @@ export class Spawner {
       await commentOnIssue(task.issueId, "Planning...");
       logTask(task.identifier, "Starting Phase 1: Planning");
 
+      const planStart = Date.now();
       const planResult = await spawnClaude(
         buildPlanningPrompt(task),
         getPlanningAllowedTools(),
@@ -136,6 +138,11 @@ export class Spawner {
         throw new Error("Planning failed to produce a plan file");
       }
 
+      const planDuration = Date.now() - planStart;
+      const planStats = `Planning completed in ${formatDuration(planDuration)}${formatPhaseStats(planResult)}`;
+      logTask(task.identifier, planStats);
+      await commentOnIssue(task.issueId, planStats);
+
       // Commit plan file to branch
       await commitFile(
         workDir,
@@ -148,6 +155,7 @@ export class Spawner {
       await commentOnIssue(task.issueId, "Plan approved, executing...");
       logTask(task.identifier, "Starting Phase 2: Execution");
 
+      const execStart = Date.now();
       const execResult = await spawnClaude(
         buildExecutionPrompt(task),
         getExecutionAllowedTools(this.config, task),
@@ -167,6 +175,11 @@ export class Spawner {
         throw new Error(`Execution failed (exit ${execResult.exitCode}):\n${errTail}`);
       }
 
+      const execDuration = Date.now() - execStart;
+      const execStats = `Execution completed in ${formatDuration(execDuration)}${formatPhaseStats(execResult)}`;
+      logTask(task.identifier, execStats);
+      await commentOnIssue(task.issueId, execStats);
+
       // 5. Check for commits, auto-commit if needed
       if (await hasUncommittedChanges(workDir)) {
         await autoCommit(workDir, task.identifier, `[${task.identifier}] Auto-commit remaining changes`);
@@ -185,10 +198,12 @@ export class Spawner {
         if (inReviewId) {
           await updateIssueStatus(task.issueId, inReviewId);
         }
-        await commentOnIssue(task.issueId, `Draft PR created: ${prUrl}`);
+        const totalDuration = formatDuration(Date.now() - taskStart);
+        logTask(task.identifier, `Completed in ${totalDuration}`);
+        await commentOnIssue(task.issueId, `Draft PR created: ${prUrl} (completed in ${totalDuration})`);
         await sendSlackNotification(
           this.config.slackWebhookUrl,
-          formatSuccess(task.identifier, task.title, prUrl),
+          formatSuccess(task.identifier, task.title, prUrl, totalDuration),
         );
         logTask(task.identifier, `Success — PR: ${prUrl}`);
         return { success: true, prUrl };
@@ -201,6 +216,8 @@ export class Spawner {
       const error = err instanceof Error ? err.message : String(err);
       logTaskError(task.identifier, error);
 
+      const totalDuration = formatDuration(Date.now() - taskStart);
+
       // Move to Critter Failed
       const failedId = this.teamStatuses[task.teamId]?.["Critter Failed"];
       if (failedId) {
@@ -212,14 +229,14 @@ export class Spawner {
       }
 
       try {
-        await commentOnIssue(task.issueId, `Critter failed: ${error}`);
+        await commentOnIssue(task.issueId, `Critter failed after ${totalDuration}: ${error}`);
       } catch {
         logTaskError(task.identifier, "Failed to post error comment");
       }
 
       await sendSlackNotification(
         this.config.slackWebhookUrl,
-        formatFailure(task.identifier, task.title, error),
+        formatFailure(task.identifier, task.title, error, totalDuration),
       );
 
       return { success: false, error };
