@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { spawnClaude } from "./claude.js";
 import {
   autoCommit,
@@ -122,6 +122,9 @@ export class Spawner {
 
       // 2. Create branch
       await createBranch(workDir, branch, task.identifier);
+
+      // Exclude critter temp files from git so they don't trigger warnings
+      appendFileSync(`${workDir}/.git/info/exclude`, "\n.critter-*\n");
 
       // Ensure plans directory exists
       const plansDir = `${workDir}/critters/plans`;
