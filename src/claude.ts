@@ -123,20 +123,21 @@ sleep 5
     logTaskWarn(identifier, `Failed to kill tmux pane during cleanup: ${cleanupResult.stderr}`);
   }
 
-  const { numTurns, totalTokens } = parseClaudeJsonLog(jsonLogFile, identifier);
+  const { numTurns, inputTokens, outputTokens, cacheReadTokens } = parseClaudeJsonLog(jsonLogFile, identifier);
 
-  return { exitCode, stdout: "", stderr: "", timedOut, numTurns, totalTokens };
+  return { exitCode, stdout: "", stderr: "", timedOut, numTurns, inputTokens, outputTokens, cacheReadTokens };
 }
 
-function parseClaudeJsonLog(filePath: string, identifier: string): { numTurns?: number; totalTokens?: number } {
+function parseClaudeJsonLog(filePath: string, identifier: string): { numTurns?: number; inputTokens?: number; outputTokens?: number; cacheReadTokens?: number } {
   if (!existsSync(filePath)) return {};
   try {
     const content = readFileSync(filePath, "utf-8");
     const lines = content.trim().split("\n").filter(Boolean);
 
     let numTurns: number | undefined;
-    let totalInput = 0;
-    let totalOutput = 0;
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let cacheReadTokens = 0;
 
     for (const line of lines) {
       try {
@@ -146,20 +147,26 @@ function parseClaudeJsonLog(filePath: string, identifier: string): { numTurns?: 
         }
         // Sum tokens from each assistant message (result.usage only has the last turn)
         if (obj.type === "assistant" && obj.message?.usage) {
-          totalInput += obj.message.usage.input_tokens ?? 0;
-          totalOutput += obj.message.usage.output_tokens ?? 0;
+          const u = obj.message.usage;
+          inputTokens += (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+          outputTokens += u.output_tokens ?? 0;
+          cacheReadTokens += u.cache_read_input_tokens ?? 0;
         }
       } catch {
         // Skip non-JSON lines
       }
     }
 
-    if (numTurns === undefined || (totalInput === 0 && totalOutput === 0)) {
+    if (numTurns === undefined || (inputTokens === 0 && outputTokens === 0)) {
       logTaskWarn(identifier, "Could not parse usage data from Claude output");
     }
 
-    const totalTokens = totalInput + totalOutput || undefined;
-    return { numTurns, totalTokens };
+    return {
+      numTurns,
+      inputTokens: inputTokens || undefined,
+      outputTokens: outputTokens || undefined,
+      cacheReadTokens: cacheReadTokens || undefined,
+    };
   } catch {
     // File read error — non-fatal
   }

@@ -51,12 +51,17 @@ export function formatDuration(ms: number): string {
 }
 
 export function formatTokenCount(tokens: number): string {
-  if (tokens >= 1000) return `${Math.round(tokens / 1000)}k tokens`;
-  return `${tokens} tokens`;
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
+  if (tokens >= 1000) return `${Math.round(tokens / 1000)}k`;
+  return `${tokens}`;
 }
 
-export function formatPhaseStats(result: { numTurns?: number; totalTokens?: number }): string {
+export function formatPhaseStats(result: { numTurns?: number; inputTokens?: number; outputTokens?: number; cacheReadTokens?: number }): string {
   if (result.numTurns == null) return "";
-  const tokens = result.totalTokens != null ? `, ${formatTokenCount(result.totalTokens)}` : "";
+  const parts: string[] = [];
+  if (result.inputTokens != null) parts.push(`${formatTokenCount(result.inputTokens)} in`);
+  if (result.outputTokens != null) parts.push(`${formatTokenCount(result.outputTokens)} out`);
+  if (result.cacheReadTokens != null) parts.push(`${formatTokenCount(result.cacheReadTokens)} cached`);
+  const tokens = parts.length > 0 ? `, ${parts.join(" / ")}` : "";
   return ` (${result.numTurns} turns${tokens})`;
 }

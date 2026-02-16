@@ -42,7 +42,9 @@ export interface SpawnResult {
   stderr: string;
   timedOut: boolean;
   numTurns?: number;
-  totalTokens?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
 }
 
 export interface CritterResult {
