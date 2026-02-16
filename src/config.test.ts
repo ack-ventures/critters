@@ -76,7 +76,7 @@ describe("validateWorkDir", () => {
     expect(config.workDir).toBe(realpathSync("/tmp/critters-work"));
   });
 
-  test("accepts /private/tmp/critters-work (macOS)", () => {
+  test.skipIf(process.platform !== "darwin")("accepts /private/tmp/critters-work (macOS)", () => {
     const path = writeYaml("private-tmp.yaml", `workDir: /private/tmp/critters-work\n${validToolsYaml}`);
     const config = loadConfig(path);
     expect(config.workDir).toBe("/private/tmp/critters-work");
