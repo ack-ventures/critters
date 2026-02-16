@@ -9,6 +9,12 @@ import { runCommand } from "./utils.js";
 import { Watcher } from "./watcher.js";
 
 async function main() {
+  // Parse CLI flags early so file logging captures all output
+  const noTmux = Bun.argv.includes("--no-tmux");
+  if (noTmux) {
+    initFileLogging();
+  }
+
   const { version } = await Bun.file(new URL("../package.json", import.meta.url)).json();
   log(`Critters v${version} starting...`);
 
@@ -17,14 +23,9 @@ async function main() {
 
   // Load config
   const config = loadConfig();
-
-  // Parse CLI flags
-  const noTmux = Bun.argv.includes("--no-tmux");
   config.noTmux = noTmux;
 
-  if (noTmux) {
-    initFileLogging();
-  } else {
+  if (!noTmux) {
     // Enable pane titles in the tmux session (best-effort — may fail if not running in tmux)
     await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-status", "top"]).catch(() => {});
     await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-format", "#{pane_title}"]).catch(() => {});

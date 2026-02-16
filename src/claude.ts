@@ -229,7 +229,7 @@ export async function spawnClaudeSubprocess(
     `export PATH="$HOME/.bun/bin:$HOME/.local/bin:${currentPath}"`,
     "unset CLAUDECODE",
     `cd ${shellEscape(workDir)}`,
-    `claude -p "$(cat ${shellEscape(promptFile)})"` +
+    `exec claude -p "$(cat ${shellEscape(promptFile)})"` +
       ` --model opus` +
       ` --allowedTools ${shellEscape(allowedTools.join(","))}` +
       ` --max-turns ${maxTurns}` +
