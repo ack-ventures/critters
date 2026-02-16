@@ -1,59 +1,98 @@
-import { spawn, type ChildProcess } from "child_process";
+import { spawn } from "child_process";
+import { writeFileSync, readFileSync, existsSync } from "fs";
 import type { SpawnResult } from "./types.js";
-import { logTask } from "./logger.js";
+import { logTask, logTaskError } from "./logger.js";
+import { sleep } from "./utils.js";
 
-export function spawnClaude(
+const TMUX_SESSION = "critters";
+
+export async function spawnClaude(
   prompt: string,
   allowedTools: string[],
   workDir: string,
   maxTurns: number,
   identifier: string,
+  phase: string,
   signal?: AbortSignal,
 ): Promise<SpawnResult> {
-  return new Promise((resolve) => {
-    const args = [
-      "-p", prompt,
+  const windowName = `${identifier}-${phase}`;
+  const promptFile = `${workDir}/.critter-prompt`;
+  const exitCodeFile = `${workDir}/.critter-exit-code-${phase}`;
+  const logFile = `${workDir}/.critter-log-${phase}`;
+
+  // Write prompt to file to avoid shell quoting issues
+  writeFileSync(promptFile, prompt);
+
+  // Build the command that runs inside the tmux window
+  const claudeCmd = [
+    `cd ${shellEscape(workDir)}`,
+    [
+      "claude",
+      "-p", `"$(cat ${shellEscape(promptFile)})"`,
       "--model", "opus",
-      "--allowedTools", allowedTools.join(","),
+      "--allowedTools", `"${allowedTools.join(",")}"`,
       "--max-turns", String(maxTurns),
-      "--output-format", "text",
-    ];
+    ].join(" "),
+  ].join(" && ");
 
-    logTask(identifier, `Spawning Claude with ${allowedTools.length} allowed tools`);
+  // Wrap: run claude, capture exit code, tee output to log
+  const wrappedCmd = `{ ${claudeCmd} ; } 2>&1 | tee ${shellEscape(logFile)}; echo \${PIPESTATUS[0]} > ${shellEscape(exitCodeFile)}`;
 
-    const proc: ChildProcess = spawn("claude", args, {
-      cwd: workDir,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+  logTask(identifier, `Spawning Claude in tmux window "${windowName}" (${phase})`);
 
+  // Create tmux window
+  const tmuxResult = await runCommand("tmux", [
+    "new-window", "-t", TMUX_SESSION, "-n", windowName, wrappedCmd,
+  ]);
+
+  if (tmuxResult.code !== 0) {
+    logTaskError(identifier, `Failed to create tmux window: ${tmuxResult.stderr}`);
+    return { exitCode: 1, stdout: "", stderr: tmuxResult.stderr, timedOut: false };
+  }
+
+  // Poll for completion
+  let timedOut = false;
+  while (!existsSync(exitCodeFile)) {
+    if (signal?.aborted) {
+      timedOut = true;
+      // Kill the tmux window
+      await runCommand("tmux", ["kill-window", "-t", `${TMUX_SESSION}:${windowName}`]);
+      break;
+    }
+    await sleep(2000);
+  }
+
+  // Read results
+  let exitCode = 1;
+  let stdout = "";
+
+  if (existsSync(exitCodeFile)) {
+    const raw = readFileSync(exitCodeFile, "utf-8").trim();
+    exitCode = parseInt(raw, 10);
+    if (isNaN(exitCode)) exitCode = 1;
+  }
+
+  if (existsSync(logFile)) {
+    stdout = readFileSync(logFile, "utf-8");
+  }
+
+  // Clean up the tmux window (it may already be gone)
+  await runCommand("tmux", ["kill-window", "-t", `${TMUX_SESSION}:${windowName}`]).catch(() => {});
+
+  return { exitCode, stdout, stderr: "", timedOut };
+}
+
+function shellEscape(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
+function runCommand(cmd: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    const proc = spawn(cmd, args);
     let stdout = "";
     let stderr = "";
-    let timedOut = false;
-
     proc.stdout?.on("data", (d) => (stdout += d));
     proc.stderr?.on("data", (d) => (stderr += d));
-
-    const onAbort = () => {
-      timedOut = true;
-      proc.kill("SIGTERM");
-      // Give it 5s to clean up, then force kill
-      setTimeout(() => proc.kill("SIGKILL"), 5000);
-    };
-
-    if (signal) {
-      signal.addEventListener("abort", onAbort, { once: true });
-    }
-
-    proc.on("close", (code) => {
-      if (signal) {
-        signal.removeEventListener("abort", onAbort);
-      }
-      resolve({
-        exitCode: code ?? 1,
-        stdout,
-        stderr,
-        timedOut,
-      });
-    });
+    proc.on("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
   });
 }

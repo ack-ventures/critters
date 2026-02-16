@@ -116,6 +116,7 @@ export class Spawner {
         workDir,
         this.config.maxTurns,
         task.identifier,
+        "plan",
         abortController.signal,
       );
 
@@ -144,6 +145,7 @@ export class Spawner {
         workDir,
         this.config.maxTurns,
         task.identifier,
+        "exec",
         abortController.signal,
       );
 
