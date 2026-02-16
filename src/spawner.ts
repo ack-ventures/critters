@@ -291,9 +291,9 @@ async function uploadFailureLogs(
 
   const logFiles = [
     { path: `${workDir}/.critter-output-plan.json`, name: `${task.identifier}-plan-output.txt` },
-    { path: `/tmp/critter-err-${task.identifier}-plan.log`, name: `${task.identifier}-plan-stderr.txt` },
+    { path: `${workDir}/.critter-err-plan.log`, name: `${task.identifier}-plan-stderr.txt` },
     { path: `${workDir}/.critter-output-exec.json`, name: `${task.identifier}-exec-output.txt` },
-    { path: `/tmp/critter-err-${task.identifier}-exec.log`, name: `${task.identifier}-exec-stderr.txt` },
+    { path: `${workDir}/.critter-err-exec.log`, name: `${task.identifier}-exec-stderr.txt` },
     { path: `${workDir}/critters/plans/${task.identifier}.md`, name: `${task.identifier}-plan.md` },
   ];
 
