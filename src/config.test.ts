@@ -93,3 +93,71 @@ describe("validateWorkDir", () => {
     expect(config.workDir).toBe("/tmp/critters-work");
   });
 });
+
+describe("validateRepoUrls", () => {
+  test("valid SSH URL accepted in repos", () => {
+    const path = writeYaml(
+      "repo-ssh.yaml",
+      `repos:\n  "proj-1":\n    url: "git@github.com:org/repo.git"\n`,
+    );
+    const config = loadConfig(path);
+    expect(config.repos["proj-1"].url).toBe("git@github.com:org/repo.git");
+  });
+
+  test("valid HTTPS URL accepted in repos", () => {
+    const path = writeYaml(
+      "repo-https.yaml",
+      `repos:\n  "proj-2":\n    url: "https://github.com/org/repo.git"\n`,
+    );
+    const config = loadConfig(path);
+    expect(config.repos["proj-2"].url).toBe("https://github.com/org/repo.git");
+  });
+
+  test("invalid URL rejected (missing .git suffix)", () => {
+    const path = writeYaml(
+      "repo-no-git.yaml",
+      `repos:\n  "proj-3":\n    url: "git@github.com:org/repo"\n`,
+    );
+    expect(() => loadConfig(path)).toThrow("Invalid git URL for repo");
+  });
+
+  test("invalid URL rejected (plain HTTP without .git)", () => {
+    const path = writeYaml(
+      "repo-http.yaml",
+      `repos:\n  "proj-4":\n    url: "http://example.com/repo"\n`,
+    );
+    expect(() => loadConfig(path)).toThrow("Invalid git URL for repo");
+  });
+
+  test("invalid URL rejected (random string)", () => {
+    const path = writeYaml(
+      "repo-random.yaml",
+      `repos:\n  "proj-5":\n    url: "not-a-url"\n`,
+    );
+    expect(() => loadConfig(path)).toThrow("Invalid git URL for repo");
+  });
+
+  test("teamRepos valid SSH URL accepted", () => {
+    const path = writeYaml(
+      "team-ssh.yaml",
+      `teamRepos:\n  "team-1": "git@github.com:org/repo.git"\n`,
+    );
+    const config = loadConfig(path);
+    expect(config.teamRepos["team-1"]).toBe("git@github.com:org/repo.git");
+  });
+
+  test("teamRepos invalid URL rejected", () => {
+    const path = writeYaml(
+      "team-invalid.yaml",
+      `teamRepos:\n  "team-2": "not-a-url"\n`,
+    );
+    expect(() => loadConfig(path)).toThrow("Invalid git URL for teamRepo");
+  });
+
+  test("empty repos and teamRepos passes validation", () => {
+    const path = writeYaml("repo-empty.yaml", "concurrency: 2\n");
+    const config = loadConfig(path);
+    expect(Object.keys(config.repos)).toHaveLength(0);
+    expect(Object.keys(config.teamRepos)).toHaveLength(0);
+  });
+});

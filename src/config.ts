@@ -100,6 +100,21 @@ export function loadConfig(configPath = "critters.config.yaml"): Config {
   return config;
 }
 
+const GIT_URL_RE = /^(git@[\w.-]+:[\w./-]+\.git|https?:\/\/[\w.-]+\/[\w./-]+\.git)$/;
+
+function validateRepoUrls(config: Config): void {
+  for (const [key, repo] of Object.entries(config.repos)) {
+    if (!GIT_URL_RE.test(repo.url)) {
+      throw new Error(`Invalid git URL for repo '${key}': ${repo.url}`);
+    }
+  }
+  for (const [key, url] of Object.entries(config.teamRepos)) {
+    if (!GIT_URL_RE.test(url)) {
+      throw new Error(`Invalid git URL for teamRepo '${key}': ${url}`);
+    }
+  }
+}
+
 function validateConfig(config: Config): void {
   if (config.concurrency < 1) {
     throw new Error(`Invalid config: concurrency must be >= 1, got ${config.concurrency}`);
@@ -116,4 +131,5 @@ function validateConfig(config: Config): void {
   if (config.maxExecutionTurns <= 0) {
     throw new Error(`Invalid config: maxExecutionTurns must be > 0, got ${config.maxExecutionTurns}`);
   }
+  validateRepoUrls(config);
 }
