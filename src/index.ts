@@ -1,3 +1,4 @@
+import packageJson from "../package.json";
 import { loadConfig } from "./config.js";
 import { checkPrerequisites } from "./prerequisites.js";
 import { initLinear, ensureLabel, loadTeamStatuses, ensureCritterFailedStatus } from "./linear.js";
@@ -6,7 +7,7 @@ import { Watcher } from "./watcher.js";
 import { log, logError } from "./logger.js";
 
 async function main() {
-  log("Starting Critters...");
+  log(`Critters v${packageJson.version} starting...`);
 
   // Verify required CLI tools are available
   await checkPrerequisites();
