@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { loadConfig } from "./config.js";
 import { ensureCritterFailedStatus, ensureLabel, initLinear, loadTeamStatuses } from "./linear.js";
 import { initFileLogging, log, logError } from "./logger.js";
@@ -15,14 +17,42 @@ async function main() {
     initFileLogging();
   }
 
-  const { version } = await Bun.file(new URL("../package.json", import.meta.url)).json();
+  // Load ~/.critters/.env as fallback if CWD .env doesn't exist
+  const cwdEnv = "./.env";
+  const userEnv = `${homedir()}/.critters/.env`;
+  if (!existsSync(cwdEnv) && existsSync(userEnv)) {
+    const envContent = readFileSync(userEnv, "utf-8");
+    for (const line of envContent.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eqIdx = trimmed.indexOf("=");
+      if (eqIdx === -1) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      const value = trimmed.slice(eqIdx + 1).trim();
+      if (!(key in process.env)) {
+        process.env[key] = value;
+      }
+    }
+  }
+
+  let version = "unknown";
+  try {
+    const pkg = await Bun.file(new URL("../package.json", import.meta.url)).json();
+    version = pkg.version;
+  } catch {
+    // In compiled binary, import.meta.url won't resolve to the source tree
+  }
   log(`Critters v${version} starting...`);
 
   // Verify required CLI tools are available
   await checkPrerequisites();
 
   // Load config
-  const config = loadConfig();
+  const configIdx = Bun.argv.indexOf("--config");
+  const configPath = configIdx !== -1 && Bun.argv[configIdx + 1]
+    ? Bun.argv[configIdx + 1]
+    : undefined;
+  const config = loadConfig(configPath);
   config.noTmux = noTmux;
 
   if (!noTmux) {

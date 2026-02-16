@@ -1,4 +1,5 @@
-import { mkdirSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
+import { homedir } from "node:os";
 import { parse as parseYaml } from "yaml";
 import type { Config, RepoConfig } from "./types.js";
 
@@ -49,8 +50,28 @@ function validateWorkDir(workDir: string): void {
   }
 }
 
-export function loadConfig(configPath = "critters.config.yaml"): Config {
-  const raw = readFileSync(configPath, "utf-8");
+function resolveConfigPath(configPath?: string): string {
+  if (configPath) return configPath;
+
+  const candidates = [
+    "./critters.config.yaml",
+    `${homedir()}/.critters/config.yaml`,
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+
+  throw new Error(
+    `Config file not found. Searched:\n` +
+    candidates.map((c) => `  - ${c}`).join("\n") +
+    `\n\nCreate critters.config.yaml in the current directory, or ~/.critters/config.yaml for installed binary usage.` +
+    `\nYou can also pass --config <path> to specify a config file.`,
+  );
+}
+
+export function loadConfig(configPath?: string): Config {
+  const resolved = resolveConfigPath(configPath);
+  const raw = readFileSync(resolved, "utf-8");
   const yaml = parseYaml(raw) as Record<string, unknown>;
 
   const linearApiKey = process.env.LINEAR_API_KEY;

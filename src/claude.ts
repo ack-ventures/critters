@@ -1,11 +1,8 @@
-import { chmodSync, copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { STREAM_FILTER } from "./jq-filter.js";
 import { logTask, logTaskError, logTaskWarn } from "./logger.js";
 import type { SpawnResult } from "./types.js";
 import { runCommand, sleep } from "./utils.js";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Rotating colors for critter panes — each critter gets a distinct look
 const PANE_COLORS = [
@@ -35,7 +32,7 @@ export async function spawnClaude(
   // Write prompt and jq filter to work dir
   writeFileSync(promptFile, prompt);
   const filterFile = `${workDir}/.critter-filter.jq`;
-  copyFileSync(join(__dirname, "stream-filter.jq"), filterFile);
+  writeFileSync(filterFile, STREAM_FILTER);
 
   const color = PANE_COLORS[colorIndex % PANE_COLORS.length];
   colorIndex++;
