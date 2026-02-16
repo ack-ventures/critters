@@ -43,6 +43,15 @@ export class Watcher {
         continue;
       }
 
+      // Check for unresolved blockers
+      if (task.blockedBy && task.blockedBy.length > 0) {
+        const blockerList = task.blockedBy
+          .map((b) => `${b.identifier} (${b.status})`)
+          .join(", ");
+        logTask(task.identifier, `Blocked by ${blockerList} — skipping`);
+        continue;
+      }
+
       // Resolve repo URL
       const repoUrl = resolveRepoUrl(task, this.config);
       if (!repoUrl) {
