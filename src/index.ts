@@ -6,7 +6,8 @@ import { Watcher } from "./watcher.js";
 import { log, logError } from "./logger.js";
 
 async function main() {
-  log("Starting Critters...");
+  const { version } = await Bun.file(new URL("../package.json", import.meta.url)).json();
+  log(`Critters v${version} starting...`);
 
   // Verify required CLI tools are available
   await checkPrerequisites();

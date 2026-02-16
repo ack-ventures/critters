@@ -9,6 +9,7 @@ import {
   hasCommitsOnBranch,
   hasUncommittedChanges,
   autoCommit,
+  commitFile,
   cleanupWorkDir,
   cleanupStaleWorkDirs,
 } from "./git.js";
@@ -139,6 +140,14 @@ export class Spawner {
 
       const planDuration = Date.now() - planStart;
       logTask(task.identifier, `Planning completed in ${formatDuration(planDuration)}${formatPhaseStats(planResult)}`);
+
+      // Commit plan file to branch
+      await commitFile(
+        workDir,
+        `critters/plans/${task.identifier}.md`,
+        `[${task.identifier}] Add implementation plan`,
+        task.identifier,
+      );
 
       // 4. Phase 2: Execution
       await commentOnIssue(task.issueId, "Plan approved, executing...");

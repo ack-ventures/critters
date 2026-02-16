@@ -1,10 +1,23 @@
 import { spawn } from "child_process";
-import { writeFileSync, readFileSync, existsSync, chmodSync } from "fs";
+import { writeFileSync, readFileSync, existsSync, chmodSync, copyFileSync } from "fs";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 import type { SpawnResult } from "./types.js";
 import { logTask, logTaskError } from "./logger.js";
 import { sleep } from "./utils.js";
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
 const TMUX_SESSION = "critters";
+
+// Rotating colors for critter panes — each critter gets a distinct look
+const PANE_COLORS = [
+  { bg: "colour17",  fg: "colour39",  label: "\x1b[1;36m" },  // deep blue bg, cyan text
+  { bg: "colour52",  fg: "colour209", label: "\x1b[1;33m" },  // dark red bg, orange text
+  { bg: "colour22",  fg: "colour119", label: "\x1b[1;32m" },  // dark green bg, lime text
+  { bg: "colour53",  fg: "colour177", label: "\x1b[1;35m" },  // purple bg, magenta text
+];
+let colorIndex = 0;
 
 export async function spawnClaude(
   prompt: string,
@@ -21,27 +34,42 @@ export async function spawnClaude(
   const scriptFile = `${workDir}/.critter-run-${phase}.sh`;
   const jsonLogFile = `${workDir}/.critter-output-${phase}.json`;
 
-  // Write prompt to file to avoid shell quoting issues
+  // Write prompt and jq filter to work dir
   writeFileSync(promptFile, prompt);
+  const filterFile = `${workDir}/.critter-filter.jq`;
+  copyFileSync(join(__dirname, "stream-filter.jq"), filterFile);
 
-  // Write a bash script that runs claude directly with TTY
+  const color = PANE_COLORS[colorIndex % PANE_COLORS.length];
+  colorIndex++;
+  const reset = "\\x1b[0m";
+
+  const errLog = `/tmp/critter-err-${identifier}-${phase}.log`;
+
+  // Write a bash script that streams Claude's output via stream-json + jq
   const script = `#!/bin/bash
 set -o pipefail
 export PATH="$HOME/.bun/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-echo "=== Critter ${identifier} (${phase}) ==="
-echo "Working in: ${workDir}"
-echo "Starting Claude..."
+unset CLAUDECODE
+echo -e "${color.label}━━━ ${identifier} / ${phase} ━━━${reset}"
 echo ""
 cd ${shellEscape(workDir)}
 claude -p "$(cat ${shellEscape(promptFile)})" \\
   --model opus \\
   --allowedTools ${shellEscape(allowedTools.join(","))} \\
   --max-turns ${maxTurns} \\
-  --output-format stream-json | tee ${shellEscape(jsonLogFile)}
+  --verbose \\
+  --output-format stream-json \\
+  2>${shellEscape(errLog)} | \\
+  tee ${shellEscape(jsonLogFile)} | \\
+  jq --unbuffered -cr -f ${shellEscape(filterFile)}
 EXIT_CODE=\${PIPESTATUS[0]}
+if [ $EXIT_CODE -ne 0 ]; then
+  echo ""
+  echo -e "${color.label}=== Claude failed (exit $EXIT_CODE) ===${reset}"
+  echo "stderr:"
+  cat ${shellEscape(errLog)}
+fi
 echo $EXIT_CODE > ${shellEscape(exitCodeFile)}
-echo ""
-echo "=== Claude exited with code $EXIT_CODE ==="
 sleep 5
 `;
 

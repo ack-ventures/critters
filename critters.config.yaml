@@ -13,12 +13,14 @@ defaultAllowedTools:
   - "Grep"
   - "Bash(git:*)"
   - "Bash(gh:*)"
+  - "Bash(bun:*)"
   - "Bash(npm:*)"
   - "Bash(npx:*)"
   - "Bash(node:*)"
   - "Bash(tsc:*)"
   - "Bash(ls:*)"
   - "Bash(mkdir:*)"
+  - "Bash(cat:*)"
 
 repos:
   # Linear project ID → repo config
