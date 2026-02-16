@@ -1,28 +1,27 @@
-import { existsSync, mkdirSync } from "fs";
-import { spawn } from "child_process";
-import type { Config, CritterTask, CritterResult, TeamStatuses } from "./types.js";
-import { branchName, formatDuration, formatPhaseStats } from "./utils.js";
-import { logTask, logTaskError } from "./logger.js";
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync } from "node:fs";
+import { spawnClaude } from "./claude.js";
 import {
-  shallowClone,
+  autoCommit,
+  cleanupStaleWorkDirs,
+  cleanupWorkDir,
+  commitFile,
   createBranch,
   hasCommitsOnBranch,
   hasUncommittedChanges,
-  autoCommit,
-  commitFile,
-  cleanupWorkDir,
-  cleanupStaleWorkDirs,
+  shallowClone,
 } from "./git.js";
-import { spawnClaude } from "./claude.js";
+import { commentOnIssue, updateIssueStatus } from "./linear.js";
+import { logTask, logTaskError } from "./logger.js";
 import {
-  buildPlanningPrompt,
   buildExecutionPrompt,
-  getPlanningAllowedTools,
+  buildPlanningPrompt,
   getExecutionAllowedTools,
+  getPlanningAllowedTools,
 } from "./prompt.js";
-import { updateIssueStatus, commentOnIssue } from "./linear.js";
-import { sendSlackNotification, formatSuccess, formatFailure } from "./slack.js";
-import { tailLines } from "./utils.js";
+import { formatFailure, formatSuccess, sendSlackNotification } from "./slack.js";
+import type { Config, CritterResult, CritterTask, TeamStatuses } from "./types.js";
+import { branchName, formatDuration, formatPhaseStats, tailLines } from "./utils.js";
 
 interface QueuedTask {
   task: CritterTask;
@@ -62,7 +61,8 @@ export class Spawner {
 
   private processQueue(): void {
     while (this.running < this.config.concurrency && this.queue.length > 0 && !this.stopped) {
-      const item = this.queue.shift()!;
+      const item = this.queue.shift();
+      if (!item) break;
       this.running++;
       this.runTask(item.task).then((result) => {
         this.running--;

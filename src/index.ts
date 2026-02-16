@@ -1,9 +1,9 @@
 import { loadConfig } from "./config.js";
+import { ensureCritterFailedStatus, ensureLabel, initLinear, loadTeamStatuses } from "./linear.js";
+import { log, logError } from "./logger.js";
 import { checkPrerequisites } from "./prerequisites.js";
-import { initLinear, ensureLabel, loadTeamStatuses, ensureCritterFailedStatus } from "./linear.js";
 import { Spawner } from "./spawner.js";
 import { Watcher } from "./watcher.js";
-import { log, logError } from "./logger.js";
 
 async function main() {
   const { version } = await Bun.file(new URL("../package.json", import.meta.url)).json();

@@ -1,5 +1,5 @@
-import { spawn } from "child_process";
-import { existsSync, rmSync } from "fs";
+import { spawn } from "node:child_process";
+import { existsSync, readdirSync, rmSync } from "node:fs";
 import { logTask, logTaskError } from "./logger.js";
 
 function run(args: string[], cwd: string): Promise<{ code: number; stdout: string; stderr: string }> {
@@ -105,8 +105,7 @@ export function cleanupWorkDir(dir: string): void {
 
 export function cleanupStaleWorkDirs(baseDir: string): void {
   if (!existsSync(baseDir)) return;
-  const { readdirSync } = require("fs");
-  const entries = readdirSync(baseDir) as string[];
+  const entries = readdirSync(baseDir, { encoding: "utf-8" });
   for (const entry of entries) {
     const fullPath = `${baseDir}/${entry}`;
     cleanupWorkDir(fullPath);

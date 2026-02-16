@@ -1,9 +1,9 @@
-import { spawn } from "child_process";
-import { writeFileSync, readFileSync, existsSync, chmodSync, copyFileSync } from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
-import type { SpawnResult } from "./types.js";
+import { spawn } from "node:child_process";
+import { chmodSync, copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { logTask, logTaskError } from "./logger.js";
+import type { SpawnResult } from "./types.js";
 import { sleep } from "./utils.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -109,7 +109,7 @@ sleep 5
   if (existsSync(exitCodeFile)) {
     const raw = readFileSync(exitCodeFile, "utf-8").trim();
     exitCode = parseInt(raw, 10);
-    if (isNaN(exitCode)) exitCode = 1;
+    if (Number.isNaN(exitCode)) exitCode = 1;
   }
 
   // Clean up the pane (it may already be gone after the script exits)
@@ -139,8 +139,6 @@ function parseClaudeJsonLog(filePath: string): { numTurns?: number; totalTokens?
           return { numTurns, totalTokens };
         }
       } catch {
-        // Skip non-JSON lines
-        continue;
       }
     }
   } catch {

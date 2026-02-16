@@ -1,4 +1,4 @@
-import { spawn } from "child_process";
+import { spawn } from "node:child_process";
 import { log, logError } from "./logger.js";
 
 function runCommand(command: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
