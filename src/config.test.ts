@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { loadConfig } from "./config.js";
 
 const tmpDir = "/tmp/critters-config-test";
+const validToolsYaml = 'defaultAllowedTools:\n  - "Read"\n';
 
 function writeYaml(filename: string, content: string): string {
   const path = `${tmpDir}/${filename}`;
@@ -70,26 +71,44 @@ describe("validateWorkDir", () => {
   });
 
   test("accepts /tmp/critters-work", () => {
-    const path = writeYaml("tmp.yaml", "workDir: /tmp/critters-work\n");
+    const path = writeYaml("tmp.yaml", `workDir: /tmp/critters-work\n${validToolsYaml}`);
     const config = loadConfig(path);
     expect(config.workDir).toBe("/tmp/critters-work");
   });
 
   test("accepts /private/tmp/critters-work (macOS)", () => {
-    const path = writeYaml("private-tmp.yaml", "workDir: /private/tmp/critters-work\n");
+    const path = writeYaml("private-tmp.yaml", `workDir: /private/tmp/critters-work\n${validToolsYaml}`);
     const config = loadConfig(path);
     expect(config.workDir).toBe("/private/tmp/critters-work");
   });
 
   test("accepts /data/critters-workspace (contains critters)", () => {
-    const path = writeYaml("critters-path.yaml", "workDir: /data/critters-workspace\n");
+    const path = writeYaml("critters-path.yaml", `workDir: /data/critters-workspace\n${validToolsYaml}`);
     const config = loadConfig(path);
     expect(config.workDir).toBe("/data/critters-workspace");
   });
 
   test("default workDir (/tmp/critters-work) passes validation", () => {
-    const path = writeYaml("default.yaml", "concurrency: 2\n");
+    const path = writeYaml("default.yaml", `concurrency: 2\n${validToolsYaml}`);
     const config = loadConfig(path);
     expect(config.workDir).toBe("/tmp/critters-work");
+  });
+});
+
+describe("validateConfig - defaultAllowedTools", () => {
+  test("rejects empty defaultAllowedTools array", () => {
+    const path = writeYaml("empty-tools.yaml", "workDir: /tmp/critters-work\ndefaultAllowedTools: []\n");
+    expect(() => loadConfig(path)).toThrow("defaultAllowedTools must be a non-empty array of tool patterns");
+  });
+
+  test("rejects missing defaultAllowedTools (defaults to empty array)", () => {
+    const path = writeYaml("no-tools.yaml", "workDir: /tmp/critters-work\n");
+    expect(() => loadConfig(path)).toThrow("defaultAllowedTools must be a non-empty array of tool patterns");
+  });
+
+  test("accepts non-empty defaultAllowedTools", () => {
+    const path = writeYaml("valid-tools.yaml", `workDir: /tmp/critters-work\n${validToolsYaml}`);
+    const config = loadConfig(path);
+    expect(config.defaultAllowedTools).toEqual(["Read"]);
   });
 });
