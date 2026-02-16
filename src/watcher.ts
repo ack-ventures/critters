@@ -1,5 +1,5 @@
 import { commentOnIssue, findCritterIssues } from "./linear.js";
-import { log, logError, logTask } from "./logger.js";
+import { log, logError, logTask, logTaskError } from "./logger.js";
 import { resolveRepoUrl } from "./prompt.js";
 import type { Spawner } from "./spawner.js";
 import type { Config } from "./types.js";
@@ -70,6 +70,9 @@ export class Watcher {
         } else {
           logTask(task.identifier, `Failed: ${result.error}`);
         }
+      }).catch((err) => {
+        this.activeIssueIds.delete(task.issueId);
+        logTaskError(task.identifier, `Dispatch failed: ${err}`);
       });
     }
   }
