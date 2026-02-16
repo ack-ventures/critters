@@ -139,7 +139,9 @@ export class Spawner {
       }
 
       const planDuration = Date.now() - planStart;
-      logTask(task.identifier, `Planning completed in ${formatDuration(planDuration)}${formatPhaseStats(planResult)}`);
+      const planStats = `Planning completed in ${formatDuration(planDuration)}${formatPhaseStats(planResult)}`;
+      logTask(task.identifier, planStats);
+      await commentOnIssue(task.issueId, planStats);
 
       // Commit plan file to branch
       await commitFile(
@@ -174,7 +176,9 @@ export class Spawner {
       }
 
       const execDuration = Date.now() - execStart;
-      logTask(task.identifier, `Execution completed in ${formatDuration(execDuration)}${formatPhaseStats(execResult)}`);
+      const execStats = `Execution completed in ${formatDuration(execDuration)}${formatPhaseStats(execResult)}`;
+      logTask(task.identifier, execStats);
+      await commentOnIssue(task.issueId, execStats);
 
       // 5. Check for commits, auto-commit if needed
       if (await hasUncommittedChanges(workDir)) {
