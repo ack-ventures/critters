@@ -1,4 +1,4 @@
-import { log, logError } from "./logger.js";
+import { logError } from "./logger.js";
 
 export async function sendSlackNotification(
   webhookUrl: string | undefined,

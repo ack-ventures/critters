@@ -50,7 +50,10 @@ export function getExecutionAllowedTools(config: Config, task: CritterTask): str
 
   // Merge per-repo extra tools
   if (task.projectId && config.repos[task.projectId]?.extraAllowedTools) {
-    tools.push(...config.repos[task.projectId].extraAllowedTools!);
+    const extra = config.repos[task.projectId]?.extraAllowedTools;
+    if (extra) {
+      tools.push(...extra);
+    }
   }
 
   return [...new Set(tools)];

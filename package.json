@@ -5,13 +5,15 @@
   "type": "module",
   "scripts": {
     "start": "bun run src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src/"
   },
   "dependencies": {
     "@linear/sdk": "latest",
     "yaml": "^2"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.0",
     "@types/bun": "latest",
     "typescript": "^5"
   }

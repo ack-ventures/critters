@@ -1,6 +1,6 @@
 import { LinearClient } from "@linear/sdk";
+import { log } from "./logger.js";
 import type { Config, CritterTask, TeamStatuses } from "./types.js";
-import { log, logError } from "./logger.js";
 
 let client: LinearClient;
 

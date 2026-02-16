@@ -1,21 +1,18 @@
-import type { Config, TeamStatuses } from "./types.js";
+import { commentOnIssue, findCritterIssues } from "./linear.js";
 import { log, logError, logTask } from "./logger.js";
-import { findCritterIssues } from "./linear.js";
 import { resolveRepoUrl } from "./prompt.js";
-import { commentOnIssue } from "./linear.js";
-import { Spawner } from "./spawner.js";
+import type { Spawner } from "./spawner.js";
+import type { Config } from "./types.js";
 import { sleep } from "./utils.js";
 
 export class Watcher {
   private config: Config;
-  private teamStatuses: TeamStatuses;
   private spawner: Spawner;
   private activeIssueIds = new Set<string>();
   private stopped = false;
 
-  constructor(config: Config, teamStatuses: TeamStatuses, spawner: Spawner) {
+  constructor(config: Config, spawner: Spawner) {
     this.config = config;
-    this.teamStatuses = teamStatuses;
     this.spawner = spawner;
   }
 
