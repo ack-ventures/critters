@@ -156,9 +156,10 @@ export class Spawner {
       logTask(task.identifier, "Starting Phase 2: Execution");
 
       const execStart = Date.now();
+      const execAllowedTools = getExecutionAllowedTools(this.config, task);
       const execResult = await spawnClaude(
-        buildExecutionPrompt(task),
-        getExecutionAllowedTools(this.config, task),
+        buildExecutionPrompt(task, execAllowedTools),
+        execAllowedTools,
         workDir,
         this.config.maxTurns,
         task.identifier,
