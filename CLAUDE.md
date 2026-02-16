@@ -94,6 +94,7 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 | `src/config.ts` | Load YAML + env |
 | `src/logger.ts` | Timestamped console logging |
 | `src/slack.ts` | Webhook notifications |
+| `critters/plans/<ID>.md` | Planning phase output — critters write their implementation plans here, committed to the repo |
 
 ## Environment variables
 
