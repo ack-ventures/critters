@@ -1,10 +1,9 @@
-import { spawn } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { logTask, logTaskError } from "./logger.js";
 import type { SpawnResult } from "./types.js";
-import { sleep } from "./utils.js";
+import { runCommand, sleep } from "./utils.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -159,15 +158,4 @@ function parseClaudeJsonLog(filePath: string): { numTurns?: number; totalTokens?
 
 function shellEscape(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
-}
-
-function runCommand(cmd: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
-  return new Promise((resolve) => {
-    const proc = spawn(cmd, args);
-    let stdout = "";
-    let stderr = "";
-    proc.stdout?.on("data", (d) => (stdout += d));
-    proc.stderr?.on("data", (d) => (stderr += d));
-    proc.on("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
-  });
 }

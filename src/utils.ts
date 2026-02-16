@@ -1,3 +1,23 @@
+import { spawn } from "node:child_process";
+
+export function runCommand(
+  command: string,
+  args: string[],
+  options?: { cwd?: string },
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    const proc = spawn(command, args, options?.cwd ? { cwd: options.cwd } : undefined);
+    let stdout = "";
+    let stderr = "";
+    proc.stdout?.on("data", (d) => (stdout += d));
+    proc.stderr?.on("data", (d) => (stderr += d));
+    proc.on("error", (err) => {
+      resolve({ code: 1, stdout, stderr: stderr || err.message });
+    });
+    proc.on("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
+  });
+}
+
 export function slugify(text: string): string {
   return text
     .toLowerCase()
