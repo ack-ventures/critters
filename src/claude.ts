@@ -1,7 +1,7 @@
 import { chmodSync, copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { logTask, logTaskError } from "./logger.js";
+import { logTask, logTaskError, logTaskWarn } from "./logger.js";
 import type { SpawnResult } from "./types.js";
 import { runCommand, sleep } from "./utils.js";
 
@@ -99,7 +99,10 @@ sleep 5
   while (!existsSync(exitCodeFile)) {
     if (signal?.aborted) {
       timedOut = true;
-      await runCommand("tmux", ["kill-pane", "-t", paneId]);
+      const killResult = await runCommand("tmux", ["kill-pane", "-t", paneId]);
+      if (killResult.code !== 0) {
+        logTaskWarn(identifier, `Failed to kill tmux pane on abort: ${killResult.stderr}`);
+      }
       break;
     }
     await sleep(2000);
@@ -115,7 +118,10 @@ sleep 5
   }
 
   // Clean up the pane (it may already be gone after the script exits)
-  await runCommand("tmux", ["kill-pane", "-t", paneId]).catch(() => {});
+  const cleanupResult = await runCommand("tmux", ["kill-pane", "-t", paneId]);
+  if (cleanupResult.code !== 0) {
+    logTaskWarn(identifier, `Failed to kill tmux pane during cleanup: ${cleanupResult.stderr}`);
+  }
 
   const { numTurns, totalTokens } = parseClaudeJsonLog(jsonLogFile);
 
