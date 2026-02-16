@@ -18,45 +18,47 @@ export async function spawnClaude(
   const windowName = `${identifier}-${phase}`;
   const promptFile = `${workDir}/.critter-prompt-${phase}`;
   const exitCodeFile = `${workDir}/.critter-exit-code-${phase}`;
-  const logFile = `${workDir}/.critter-log-${phase}`;
   const scriptFile = `${workDir}/.critter-run-${phase}.sh`;
 
   // Write prompt to file to avoid shell quoting issues
   writeFileSync(promptFile, prompt);
 
-  // Write a bash script that runs claude and captures the exit code
+  // Write a bash script that runs claude directly (no pipe, keeps TTY for interactive output)
   const script = `#!/bin/bash
 export PATH="$HOME/.bun/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 cd ${shellEscape(workDir)}
 claude -p "$(cat ${shellEscape(promptFile)})" \\
   --model opus \\
   --allowedTools ${shellEscape(allowedTools.join(","))} \\
-  --max-turns ${maxTurns} \\
-  2>&1 | tee ${shellEscape(logFile)}
-echo \${PIPESTATUS[0]} > ${shellEscape(exitCodeFile)}
+  --max-turns ${maxTurns}
+echo $? > ${shellEscape(exitCodeFile)}
 `;
 
   writeFileSync(scriptFile, script);
   chmodSync(scriptFile, 0o755);
 
-  logTask(identifier, `Spawning Claude in tmux window "${windowName}" (${phase})`);
+  logTask(identifier, `Spawning Claude in tmux pane "${windowName}" (${phase})`);
 
-  // Create tmux window running the bash script
+  // Split a new pane in the critters session for this critter
   const tmuxResult = await runCommand("tmux", [
-    "new-window", "-t", TMUX_SESSION, "-n", windowName, `/bin/bash ${scriptFile}`,
+    "split-window", "-t", TMUX_SESSION, "-h", "-d",
+    "-P", "-F", "#{pane_id}",
+    `/bin/bash ${scriptFile}`,
   ]);
 
   if (tmuxResult.code !== 0) {
-    logTaskError(identifier, `Failed to create tmux window: ${tmuxResult.stderr}`);
+    logTaskError(identifier, `Failed to create tmux pane: ${tmuxResult.stderr}`);
     return { exitCode: 1, stdout: "", stderr: tmuxResult.stderr, timedOut: false };
   }
+
+  const paneId = tmuxResult.stdout.trim();
 
   // Poll for completion
   let timedOut = false;
   while (!existsSync(exitCodeFile)) {
     if (signal?.aborted) {
       timedOut = true;
-      await runCommand("tmux", ["kill-window", "-t", `${TMUX_SESSION}:${windowName}`]);
+      await runCommand("tmux", ["kill-pane", "-t", paneId]);
       break;
     }
     await sleep(2000);
@@ -64,7 +66,6 @@ echo \${PIPESTATUS[0]} > ${shellEscape(exitCodeFile)}
 
   // Read results
   let exitCode = 1;
-  let stdout = "";
 
   if (existsSync(exitCodeFile)) {
     const raw = readFileSync(exitCodeFile, "utf-8").trim();
@@ -72,14 +73,10 @@ echo \${PIPESTATUS[0]} > ${shellEscape(exitCodeFile)}
     if (isNaN(exitCode)) exitCode = 1;
   }
 
-  if (existsSync(logFile)) {
-    stdout = readFileSync(logFile, "utf-8");
-  }
+  // Clean up the pane (it may already be gone after the script exits)
+  await runCommand("tmux", ["kill-pane", "-t", paneId]).catch(() => {});
 
-  // Clean up the tmux window (it may already be gone)
-  await runCommand("tmux", ["kill-window", "-t", `${TMUX_SESSION}:${windowName}`]).catch(() => {});
-
-  return { exitCode, stdout, stderr: "", timedOut };
+  return { exitCode, stdout: "", stderr: "", timedOut };
 }
 
 function shellEscape(s: string): string {
