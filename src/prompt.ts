@@ -2,13 +2,21 @@ import type { Config, CritterTask } from "./types.js";
 
 const REPO_LINE_RE = /^repo:\s*(.+)$/mi;
 
+export function cleanLinearMarkdown(text: string): string {
+  // Linear converts git@github.com into [git@github.com](<mailto:git@github.com>)
+  // Undo that so we get the raw SSH URL back
+  return text.replace(/\[([^\]]+)\]\(<mailto:[^>]+>\)/g, "$1");
+}
+
 export function parseRepoUrl(description: string): string | null {
-  const match = description.match(REPO_LINE_RE);
+  const cleaned = cleanLinearMarkdown(description);
+  const match = cleaned.match(REPO_LINE_RE);
   return match ? match[1].trim() : null;
 }
 
 export function stripRepoLine(description: string): string {
-  return description.replace(REPO_LINE_RE, "").trim();
+  const cleaned = cleanLinearMarkdown(description);
+  return cleaned.replace(REPO_LINE_RE, "").trim();
 }
 
 export function resolveRepoUrl(task: CritterTask, config: Config): string | null {
