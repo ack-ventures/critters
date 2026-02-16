@@ -116,3 +116,35 @@ export async function commentOnIssue(
 ): Promise<void> {
   await client.createComment({ issueId, body });
 }
+
+export async function uploadFileToIssue(
+  issueId: string,
+  filename: string,
+  content: Buffer,
+  contentType: string,
+): Promise<string | null> {
+  const payload = await client.fileUpload(contentType, filename, content.length);
+  const uploadFile = payload.uploadFile;
+  if (!uploadFile) return null;
+
+  const headers: Record<string, string> = {};
+  for (const h of uploadFile.headers) {
+    headers[h.key] = h.value;
+  }
+
+  const resp = await fetch(uploadFile.uploadUrl, {
+    method: "PUT",
+    headers,
+    body: new Uint8Array(content),
+  });
+
+  if (!resp.ok) return null;
+
+  await client.createAttachment({
+    issueId,
+    url: uploadFile.assetUrl,
+    title: filename,
+  });
+
+  return uploadFile.assetUrl;
+}
