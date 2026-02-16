@@ -1,12 +1,20 @@
+#!/usr/bin/env bun
+
 import { loadConfig } from "./config.js";
 import { ensureCritterFailedStatus, ensureLabel, initLinear, loadTeamStatuses } from "./linear.js";
-import { log, logError } from "./logger.js";
+import { initFileLogging, log, logError } from "./logger.js";
 import { checkPrerequisites } from "./prerequisites.js";
 import { Spawner } from "./spawner.js";
 import { runCommand } from "./utils.js";
 import { Watcher } from "./watcher.js";
 
 async function main() {
+  // Parse CLI flags early so file logging captures all output
+  const noTmux = Bun.argv.includes("--no-tmux");
+  if (noTmux) {
+    initFileLogging();
+  }
+
   const { version } = await Bun.file(new URL("../package.json", import.meta.url)).json();
   log(`Critters v${version} starting...`);
 
@@ -15,11 +23,14 @@ async function main() {
 
   // Load config
   const config = loadConfig();
+  config.noTmux = noTmux;
 
-  // Enable pane titles in the tmux session (best-effort — may fail if not running in tmux)
-  await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-status", "top"]).catch(() => {});
-  await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-format", "#{pane_title}"]).catch(() => {});
-  log(`Config loaded: concurrency=${config.concurrency}, timeout=${config.timeoutMinutes}min, poll=${config.pollIntervalSeconds}s`);
+  if (!noTmux) {
+    // Enable pane titles in the tmux session (best-effort — may fail if not running in tmux)
+    await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-status", "top"]).catch(() => {});
+    await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-format", "#{pane_title}"]).catch(() => {});
+  }
+  log(`Config loaded: concurrency=${config.concurrency}, timeout=${config.timeoutMinutes}min, poll=${config.pollIntervalSeconds}s, noTmux=${noTmux}`);
 
   // Init Linear client
   initLinear(config);

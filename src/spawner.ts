@@ -1,5 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { spawnClaude } from "./claude.js";
+import { spawnClaude, spawnClaudeSubprocess } from "./claude.js";
 import {
   autoCommit,
   cleanupStaleWorkDirs,
@@ -138,16 +138,26 @@ export class Spawner {
       logTask(task.identifier, `Planning phase allowed tools: ${planAllowedTools.join(", ")}`);
 
       const planStart = Date.now();
-      const planResult = await spawnClaude(
-        buildPlanningPrompt(task),
-        planAllowedTools,
-        workDir,
-        this.config.maxPlanningTurns,
-        task.identifier,
-        "plan",
-        this.config.tmuxSession,
-        abortController.signal,
-      );
+      const planResult = this.config.noTmux
+        ? await spawnClaudeSubprocess(
+            buildPlanningPrompt(task),
+            planAllowedTools,
+            workDir,
+            this.config.maxPlanningTurns,
+            task.identifier,
+            "plan",
+            abortController.signal,
+          )
+        : await spawnClaude(
+            buildPlanningPrompt(task),
+            planAllowedTools,
+            workDir,
+            this.config.maxPlanningTurns,
+            task.identifier,
+            "plan",
+            this.config.tmuxSession,
+            abortController.signal,
+          );
 
       validatePhaseResult(planResult, "planning");
 
@@ -177,16 +187,26 @@ export class Spawner {
       const execStart = Date.now();
       const execAllowedTools = getExecutionAllowedTools(this.config, task);
       logTask(task.identifier, `Execution phase allowed tools: ${execAllowedTools.join(", ")}`);
-      const execResult = await spawnClaude(
-        buildExecutionPrompt(task, execAllowedTools),
-        execAllowedTools,
-        workDir,
-        this.config.maxExecutionTurns,
-        task.identifier,
-        "exec",
-        this.config.tmuxSession,
-        abortController.signal,
-      );
+      const execResult = this.config.noTmux
+        ? await spawnClaudeSubprocess(
+            buildExecutionPrompt(task, execAllowedTools),
+            execAllowedTools,
+            workDir,
+            this.config.maxExecutionTurns,
+            task.identifier,
+            "exec",
+            abortController.signal,
+          )
+        : await spawnClaude(
+            buildExecutionPrompt(task, execAllowedTools),
+            execAllowedTools,
+            workDir,
+            this.config.maxExecutionTurns,
+            task.identifier,
+            "exec",
+            this.config.tmuxSession,
+            abortController.signal,
+          );
 
       validatePhaseResult(execResult, "execution");
 

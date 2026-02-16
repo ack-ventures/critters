@@ -91,6 +91,7 @@ export function loadConfig(configPath = "critters.config.yaml"): Config {
     maxExecutionTurns: (yaml.maxExecutionTurns as number) ?? 75,
     defaultAllowedTools: (yaml.defaultAllowedTools as string[]) ?? [],
     tmuxSession: (yaml.tmuxSession as string) ?? "critters",
+    noTmux: false,
     repos,
     teamRepos,
     linearApiKey,
