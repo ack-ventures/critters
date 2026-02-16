@@ -1,5 +1,5 @@
 pollIntervalSeconds: 30
-concurrency: 2
+concurrency: 5
 timeoutMinutes: 30
 workDir: /tmp/critters-work
 triggerLabel: "Critter"
