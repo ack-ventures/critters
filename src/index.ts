@@ -33,7 +33,7 @@ async function main() {
   log("Cleaned up stale work directories");
 
   // Create watcher
-  const watcher = new Watcher(config, teamStatuses, spawner);
+  const watcher = new Watcher(config, spawner);
 
   // Signal handlers
   const shutdown = () => {

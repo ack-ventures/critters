@@ -139,6 +139,7 @@ function parseClaudeJsonLog(filePath: string): { numTurns?: number; totalTokens?
           return { numTurns, totalTokens };
         }
       } catch {
+        // Skip non-JSON lines
       }
     }
   } catch {

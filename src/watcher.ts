@@ -2,7 +2,7 @@ import { commentOnIssue, findCritterIssues } from "./linear.js";
 import { log, logError, logTask } from "./logger.js";
 import { resolveRepoUrl } from "./prompt.js";
 import type { Spawner } from "./spawner.js";
-import type { Config, TeamStatuses } from "./types.js";
+import type { Config } from "./types.js";
 import { sleep } from "./utils.js";
 
 export class Watcher {
@@ -11,7 +11,7 @@ export class Watcher {
   private activeIssueIds = new Set<string>();
   private stopped = false;
 
-  constructor(config: Config, _teamStatuses: TeamStatuses, spawner: Spawner) {
+  constructor(config: Config, spawner: Spawner) {
     this.config = config;
     this.spawner = spawner;
   }
