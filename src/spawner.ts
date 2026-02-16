@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from "fs";
+import { existsSync, mkdirSync, readFileSync } from "fs";
 import { spawn } from "child_process";
 import type { Config, CritterTask, CritterResult, TeamStatuses } from "./types.js";
 import { branchName, formatDuration, formatPhaseStats } from "./utils.js";
@@ -20,7 +20,7 @@ import {
   getPlanningAllowedTools,
   getExecutionAllowedTools,
 } from "./prompt.js";
-import { updateIssueStatus, commentOnIssue } from "./linear.js";
+import { updateIssueStatus, commentOnIssue, uploadFileToIssue } from "./linear.js";
 import { sendSlackNotification, formatSuccess, formatFailure } from "./slack.js";
 import { tailLines } from "./utils.js";
 
@@ -228,8 +228,15 @@ export class Spawner {
         }
       }
 
+      // Upload logs and plan file as attachments for debugging
+      const attachmentUrls = await uploadFailureLogs(task, workDir);
+
       try {
-        await commentOnIssue(task.issueId, `Critter failed after ${totalDuration}: ${error}`);
+        let failComment = `Critter failed after ${totalDuration}: ${error}`;
+        if (attachmentUrls.length > 0) {
+          failComment += "\n\nAttached logs:\n" + attachmentUrls.map((a) => `- [${a.name}](${a.url})`).join("\n");
+        }
+        await commentOnIssue(task.issueId, failComment);
       } catch {
         logTaskError(task.identifier, "Failed to post error comment");
       }
@@ -247,6 +254,43 @@ export class Spawner {
       logTask(task.identifier, "Cleaned up work directory");
     }
   }
+}
+
+const MAX_LOG_SIZE = 5 * 1024 * 1024; // 5MB cap per file
+
+async function uploadFailureLogs(
+  task: CritterTask,
+  workDir: string,
+): Promise<Array<{ name: string; url: string }>> {
+  const uploaded: Array<{ name: string; url: string }> = [];
+
+  const logFiles = [
+    { path: `${workDir}/.critter-output-plan.json`, name: `${task.identifier}-plan-output.txt` },
+    { path: `/tmp/critter-err-${task.identifier}-plan.log`, name: `${task.identifier}-plan-stderr.txt` },
+    { path: `${workDir}/.critter-output-exec.json`, name: `${task.identifier}-exec-output.txt` },
+    { path: `/tmp/critter-err-${task.identifier}-exec.log`, name: `${task.identifier}-exec-stderr.txt` },
+    { path: `${workDir}/critters/plans/${task.identifier}.md`, name: `${task.identifier}-plan.md` },
+  ];
+
+  for (const file of logFiles) {
+    if (!existsSync(file.path)) continue;
+    try {
+      let content = readFileSync(file.path);
+      if (content.length === 0) continue;
+      if (content.length > MAX_LOG_SIZE) {
+        content = content.subarray(content.length - MAX_LOG_SIZE);
+      }
+      const url = await uploadFileToIssue(task.issueId, file.name, content, "text/plain");
+      if (url) {
+        uploaded.push({ name: file.name, url });
+        logTask(task.identifier, `Uploaded ${file.name}`);
+      }
+    } catch {
+      logTaskError(task.identifier, `Failed to upload ${file.name}`);
+    }
+  }
+
+  return uploaded;
 }
 
 async function detectPr(
