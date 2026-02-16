@@ -28,8 +28,8 @@ describe("validateWorkDir", () => {
     expect(() => loadConfig(path)).toThrow("must not be the root directory");
   });
 
-  test("rejects /Users/andrew (home directory)", () => {
-    const path = writeYaml("home.yaml", "workDir: /Users/andrew\n");
+  test("rejects /Users/testuser (home directory)", () => {
+    const path = writeYaml("home.yaml", "workDir: /Users/testuser\n");
     expect(() => loadConfig(path)).toThrow("must not be a home directory");
   });
 

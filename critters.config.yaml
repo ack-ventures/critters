@@ -5,6 +5,7 @@ workDir: /tmp/critters-work
 triggerLabel: "Critter"
 maxPlanningTurns: 50
 maxExecutionTurns: 75
+tmuxSession: critters
 
 defaultAllowedTools:
   - "Read"

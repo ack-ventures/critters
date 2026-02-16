@@ -89,6 +89,13 @@ You have a limited set of tools. Only these Bash commands are available: git, ls
 If a command is blocked or requires approval, do NOT retry it — move on and find an alternative approach or skip that step.`;
 }
 
+function getOsGuidance(): string {
+  if (process.platform === "darwin") {
+    return "You are running on macOS — some GNU-specific flags (like `cat -A`, `grep -P`) are not available.";
+  }
+  return "You are running on Linux.";
+}
+
 export function buildExecutionPrompt(task: CritterTask, allowedTools: string[]): string {
   const bashTools = allowedTools
     .filter((t) => t.startsWith("Bash("))
@@ -110,6 +117,6 @@ Execute the plan completely. Then:
 You have a limited set of tools. Only these Bash commands are available: ${bashTools.join(", ")}.
 Commands like chmod, bunx, perl, python3, curl, and others are NOT available.
 Use "bun x" instead of "bunx" to run package binaries.
-You are running on macOS — some GNU-specific flags (like \`cat -A\`, \`grep -P\`) are not available.
+${getOsGuidance()}
 If a command is blocked or requires approval, do NOT retry it — move on and find an alternative approach or skip that step. Never retry a blocked command more than once.`;
 }

@@ -7,7 +7,39 @@ TypeScript daemon that watches Linear for issues labeled "Critter", spawns Claud
 - Language: TypeScript (strict)
 - Package manager: bun
 - Key deps: @linear/sdk, yaml
-- Run: `bun run src/index.ts` (or `tmux new -s critters 'cd /Users/andrew/dev/critters && bun run src/index.ts'`)
+- Run: `bun run src/index.ts` (or `tmux new -s critters 'bun run src/index.ts'`)
+
+## Getting Started
+
+### Prerequisites
+- [Bun](https://bun.sh/) (runtime & package manager)
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude` command)
+- [GitHub CLI](https://cli.github.com/) (`gh`) — must be authenticated (`gh auth login`)
+- `git`
+- `tmux`
+- `jq`
+
+### Setup
+1. Clone the repo and install dependencies:
+   ```
+   git clone <repo-url> && cd critters
+   bun install
+   ```
+2. Copy `.env.example` to `.env` and fill in your values:
+   ```
+   cp .env.example .env
+   ```
+   Required: `LINEAR_API_KEY` — your Linear API key
+   Optional: `SLACK_WEBHOOK_URL` — for Slack notifications
+3. Review `critters.config.yaml` and adjust settings as needed.
+4. Start a tmux session (name must match `tmuxSession` in config, defaults to "critters"):
+   ```
+   tmux new -s critters
+   ```
+5. Run the daemon:
+   ```
+   bun run src/index.ts
+   ```
 
 ## Conventions
 - All source in `src/`
@@ -62,6 +94,7 @@ The watcher picks up matching issues every 120 seconds. Once picked up, status m
 | `maxTurns` | 50 | Max Claude turns per phase |
 | `defaultAllowedTools` | see file | Tools critters can use |
 | `repos` | {} | Project ID → repo URL + extra tools |
+| `tmuxSession` | "critters" | Name of the tmux session to use |
 | `teamRepos` | {} | Team ID → fallback repo URL |
 
 ### Allowed tools

@@ -145,6 +145,7 @@ export class Spawner {
         this.config.maxPlanningTurns,
         task.identifier,
         "plan",
+        this.config.tmuxSession,
         abortController.signal,
       );
 
@@ -183,6 +184,7 @@ export class Spawner {
         this.config.maxExecutionTurns,
         task.identifier,
         "exec",
+        this.config.tmuxSession,
         abortController.signal,
       );
 
