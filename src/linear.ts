@@ -1,5 +1,5 @@
 import { LinearClient } from "@linear/sdk";
-import { log } from "./logger.js";
+import { log, logError } from "./logger.js";
 import type { Config, CritterTask, TeamStatuses } from "./types.js";
 
 let client: LinearClient;
@@ -125,7 +125,10 @@ export async function uploadFileToIssue(
 ): Promise<string | null> {
   const payload = await client.fileUpload(contentType, filename, content.length);
   const uploadFile = payload.uploadFile;
-  if (!uploadFile) return null;
+  if (!uploadFile) {
+    logError("File upload failed: no uploadFile in payload");
+    return null;
+  }
 
   const headers: Record<string, string> = {};
   for (const h of uploadFile.headers) {
@@ -138,7 +141,10 @@ export async function uploadFileToIssue(
     body: new Uint8Array(content),
   });
 
-  if (!resp.ok) return null;
+  if (!resp.ok) {
+    logError(`File upload failed: PUT request returned HTTP ${resp.status}`);
+    return null;
+  }
 
   await client.createAttachment({
     issueId,
