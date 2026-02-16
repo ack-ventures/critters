@@ -42,7 +42,7 @@ export async function spawnClaude(
   colorIndex++;
   const reset = "\\x1b[0m";
 
-  const errLog = `/tmp/critter-err-${identifier}-${phase}.log`;
+  const errLog = `${workDir}/.critter-err-${phase}.log`;
 
   // Write a bash script that streams Claude's output via stream-json + jq
   const script = `#!/bin/bash
