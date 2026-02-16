@@ -19,7 +19,7 @@ import {
   getPlanningAllowedTools,
 } from "./prompt.js";
 import { formatFailure, formatSuccess, sendSlackNotification } from "./slack.js";
-import type { Config, CritterResult, CritterTask, TeamStatuses } from "./types.js";
+import type { Config, CritterResult, CritterTask, SpawnResult, TeamStatuses } from "./types.js";
 import { branchName, formatDuration, formatPhaseStats, runCommand, sleep, tailLines } from "./utils.js";
 
 interface QueuedTask {
@@ -145,14 +145,7 @@ export class Spawner {
         abortController.signal,
       );
 
-      if (planResult.timedOut) {
-        throw new Error("Timed out during planning phase");
-      }
-
-      if (planResult.exitCode !== 0) {
-        const errTail = tailLines(planResult.stderr || planResult.stdout, 20);
-        throw new Error(`Planning failed (exit ${planResult.exitCode}):\n${errTail}`);
-      }
+      validatePhaseResult(planResult, "planning");
 
       // Verify plan file exists
       const planFile = `${workDir}/critters/plans/${task.identifier}.md`;
@@ -190,14 +183,7 @@ export class Spawner {
         abortController.signal,
       );
 
-      if (execResult.timedOut) {
-        throw new Error("Timed out during execution phase");
-      }
-
-      if (execResult.exitCode !== 0) {
-        const errTail = tailLines(execResult.stderr || execResult.stdout, 20);
-        throw new Error(`Execution failed (exit ${execResult.exitCode}):\n${errTail}`);
-      }
+      validatePhaseResult(execResult, "execution");
 
       const execDuration = Date.now() - execStart;
       const execStats = `Execution completed in ${formatDuration(execDuration)}${formatPhaseStats(execResult)}`;
@@ -278,6 +264,21 @@ export class Spawner {
       cleanupWorkDir(workDir);
       logTask(task.identifier, "Cleaned up work directory");
     }
+  }
+}
+
+function validatePhaseResult(
+  result: SpawnResult,
+  phaseName: string,
+): void {
+  if (result.timedOut) {
+    throw new Error(`Timed out during ${phaseName} phase`);
+  }
+
+  if (result.exitCode !== 0) {
+    const errTail = tailLines(result.stderr || result.stdout, 20);
+    const label = phaseName.charAt(0).toUpperCase() + phaseName.slice(1);
+    throw new Error(`${label} failed (exit ${result.exitCode}):\n${errTail}`);
   }
 }
 
