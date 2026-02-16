@@ -24,11 +24,19 @@ export function formatDuration(ms: number): string {
   if (totalSeconds < 60) return `${totalSeconds}s`;
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  return `${minutes}m ${seconds}s`;
+  if (minutes < 60) return `${minutes}m ${seconds}s`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return `${hours}h ${remainingMinutes}m`;
 }
 
-export function formatTokenCount(tokens: number | undefined | null): string {
-  if (tokens == null || isNaN(tokens)) return "0 tokens";
+export function formatTokenCount(tokens: number): string {
   if (tokens >= 1000) return `${Math.round(tokens / 1000)}k tokens`;
   return `${tokens} tokens`;
+}
+
+export function formatPhaseStats(result: { numTurns?: number; totalTokens?: number }): string {
+  if (result.numTurns == null) return "";
+  const tokens = result.totalTokens != null ? `, ${formatTokenCount(result.totalTokens)}` : "";
+  return ` (${result.numTurns} turns${tokens})`;
 }

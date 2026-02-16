@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from "fs";
 import { spawn } from "child_process";
 import type { Config, CritterTask, CritterResult, TeamStatuses } from "./types.js";
-import { branchName, formatDuration, formatTokenCount } from "./utils.js";
+import { branchName, formatDuration, formatPhaseStats } from "./utils.js";
 import { logTask, logTaskError } from "./logger.js";
 import {
   shallowClone,
@@ -138,10 +138,7 @@ export class Spawner {
       }
 
       const planDuration = Date.now() - planStart;
-      const planStats = planResult.numTurns != null
-        ? ` (${planResult.numTurns} turns${planResult.totalTokens != null ? `, ${formatTokenCount(planResult.totalTokens)}` : ""})`
-        : "";
-      logTask(task.identifier, `Planning completed in ${formatDuration(planDuration)}${planStats}`);
+      logTask(task.identifier, `Planning completed in ${formatDuration(planDuration)}${formatPhaseStats(planResult)}`);
 
       // 4. Phase 2: Execution
       await commentOnIssue(task.issueId, "Plan approved, executing...");
@@ -168,10 +165,7 @@ export class Spawner {
       }
 
       const execDuration = Date.now() - execStart;
-      const execStats = execResult.numTurns != null
-        ? ` (${execResult.numTurns} turns${execResult.totalTokens != null ? `, ${formatTokenCount(execResult.totalTokens)}` : ""})`
-        : "";
-      logTask(task.identifier, `Execution completed in ${formatDuration(execDuration)}${execStats}`);
+      logTask(task.identifier, `Execution completed in ${formatDuration(execDuration)}${formatPhaseStats(execResult)}`);
 
       // 5. Check for commits, auto-commit if needed
       if (await hasUncommittedChanges(workDir)) {
