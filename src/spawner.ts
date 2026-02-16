@@ -210,7 +210,7 @@ export class Spawner {
         }
         const totalDuration = formatDuration(Date.now() - taskStart);
         logTask(task.identifier, `Completed in ${totalDuration}`);
-        await commentOnIssue(task.issueId, `Draft PR created: ${prUrl} (completed in ${totalDuration})`);
+        await commentOnIssue(task.issueId, `PR created: ${prUrl} (completed in ${totalDuration})`);
         await sendSlackNotification(
           this.config.slackWebhookUrl,
           formatSuccess(task.identifier, task.title, prUrl, totalDuration),

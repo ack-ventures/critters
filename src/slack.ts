@@ -23,7 +23,7 @@ export async function sendSlackNotification(
 
 export function formatSuccess(identifier: string, title: string, prUrl: string, duration?: string): string {
   const durationSuffix = duration ? ` (completed in ${duration})` : "";
-  return `*${identifier}* — ${title}\nDraft PR created: ${prUrl}${durationSuffix}`;
+  return `*${identifier}* — ${title}\nPR created: ${prUrl}${durationSuffix}`;
 }
 
 export function formatFailure(identifier: string, title: string, error: string, duration?: string): string {
