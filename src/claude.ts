@@ -90,6 +90,9 @@ sleep 5
     return { exitCode: 1, stdout: "", stderr: tmuxResult.stderr, timedOut: false };
   }
 
+  // Apply main-horizontal layout so the watcher stays on top
+  await runCommand("tmux", ["select-layout", "-t", TMUX_SESSION, "main-horizontal"]).catch(() => {});
+
   const paneId = tmuxResult.stdout.trim();
 
   // Poll for completion
