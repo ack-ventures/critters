@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import { logTask, logTaskError, logTaskWarn } from "./logger.js";
-import { runCommand, sleep } from "./utils.js";
+import { withRetry } from "./retry.js";
+import { runCommand } from "./utils.js";
 
 export async function shallowClone(
   repoUrl: string,
@@ -8,34 +9,32 @@ export async function shallowClone(
   identifier: string,
   cwd?: string,
 ): Promise<void> {
-  const MAX_RETRIES = 3;
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    logTask(identifier, `Cloning ${repoUrl} → ${targetDir}${attempt > 1 ? ` (attempt ${attempt}/${MAX_RETRIES})` : ""}`);
-    try {
+  await withRetry(
+    async () => {
+      logTask(identifier, `Cloning ${repoUrl} → ${targetDir}`);
       const { code, stderr } = await runCommand(
         "git",
         ["clone", "--depth", "1", repoUrl, targetDir],
         cwd ? { cwd } : undefined,
       );
-      if (code === 0) return;
-      if (attempt < MAX_RETRIES && stderr.includes("ENOENT")) {
-        logTaskWarn(identifier, `git clone failed (ENOENT), retrying in ${attempt * 2}s...`);
-        if (existsSync(targetDir)) rmSync(targetDir, { recursive: true, force: true });
-        await sleep(attempt * 2000);
-        continue;
+      if (code !== 0) {
+        throw new Error(`git clone failed: ${stderr}`);
       }
-      throw new Error(`git clone failed: ${stderr}`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (attempt < MAX_RETRIES && msg.includes("ENOENT")) {
-        logTaskWarn(identifier, `git clone threw (ENOENT), retrying in ${attempt * 2}s...`);
+    },
+    {
+      maxRetries: 2,
+      baseDelayMs: 2000,
+      maxDelayMs: 8000,
+      shouldRetry: (error) => {
+        const msg = error instanceof Error ? error.message : String(error);
+        return msg.includes("ENOENT");
+      },
+      onRetry: (_error, _attempt, delayMs) => {
+        logTaskWarn(identifier, `git clone failed (ENOENT), retrying in ${delayMs}ms...`);
         if (existsSync(targetDir)) rmSync(targetDir, { recursive: true, force: true });
-        await sleep(attempt * 2000);
-        continue;
-      }
-      throw err;
-    }
-  }
+      },
+    },
+  );
 }
 
 export async function createBranch(

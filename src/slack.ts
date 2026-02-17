@@ -1,4 +1,5 @@
 import { logError } from "./logger.js";
+import { withRetry } from "./retry.js";
 
 export async function sendSlackNotification(
   webhookUrl: string | undefined,
@@ -7,15 +8,26 @@ export async function sendSlackNotification(
   if (!webhookUrl) return;
 
   try {
-    const response = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: message }),
-    });
+    await withRetry(
+      async () => {
+        const response = await fetch(webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: message }),
+        });
 
-    if (!response.ok) {
-      logError(`Slack webhook returned ${response.status}`);
-    }
+        if (!response.ok) {
+          throw new Error(`Slack webhook returned ${response.status}`);
+        }
+      },
+      {
+        maxRetries: 2,
+        baseDelayMs: 1000,
+        onRetry: (_error, attempt, delayMs) => {
+          logError(`Slack notification failed, retrying in ${Math.round(delayMs)}ms... (attempt ${attempt + 1}/2)`);
+        },
+      },
+    );
   } catch (err) {
     logError(`Slack notification failed: ${err}`);
   }
