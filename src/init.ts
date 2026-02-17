@@ -41,6 +41,13 @@ repos:
 teamRepos:
   # Fallback: Linear team ID → repo URL
   # "team-uuid-1": "git@github.com:your-org/default-repo.git"
+
+# Review critter settings
+# reviewTriggerLabel: "Critter Review"
+# reviewModel: opus
+# reviewConcurrency: 2
+# reviewTimeoutMinutes: 15
+# maxReviewTurns: 30
 `;
 
 export async function runInit(): Promise<void> {

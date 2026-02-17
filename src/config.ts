@@ -119,6 +119,11 @@ export function loadConfig(configPath?: string): Config {
     noTmux: false,
     planningModel: (yaml.planningModel as string) ?? "opus",
     executionModel: (yaml.executionModel as string) ?? "opus",
+    reviewTriggerLabel: (yaml.reviewTriggerLabel as string) ?? "Critter Review",
+    reviewModel: (yaml.reviewModel as string) ?? "opus",
+    reviewConcurrency: (yaml.reviewConcurrency as number) ?? 2,
+    reviewTimeoutMinutes: (yaml.reviewTimeoutMinutes as number) ?? 15,
+    maxReviewTurns: (yaml.maxReviewTurns as number) ?? 30,
     repos,
     teamRepos,
     linearApiKey,
@@ -159,6 +164,15 @@ function validateConfig(config: Config): void {
   }
   if (config.maxExecutionTurns <= 0) {
     throw new Error(`Invalid config: maxExecutionTurns must be > 0, got ${config.maxExecutionTurns}`);
+  }
+  if (config.reviewConcurrency < 1) {
+    throw new Error(`Invalid config: reviewConcurrency must be >= 1, got ${config.reviewConcurrency}`);
+  }
+  if (config.reviewTimeoutMinutes <= 0) {
+    throw new Error(`Invalid config: reviewTimeoutMinutes must be > 0, got ${config.reviewTimeoutMinutes}`);
+  }
+  if (config.maxReviewTurns <= 0) {
+    throw new Error(`Invalid config: maxReviewTurns must be > 0, got ${config.maxReviewTurns}`);
   }
   if (!Array.isArray(config.defaultAllowedTools) || config.defaultAllowedTools.length === 0) {
     throw new Error("Invalid config: defaultAllowedTools must be a non-empty array of tool patterns");

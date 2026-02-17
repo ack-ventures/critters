@@ -9,6 +9,13 @@ tmuxSession: critters
 # planningModel: opus
 # executionModel: opus
 
+# Review critter settings
+# reviewTriggerLabel: "Critter Review"
+# reviewModel: opus
+# reviewConcurrency: 2
+# reviewTimeoutMinutes: 15
+# maxReviewTurns: 30
+
 defaultAllowedTools:
   - "Read"
   - "Write"

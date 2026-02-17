@@ -30,3 +30,18 @@ export function formatFailure(identifier: string, title: string, error: string, 
   const durationPrefix = duration ? ` after ${duration}` : "";
   return `*${identifier}* — ${title}\nFailed${durationPrefix}: ${error}`;
 }
+
+export function formatReviewMerged(identifier: string, title: string, prUrl: string, duration?: string): string {
+  const durationSuffix = duration ? ` (reviewed in ${duration})` : "";
+  return `*${identifier}* — ${title}\nPR merged: ${prUrl}${durationSuffix}`;
+}
+
+export function formatReviewNeedsChanges(identifier: string, title: string, reason: string, duration?: string): string {
+  const durationSuffix = duration ? ` (reviewed in ${duration})` : "";
+  return `*${identifier}* — ${title}\nNeeds changes: ${reason}${durationSuffix}`;
+}
+
+export function formatReviewFailure(identifier: string, title: string, error: string, duration?: string): string {
+  const durationPrefix = duration ? ` after ${duration}` : "";
+  return `*${identifier}* — ${title}\nReview failed${durationPrefix}: ${error}`;
+}

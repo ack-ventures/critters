@@ -97,6 +97,11 @@ teamRepos:
     expect(config.noTmux).toBe(false);
     expect(config.repos).toEqual({});
     expect(config.teamRepos).toEqual({});
+    expect(config.reviewTriggerLabel).toBe("Critter Review");
+    expect(config.reviewModel).toBe("opus");
+    expect(config.reviewConcurrency).toBe(2);
+    expect(config.reviewTimeoutMinutes).toBe(15);
+    expect(config.maxReviewTurns).toBe(30);
   });
 
   test("throws when config file does not exist", () => {
@@ -166,6 +171,41 @@ teamRepos:
       expect(config.teamRepos["team-1"]).toBe("git@github.com:org/default-repo.git");
       expect(config.teamRepos["team-2"]).toBe("https://github.com/org/other-repo.git");
       expect(Object.keys(config.teamRepos)).toHaveLength(2);
+    });
+  });
+
+  describe("review config", () => {
+    test("reads review config from YAML", () => {
+      const yaml = `
+defaultAllowedTools:
+  - "Read"
+reviewTriggerLabel: "Review Me"
+reviewModel: sonnet
+reviewConcurrency: 3
+reviewTimeoutMinutes: 20
+maxReviewTurns: 40
+`;
+      const config = loadConfig(writeYaml(yaml));
+      expect(config.reviewTriggerLabel).toBe("Review Me");
+      expect(config.reviewModel).toBe("sonnet");
+      expect(config.reviewConcurrency).toBe(3);
+      expect(config.reviewTimeoutMinutes).toBe(20);
+      expect(config.maxReviewTurns).toBe(40);
+    });
+
+    test("throws when reviewConcurrency < 1", () => {
+      const yaml = `defaultAllowedTools:\n  - "Read"\nreviewConcurrency: 0\n`;
+      expect(() => loadConfig(writeYaml(yaml))).toThrow("reviewConcurrency must be >= 1");
+    });
+
+    test("throws when reviewTimeoutMinutes <= 0", () => {
+      const yaml = `defaultAllowedTools:\n  - "Read"\nreviewTimeoutMinutes: 0\n`;
+      expect(() => loadConfig(writeYaml(yaml))).toThrow("reviewTimeoutMinutes must be > 0");
+    });
+
+    test("throws when maxReviewTurns <= 0", () => {
+      const yaml = `defaultAllowedTools:\n  - "Read"\nmaxReviewTurns: 0\n`;
+      expect(() => loadConfig(writeYaml(yaml))).toThrow("maxReviewTurns must be > 0");
     });
   });
 

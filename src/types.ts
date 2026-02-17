@@ -29,6 +29,11 @@ export interface Config {
   noTmux: boolean;
   planningModel: string;
   executionModel: string;
+  reviewTriggerLabel: string;
+  reviewModel: string;
+  reviewConcurrency: number;
+  reviewTimeoutMinutes: number;
+  maxReviewTurns: number;
   linearApiKey: string;
   slackWebhookUrl?: string;
 }
@@ -56,5 +61,17 @@ export interface SpawnResult {
 export interface CritterResult {
   success: boolean;
   prUrl?: string;
+  error?: string;
+}
+
+export interface ReviewTask extends CritterTask {
+  prUrl: string;
+  prNumber: number;
+  prBranch: string;
+}
+
+export interface ReviewResult {
+  success: boolean;
+  merged?: boolean;
   error?: string;
 }

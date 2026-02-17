@@ -389,6 +389,11 @@ describe("src/prompt.ts", () => {
       noTmux: false,
       planningModel: "opus",
       executionModel: "opus",
+      reviewTriggerLabel: "Critter Review",
+      reviewModel: "opus",
+      reviewConcurrency: 2,
+      reviewTimeoutMinutes: 15,
+      maxReviewTurns: 30,
       linearApiKey: "test",
     };
 
