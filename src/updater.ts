@@ -23,9 +23,11 @@ export async function checkForUpdate(
   const printError = force ? console.error.bind(console) : logError;
 
   // Only auto-update when running as a compiled binary — when running via
-  // `bun run src/index.ts`, process.execPath points to the bun binary and
-  // we must not overwrite it.
-  if (process.execPath.includes("bun")) {
+  // `bun run src/index.ts`, process.execPath points to the bun runtime itself.
+  // We check the basename (not the full path) because the compiled binary may
+  // live in a directory whose name contains "bun" (e.g. ~/.bun/bin/critters).
+  const execName = process.execPath.split("/").pop() ?? "";
+  if (execName === "bun" || execName === "bun.exe") {
     if (force) printError("Cannot update: running via bun, not as a compiled binary. Use install.sh to install.");
     return;
   }
