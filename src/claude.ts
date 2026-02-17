@@ -11,8 +11,13 @@ const PANE_COLORS = [
   { bg: "colour22",  fg: "colour119", label: "\x1b[1;32m", toolColor: "\x1b[32m"  },  // green
   { bg: "colour53",  fg: "colour177", label: "\x1b[1;35m", toolColor: "\x1b[35m"  },  // magenta
   { bg: "colour234", fg: "colour255", label: "\x1b[1;37m", toolColor: "\x1b[37m"  },  // white
+  { bg: "colour52",  fg: "colour196", label: "\x1b[1;31m", toolColor: "\x1b[31m"  },  // red
+  { bg: "colour18",  fg: "colour75",  label: "\x1b[1;34m", toolColor: "\x1b[34m"  },  // blue
+  { bg: "colour23",  fg: "colour44",  label: "\x1b[38;5;44m", toolColor: "\x1b[38;5;44m" },  // teal
+  { bg: "colour53",  fg: "colour213", label: "\x1b[38;5;213m", toolColor: "\x1b[38;5;213m" },  // pink
+  { bg: "colour58",  fg: "colour214", label: "\x1b[38;5;214m", toolColor: "\x1b[38;5;214m" },  // orange
 ];
-let colorIndex = 0;
+const activeColors = new Set<number>();
 
 export async function spawnClaude(
   prompt: string,
@@ -35,8 +40,11 @@ export async function spawnClaude(
   const filterFile = `${workDir}/.critter-filter.jq`;
   writeFileSync(filterFile, STREAM_FILTER);
 
-  const color = PANE_COLORS[colorIndex % PANE_COLORS.length];
-  colorIndex++;
+  const available = PANE_COLORS.map((_, i) => i).filter(i => !activeColors.has(i));
+  const idx = available.length > 0
+    ? available[Math.floor(Math.random() * available.length)]
+    : Math.floor(Math.random() * PANE_COLORS.length);
+  const color = PANE_COLORS[idx];
   const reset = "\\x1b[0m";
 
   const errLog = `${workDir}/.critter-err-${phase}.log`;
@@ -98,6 +106,8 @@ sleep 5
     return { exitCode: 1, stdout: "", stderr: tmuxResult.stderr, timedOut: false };
   }
 
+  activeColors.add(idx);
+
   // Apply main-horizontal layout so the watcher stays on top
   await runCommand("tmux", ["select-layout", "-t", tmuxSession, "main-horizontal"]).catch(() => {});
 
@@ -134,6 +144,8 @@ sleep 5
   if (cleanupResult.code !== 0) {
     logTaskWarn(identifier, `Failed to kill tmux pane during cleanup: ${cleanupResult.stderr}`);
   }
+
+  activeColors.delete(idx);
 
   const { numTurns, inputTokens, outputTokens, cacheReadTokens, costUsd } = parseClaudeJsonLog(jsonLogFile, identifier);
 
