@@ -4,7 +4,7 @@ import { log, logError } from "./logger.js";
 // Canonical release source — update this if the repo ever moves.
 const RELEASES_URL = "https://api.github.com/repos/ack-ventures/critters/releases/latest";
 
-function compareSemver(a: string, b: string): number {
+export function compareSemver(a: string, b: string): number {
   const pa = a.split(".").map(Number);
   const pb = b.split(".").map(Number);
   for (let i = 0; i < 3; i++) {
