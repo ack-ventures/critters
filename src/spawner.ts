@@ -118,7 +118,7 @@ export class Spawner {
       await commentOnIssue(task.issueId, "Cloning repo...");
 
       // 1. Clone repo
-      await shallowClone(task.repoUrl, workDir, task.identifier);
+      await shallowClone(task.repoUrl, workDir, task.identifier, this.config.workDir);
 
       // 2. Create branch
       await createBranch(workDir, branch, task.identifier);

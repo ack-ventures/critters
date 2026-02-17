@@ -6,6 +6,7 @@ export async function shallowClone(
   repoUrl: string,
   targetDir: string,
   identifier: string,
+  cwd?: string,
 ): Promise<void> {
   const MAX_RETRIES = 3;
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -14,7 +15,7 @@ export async function shallowClone(
       const { code, stderr } = await runCommand(
         "git",
         ["clone", "--depth", "1", repoUrl, targetDir],
-        { cwd: process.cwd() },
+        cwd ? { cwd } : undefined,
       );
       if (code === 0) return;
       if (attempt < MAX_RETRIES && stderr.includes("ENOENT")) {
