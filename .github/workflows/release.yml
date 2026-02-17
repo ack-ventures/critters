@@ -12,8 +12,6 @@ jobs:
         include:
           - runner: macos-latest
             name: critters-darwin-arm64
-          - runner: macos-13
-            name: critters-darwin-x64
           - runner: ubuntu-latest
             name: critters-linux-x64
     runs-on: ${{ matrix.runner }}
@@ -62,6 +60,5 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" \
             artifacts/critters-darwin-arm64 \
-            artifacts/critters-darwin-x64 \
             artifacts/critters-linux-x64 \
             --generate-notes
