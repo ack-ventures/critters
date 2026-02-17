@@ -105,6 +105,7 @@ teamRepos:
     expect(config.reviewTimeoutMinutes).toBe(15);
     expect(config.maxReviewTurns).toBe(30);
     expect(config.maxLogSizeMb).toBe(10);
+    expect(config.healthPort).toBe(3847);
   });
 
   test("throws when config file does not exist", () => {
@@ -214,6 +215,36 @@ maxReviewTurns: 40
     test("throws when maxLogSizeMb <= 0", () => {
       const yaml = `defaultAllowedTools:\n  - "Read"\nmaxLogSizeMb: 0\n`;
       expect(() => loadConfig(writeYaml(yaml))).toThrow("maxLogSizeMb must be > 0");
+    });
+  });
+
+  describe("healthPort config", () => {
+    test("defaults to 3847", () => {
+      const yaml = `defaultAllowedTools:\n  - "Read"\n`;
+      const config = loadConfig(writeYaml(yaml));
+      expect(config.healthPort).toBe(3847);
+    });
+
+    test("reads healthPort from YAML", () => {
+      const yaml = `defaultAllowedTools:\n  - "Read"\nhealthPort: 8080\n`;
+      const config = loadConfig(writeYaml(yaml));
+      expect(config.healthPort).toBe(8080);
+    });
+
+    test("allows 0 to disable", () => {
+      const yaml = `defaultAllowedTools:\n  - "Read"\nhealthPort: 0\n`;
+      const config = loadConfig(writeYaml(yaml));
+      expect(config.healthPort).toBe(0);
+    });
+
+    test("throws when healthPort < 1024 (non-zero)", () => {
+      const yaml = `defaultAllowedTools:\n  - "Read"\nhealthPort: 80\n`;
+      expect(() => loadConfig(writeYaml(yaml))).toThrow("healthPort must be 0 (disabled) or 1024-65535");
+    });
+
+    test("throws when healthPort > 65535", () => {
+      const yaml = `defaultAllowedTools:\n  - "Read"\nhealthPort: 70000\n`;
+      expect(() => loadConfig(writeYaml(yaml))).toThrow("healthPort must be 0 (disabled) or 1024-65535");
     });
   });
 

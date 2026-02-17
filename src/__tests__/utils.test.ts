@@ -395,6 +395,7 @@ describe("src/prompt.ts", () => {
       reviewTimeoutMinutes: 15,
       maxReviewTurns: 30,
       maxLogSizeMb: 10,
+      healthPort: 3847,
       linearApiKey: "test",
     };
 

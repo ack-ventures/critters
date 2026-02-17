@@ -1,19 +1,22 @@
 import { commentOnIssue, findCritterIssues } from "./linear.js";
 import { log, logError, logTask, logTaskError } from "./logger.js";
-import { resolveRepoUrl } from "./prompt.js";
+import { recordMetric } from "./metrics.js";
+import { resolveRepoUrl, resolveRepoUrlWithSource } from "./prompt.js";
 import type { Spawner } from "./spawner.js";
 import type { Config } from "./types.js";
 import { sleep } from "./utils.js";
 
 export class Watcher {
   private config: Config;
-  private spawner: Spawner;
+  private spawner: Spawner | null;
   private activeIssueIds = new Set<string>();
   private stopped = false;
+  private onPoll?: () => void;
 
-  constructor(config: Config, spawner: Spawner) {
+  constructor(config: Config, spawner: Spawner | null, onPoll?: () => void) {
     this.config = config;
     this.spawner = spawner;
+    this.onPoll = onPoll;
   }
 
   async start(): Promise<void> {
@@ -21,7 +24,9 @@ export class Watcher {
 
     while (!this.stopped) {
       try {
-        await this.poll();
+        const issuesFound = await this.poll();
+        recordMetric({ timestamp: "", event: "poll_completed", outcome: `${issuesFound} issues found` });
+        this.onPoll?.();
       } catch (err) {
         logError(`Poll failed: ${err}`);
       }
@@ -32,10 +37,45 @@ export class Watcher {
 
   stop(): void {
     this.stopped = true;
-    this.spawner.stop();
+    this.spawner?.stop();
   }
 
-  private async poll(): Promise<void> {
+  async dryRunPoll(): Promise<{ total: number; wouldPickUp: number; blocked: number; skipped: number }> {
+    const issues = await findCritterIssues(this.config.triggerLabel);
+    let wouldPickUp = 0;
+    let blocked = 0;
+    let skipped = 0;
+
+    for (const task of issues) {
+      const resolved = resolveRepoUrlWithSource(task, this.config);
+
+      if (!resolved) {
+        log(`[DRY RUN] Skipping ${task.identifier} "${task.title}" — no repo URL found`);
+        skipped++;
+        continue;
+      }
+
+      if (task.blockedBy && task.blockedBy.length > 0) {
+        const blockerList = task.blockedBy
+          .map((b) => `${b.identifier} (${b.status})`)
+          .join(", ");
+        log(`[DRY RUN] Would pick up ${task.identifier} "${task.title}"`);
+        log(`  repo: ${resolved.url} (${resolved.source})`);
+        log(`  blocked by: ${blockerList}`);
+        blocked++;
+        continue;
+      }
+
+      log(`[DRY RUN] Would pick up ${task.identifier} "${task.title}"`);
+      log(`  repo: ${resolved.url} (${resolved.source})`);
+      log(`  blocked by: (none)`);
+      wouldPickUp++;
+    }
+
+    return { total: issues.length, wouldPickUp, blocked, skipped };
+  }
+
+  private async poll(): Promise<number> {
     const issues = await findCritterIssues(this.config.triggerLabel);
 
     for (const task of issues) {
@@ -72,7 +112,7 @@ export class Watcher {
       logTask(task.identifier, `Picked up: ${task.title}`);
 
       // Dispatch and handle completion (don't await — let it run concurrently)
-      this.spawner.dispatch(task).then((result) => {
+      this.spawner?.dispatch(task).then((result) => {
         this.activeIssueIds.delete(task.issueId);
         if (result.success) {
           logTask(task.identifier, "Completed successfully");
@@ -84,5 +124,7 @@ export class Watcher {
         logTaskError(task.identifier, `Dispatch failed: ${err}`);
       });
     }
+
+    return issues.length;
   }
 }

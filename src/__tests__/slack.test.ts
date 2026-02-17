@@ -1,10 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
   formatFailure,
+  formatPlanningComplete,
   formatReviewFailure,
   formatReviewMerged,
   formatReviewNeedsChanges,
+  formatReviewStarted,
   formatSuccess,
+  formatTaskPickedUp,
+  formatTimeoutWarning,
 } from "../slack.js";
 
 describe("formatSuccess", () => {
@@ -58,5 +62,56 @@ describe("formatReviewFailure", () => {
     expect(msg).toContain("Add feature");
     expect(msg).toContain("Claude crashed");
     expect(msg).toContain("Review failed");
+  });
+});
+
+describe("formatTaskPickedUp", () => {
+  test("includes identifier, title, and repo URL", () => {
+    const msg = formatTaskPickedUp("ACK-1", "Add feature", "git@github.com:org/repo.git");
+    expect(msg).toContain("ACK-1");
+    expect(msg).toContain("Add feature");
+    expect(msg).toContain("git@github.com:org/repo.git");
+    expect(msg).toContain("Picked up");
+  });
+});
+
+describe("formatPlanningComplete", () => {
+  test("includes identifier and title", () => {
+    const msg = formatPlanningComplete("ACK-1", "Add feature");
+    expect(msg).toContain("ACK-1");
+    expect(msg).toContain("Add feature");
+    expect(msg).toContain("Planning complete");
+    expect(msg).toContain("executing");
+  });
+
+  test("includes stats when provided", () => {
+    const msg = formatPlanningComplete("ACK-1", "Add feature", 12, 1.5);
+    expect(msg).toContain("12 turns");
+    expect(msg).toContain("$1.50");
+  });
+
+  test("omits stats when not provided", () => {
+    const msg = formatPlanningComplete("ACK-1", "Add feature");
+    expect(msg).not.toContain("turns");
+    expect(msg).not.toContain("$");
+  });
+});
+
+describe("formatReviewStarted", () => {
+  test("includes identifier, title, and PR URL", () => {
+    const msg = formatReviewStarted("ACK-1", "Add feature", "https://github.com/org/repo/pull/1");
+    expect(msg).toContain("ACK-1");
+    expect(msg).toContain("Add feature");
+    expect(msg).toContain("https://github.com/org/repo/pull/1");
+    expect(msg).toContain("Review started");
+  });
+});
+
+describe("formatTimeoutWarning", () => {
+  test("includes identifier, title, elapsed and timeout minutes", () => {
+    const msg = formatTimeoutWarning("ACK-1", "Add feature", 24, 30);
+    expect(msg).toContain("ACK-1");
+    expect(msg).toContain("Add feature");
+    expect(msg).toContain("24/30 minutes");
   });
 });

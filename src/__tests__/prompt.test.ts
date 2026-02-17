@@ -113,6 +113,16 @@ describe("buildPlanningPrompt with custom content", () => {
     expect(prompt).toContain("ACK-42");
     expect(prompt).toContain("Add login button");
   });
+
+  test("contains structured reviewer format instructions", () => {
+    const prompt = buildPlanningPrompt(task);
+    expect(prompt).toContain("REVIEW_STATUS: APPROVED");
+    expect(prompt).toContain("REVIEW_STATUS: NEEDS_REVISION");
+    expect(prompt).toContain("[MUST_FIX]");
+    expect(prompt).toContain("[SHOULD_FIX]");
+    expect(prompt).toContain("[CONSIDER]");
+    expect(prompt).toContain("Previous Review Items");
+  });
 });
 
 describe("buildExecutionPrompt with custom content", () => {
@@ -149,6 +159,67 @@ describe("buildExecutionPrompt with custom content", () => {
     expect(prompt).toContain("ACK-42");
     expect(prompt).toContain("Add login button");
     expect(prompt).toContain("git, gh, bun");
+  });
+});
+
+describe("buildExecutionPrompt checkpointing", () => {
+  const task: CritterTask = {
+    issueId: "issue-1",
+    identifier: "ACK-42",
+    title: "Add login button",
+    description: "Add a login button to the header",
+    repoUrl: "git@github.com:org/repo.git",
+    teamId: "team-1",
+  };
+
+  const allowedTools = [
+    "Read",
+    "Write",
+    "Edit",
+    "Bash(git:*)",
+    "Bash(gh:*)",
+    "Bash(bun:*)",
+  ];
+
+  test("includes checkpoint section without resuming", () => {
+    const prompt = buildExecutionPrompt(task, allowedTools);
+    expect(prompt).toContain("## Checkpointing");
+    expect(prompt).toContain("critters/plans/ACK-42.checkpoint.md");
+    expect(prompt).not.toContain("## Resuming from checkpoint");
+    expect(prompt).toContain("Execute the plan completely.");
+    expect(prompt).not.toContain("Continue executing the plan");
+  });
+
+  test("includes checkpoint section with resuming: false", () => {
+    const prompt = buildExecutionPrompt(task, allowedTools, { resuming: false });
+    expect(prompt).toContain("## Checkpointing");
+    expect(prompt).toContain("critters/plans/ACK-42.checkpoint.md");
+    expect(prompt).not.toContain("## Resuming from checkpoint");
+    expect(prompt).toContain("Execute the plan completely.");
+  });
+
+  test("includes both checkpoint and resume sections with resuming: true", () => {
+    const prompt = buildExecutionPrompt(task, allowedTools, { resuming: true });
+    expect(prompt).toContain("## Checkpointing");
+    expect(prompt).toContain("critters/plans/ACK-42.checkpoint.md");
+    expect(prompt).toContain("## Resuming from checkpoint");
+    expect(prompt).toContain("This is a RETRY of a previously failed attempt");
+    expect(prompt).toContain("Continue executing the plan from where the previous attempt stopped.");
+    expect(prompt).not.toContain("Execute the plan completely.");
+  });
+
+  test("resume preamble appears before the main prompt body", () => {
+    const prompt = buildExecutionPrompt(task, allowedTools, { resuming: true });
+    const resumeIndex = prompt.indexOf("## Resuming from checkpoint");
+    const bodyIndex = prompt.indexOf("You are working on issue");
+    expect(resumeIndex).toBeLessThan(bodyIndex);
+  });
+
+  test("checkpoint file path uses correct task identifier", () => {
+    const customTask = { ...task, identifier: "XYZ-99" };
+    const prompt = buildExecutionPrompt(customTask, allowedTools);
+    expect(prompt).toContain("critters/plans/XYZ-99.checkpoint.md");
+    expect(prompt).not.toContain("ACK-42");
   });
 });
 
