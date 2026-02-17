@@ -1,4 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { readCustomPrompt } from "../prompt.js";
 import { buildReviewPrompt, getReviewAllowedTools } from "../review-prompt.js";
 import type { ReviewTask } from "../types.js";
 
@@ -64,5 +68,54 @@ describe("buildReviewPrompt", () => {
     expect(prompt).not.toContain("Write your");
     expect(prompt).not.toContain("Edit the");
     expect(prompt).toContain("Do NOT modify any files");
+  });
+
+  test("does not contain Additional Context when no custom file exists", () => {
+    // When review-prompt.md does not exist in ~/.critters, no section is appended.
+    // We verify the prompt still contains expected content.
+    const prompt = buildReviewPrompt(task);
+    expect(prompt).toContain("ACK-42");
+    expect(prompt).toContain("REVIEW_RESULT:MERGED");
+  });
+});
+
+describe("buildReviewPrompt custom prompt integration", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "critters-review-test-"));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  test("readCustomPrompt returns null when review-prompt.md missing", () => {
+    expect(readCustomPrompt("review-prompt.md", tempDir)).toBeNull();
+  });
+
+  test("readCustomPrompt returns content when review-prompt.md has content", () => {
+    writeFileSync(
+      join(tempDir, "review-prompt.md"),
+      "Be especially strict about security issues.",
+    );
+    expect(readCustomPrompt("review-prompt.md", tempDir)).toBe(
+      "Be especially strict about security issues.",
+    );
+  });
+
+  test("appended custom content format is correct", () => {
+    writeFileSync(
+      join(tempDir, "review-prompt.md"),
+      "Be especially strict about security issues.",
+    );
+    const custom = readCustomPrompt("review-prompt.md", tempDir);
+    const fakeBase = "Review prompt base";
+    const result = custom
+      ? `${fakeBase}\n\n## Additional Context\n${custom}`
+      : fakeBase;
+    expect(result).toContain("## Additional Context");
+    expect(result).toContain("Be especially strict about security issues.");
+    expect(result).toMatch(/## Additional Context\nBe especially strict/);
   });
 });

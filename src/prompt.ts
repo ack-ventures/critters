@@ -1,6 +1,18 @@
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { Config, CritterTask } from "./types.js";
 
 const REPO_LINE_RE = /^repo:\s*(.+)$/mi;
+
+export function readCustomPrompt(filename: string, baseDir?: string): string | null {
+  const dir = baseDir ?? join(homedir(), ".critters");
+  const filePath = join(dir, filename);
+  if (!existsSync(filePath)) return null;
+  const content = readFileSync(filePath, "utf-8");
+  if (content.trim() === "") return null;
+  return content.trim();
+}
 
 export function cleanLinearMarkdown(text: string): string {
   // Linear converts git@github.com into [git@github.com](<mailto:git@github.com>)
@@ -62,7 +74,7 @@ export function getExecutionAllowedTools(config: Config, task: CritterTask): str
 export function buildPlanningPrompt(task: CritterTask): string {
   const cleanedDescription = stripRepoLine(task.description);
 
-  return `You are working on issue ${task.identifier}: ${task.title}
+  let prompt = `You are working on issue ${task.identifier}: ${task.title}
 
 ## Task
 ${cleanedDescription}
@@ -87,6 +99,13 @@ Your plan should include:
 ## Tool Restrictions
 You have a limited set of tools. Only these Bash commands are available: git, ls, cat, npm, node.
 If a command is blocked or requires approval, do NOT retry it — move on and find an alternative approach or skip that step.`;
+
+  const custom = readCustomPrompt("planning-prompt.md");
+  if (custom) {
+    prompt += `\n\n## Additional Context\n${custom}`;
+  }
+
+  return prompt;
 }
 
 function getOsGuidance(): string {
@@ -101,7 +120,7 @@ export function buildExecutionPrompt(task: CritterTask, allowedTools: string[]):
     .filter((t) => t.startsWith("Bash("))
     .map((t) => t.replace(/^Bash\(([^:]+):.*\)$/, "$1"));
 
-  return `You are working on issue ${task.identifier}: ${task.title}
+  let prompt = `You are working on issue ${task.identifier}: ${task.title}
 
 Read critters/plans/${task.identifier}.md — it contains an approved implementation plan.
 Execute the plan completely. Then:
@@ -119,4 +138,11 @@ Commands like chmod, bunx, perl, python3, curl, and others are NOT available.
 Use "bun x" instead of "bunx" to run package binaries.
 ${getOsGuidance()}
 If a command is blocked or requires approval, do NOT retry it — move on and find an alternative approach or skip that step. Never retry a blocked command more than once.`;
+
+  const custom = readCustomPrompt("execution-prompt.md");
+  if (custom) {
+    prompt += `\n\n## Additional Context\n${custom}`;
+  }
+
+  return prompt;
 }
