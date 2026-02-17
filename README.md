@@ -43,7 +43,7 @@ bun start
 
 ## How it works
 
-1. **Watcher** polls Linear every 30 seconds for issues with the "Critter" label in "Todo" status.
+1. **Watcher** polls Linear every 120 seconds for issues with the "Critter" label in "Todo" status.
 2. **Spawner** shallow-clones the target repo into a temp directory and creates a feature branch.
 3. **Phase 1 (Planning):** A Claude instance explores the codebase and writes an implementation plan.
 4. **Phase 2 (Execution):** A second Claude instance implements the plan, commits, pushes, and opens a draft PR.
@@ -55,7 +55,7 @@ Settings live in `critters.config.yaml`:
 
 | Field | Default | Description |
 |---|---|---|
-| `pollIntervalSeconds` | 30 | How often to poll Linear |
+| `pollIntervalSeconds` | 120 | How often to poll Linear |
 | `concurrency` | 2 | Max parallel critters |
 | `timeoutMinutes` | 30 | Total timeout per task (both phases) |
 | `workDir` | /tmp/critters-work | Temp clone directory |

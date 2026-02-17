@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { loadConfig } from "./config.js";
@@ -59,12 +60,22 @@ if (subcommand && !subcommand.startsWith("--")) {
 // ── Daemon ──────────────────────────────────────────────────────────────────
 
 async function main() {
-  // Parse CLI flags early so file logging captures all output
   const noTmux = Bun.argv.includes("--no-tmux");
   const skipUpdate = Bun.argv.includes("--skip-update");
+
+  // Auto-launch inside tmux if not already there
+  if (!noTmux && !process.env.TMUX) {
+    const esc = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
+    const args = process.argv.slice(1).filter((a) => !a.startsWith("/$bunfs/"));
+    const cmd = [process.execPath, ...args].map(esc).join(" ");
+    const session = "critters";
+
+    const result = spawnSync("tmux", ["new-session", "-A", "-s", session, cmd], { stdio: "inherit" });
+    process.exit(result.status ?? 0);
+  }
+
+  // ── Normal init ─────────────────────────────────────────────────────────
   if (noTmux) {
-    // Ignore SIGHUP (terminal disconnect) and SIGPIPE so the process
-    // survives when backgrounded (e.g., `critters --no-tmux &`)
     process.on("SIGHUP", () => {});
     process.on("SIGPIPE", () => {});
     initFileLogging();
@@ -106,7 +117,7 @@ async function main() {
   config.noTmux = noTmux;
 
   if (!noTmux) {
-    // Enable pane titles in the tmux session (best-effort — may fail if not running in tmux)
+    // Enable pane titles in the tmux session
     await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-status", "top"]).catch(() => {});
     await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-format", "#{pane_title}"]).catch(() => {});
   }
