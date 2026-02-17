@@ -67,7 +67,9 @@ async function main() {
   if (!noTmux && !process.env.TMUX) {
     const esc = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
     const args = process.argv.slice(1).filter((a) => !a.startsWith("/$bunfs/"));
-    const cmd = [process.execPath, ...args].map(esc).join(" ");
+    // Pass caller's PATH through so the re-launched binary inside tmux can
+    // find tools like git, gh, claude even if the tmux server has a minimal PATH.
+    const cmd = `env PATH=${esc(process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin")} ${[process.execPath, ...args].map(esc).join(" ")}`;
     const session = "critters";
 
     const result = spawnSync("tmux", ["new-session", "-A", "-s", session, cmd], { stdio: "inherit" });
