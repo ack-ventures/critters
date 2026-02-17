@@ -1,19 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import {
-  slugify,
-  branchName,
-  formatDuration,
-  formatTokenCount,
-  formatPhaseStats,
-} from "../utils.js";
-import {
   cleanLinearMarkdown,
   parseRepoUrl,
-  stripRepoLine,
   resolveRepoUrl,
+  stripRepoLine,
 } from "../prompt.js";
-import { compareSemver } from "../updater.js";
 import type { Config, CritterTask } from "../types.js";
+import { compareSemver } from "../updater.js";
+import {
+  branchName,
+  formatDuration,
+  formatPhaseStats,
+  formatTokenCount,
+  slugify,
+} from "../utils.js";
 
 // ---------------------------------------------------------------------------
 // src/utils.ts
@@ -174,6 +174,7 @@ describe("src/utils.ts", () => {
     });
 
     test("numTurns is null (explicit)", () => {
+      // biome-ignore lint/suspicious/noExplicitAny: testing runtime null handling
       expect(formatPhaseStats({ numTurns: null as any })).toBe("");
     });
 
