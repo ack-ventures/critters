@@ -49,6 +49,7 @@ workDir: /tmp/critters-full-test
 triggerLabel: "Bug"
 maxPlanningTurns: 30
 maxExecutionTurns: 100
+maxLogSizeMb: 20
 tmuxSession: "my-session"
 defaultAllowedTools:
   - "Read"
@@ -77,6 +78,7 @@ teamRepos:
     expect(config.noTmux).toBe(false);
     expect(config.linearApiKey).toBe("test-key");
     expect(config.slackWebhookUrl).toBe("https://hooks.slack.com/test");
+    expect(config.maxLogSizeMb).toBe(20);
     expect(config.repos["proj-1"].url).toBe("git@github.com:org/repo-a.git");
     expect(config.repos["proj-1"].extraAllowedTools).toEqual(["Bash(python:*)"]);
     expect(config.teamRepos["team-1"]).toBe("git@github.com:org/default-repo.git");
@@ -102,6 +104,7 @@ teamRepos:
     expect(config.reviewConcurrency).toBe(2);
     expect(config.reviewTimeoutMinutes).toBe(15);
     expect(config.maxReviewTurns).toBe(30);
+    expect(config.maxLogSizeMb).toBe(10);
   });
 
   test("throws when config file does not exist", () => {
@@ -206,6 +209,11 @@ maxReviewTurns: 40
     test("throws when maxReviewTurns <= 0", () => {
       const yaml = `defaultAllowedTools:\n  - "Read"\nmaxReviewTurns: 0\n`;
       expect(() => loadConfig(writeYaml(yaml))).toThrow("maxReviewTurns must be > 0");
+    });
+
+    test("throws when maxLogSizeMb <= 0", () => {
+      const yaml = `defaultAllowedTools:\n  - "Read"\nmaxLogSizeMb: 0\n`;
+      expect(() => loadConfig(writeYaml(yaml))).toThrow("maxLogSizeMb must be > 0");
     });
   });
 

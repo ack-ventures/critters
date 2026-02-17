@@ -6,6 +6,7 @@ triggerLabel: "Critter"
 maxPlanningTurns: 50
 maxExecutionTurns: 75
 tmuxSession: critters
+# maxLogSizeMb: 10          # Max log file size before rotation (keeps 3 rotated files)
 # planningModel: opus
 # executionModel: opus
 

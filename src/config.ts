@@ -124,6 +124,7 @@ export function loadConfig(configPath?: string): Config {
     reviewConcurrency: (yaml.reviewConcurrency as number) ?? 2,
     reviewTimeoutMinutes: (yaml.reviewTimeoutMinutes as number) ?? 15,
     maxReviewTurns: (yaml.maxReviewTurns as number) ?? 30,
+    maxLogSizeMb: (yaml.maxLogSizeMb as number) ?? 10,
     repos,
     teamRepos,
     linearApiKey,
@@ -173,6 +174,9 @@ function validateConfig(config: Config): void {
   }
   if (config.maxReviewTurns <= 0) {
     throw new Error(`Invalid config: maxReviewTurns must be > 0, got ${config.maxReviewTurns}`);
+  }
+  if (config.maxLogSizeMb <= 0) {
+    throw new Error(`Invalid config: maxLogSizeMb must be > 0, got ${config.maxLogSizeMb}`);
   }
   if (!Array.isArray(config.defaultAllowedTools) || config.defaultAllowedTools.length === 0) {
     throw new Error("Invalid config: defaultAllowedTools must be a non-empty array of tool patterns");
