@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import { loadConfig } from "./config.js";
 import { startHealthServer } from "./health.js";
 import { runInit } from "./init.js";
+import { runInitRepo } from "./init-repo.js";
 import { ensureCritterFailedStatus, ensureHumanReviewStatus, ensureLabel, initLinear, loadTeamStatuses } from "./linear.js";
 import { initFileLogging, log, logError } from "./logger.js";
 import { initMetrics } from "./metrics.js";
@@ -37,6 +38,7 @@ Commands:
   version     Show version
   update      Check for and apply updates
   init        Interactive config setup (~/.critters/)
+  init-repo   Scaffold .critters.yaml in current repo
   help        Show this help
 
 Flags:
@@ -53,6 +55,11 @@ if (subcommand === "update") {
 
 if (subcommand === "init") {
   await runInit();
+  process.exit(0);
+}
+
+if (subcommand === "init-repo") {
+  await runInitRepo();
   process.exit(0);
 }
 

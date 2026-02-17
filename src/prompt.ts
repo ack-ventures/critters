@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { PerRepoConfig } from "./repo-config.js";
 import type { Config, CritterTask } from "./types.js";
 
 const REPO_LINE_RE = /^repo:\s*(.+)$/mi;
@@ -57,10 +58,10 @@ export function getPlanningAllowedTools(): string[] {
   ];
 }
 
-export function getExecutionAllowedTools(config: Config, task: CritterTask): string[] {
+export function getExecutionAllowedTools(config: Config, task: CritterTask, repoConfig?: PerRepoConfig | null): string[] {
   const tools = [...config.defaultAllowedTools];
 
-  // Merge per-repo extra tools
+  // Merge per-project extra tools from daemon config
   if (task.projectId && config.repos[task.projectId]?.extraAllowedTools) {
     const extra = config.repos[task.projectId]?.extraAllowedTools;
     if (extra) {
@@ -68,10 +69,15 @@ export function getExecutionAllowedTools(config: Config, task: CritterTask): str
     }
   }
 
+  // Merge per-repo extra tools from .critters.yaml
+  if (repoConfig?.extraAllowedTools) {
+    tools.push(...repoConfig.extraAllowedTools);
+  }
+
   return [...new Set(tools)];
 }
 
-export function buildPlanningPrompt(task: CritterTask): string {
+export function buildPlanningPrompt(task: CritterTask, repoConfig?: PerRepoConfig | null): string {
   const cleanedDescription = stripRepoLine(task.description);
 
   let prompt = `You are working on issue ${task.identifier}: ${task.title}
@@ -133,6 +139,10 @@ If a command is blocked or requires approval, do NOT retry it — move on and fi
     prompt += `\n\n## Additional Context\n${custom}`;
   }
 
+  if (repoConfig?.planningPrompt) {
+    prompt += `\n\n## Repo-Specific Instructions\n${repoConfig.planningPrompt.trim()}`;
+  }
+
   return prompt;
 }
 
@@ -143,7 +153,7 @@ function getOsGuidance(): string {
   return "You are running on Linux.";
 }
 
-export function buildExecutionPrompt(task: CritterTask, allowedTools: string[], options?: { resuming?: boolean }): string {
+export function buildExecutionPrompt(task: CritterTask, allowedTools: string[], options?: { resuming?: boolean; repoConfig?: PerRepoConfig | null }): string {
   const bashTools = allowedTools
     .filter((t) => t.startsWith("Bash("))
     .map((t) => t.replace(/^Bash\(([^:]+):.*\)$/, "$1"));
@@ -196,6 +206,10 @@ If a command is blocked or requires approval, do NOT retry it — move on and fi
   const custom = readCustomPrompt("execution-prompt.md");
   if (custom) {
     prompt += `\n\n## Additional Context\n${custom}`;
+  }
+
+  if (options?.repoConfig?.executionPrompt) {
+    prompt += `\n\n## Repo-Specific Instructions\n${options.repoConfig.executionPrompt.trim()}`;
   }
 
   return prompt;

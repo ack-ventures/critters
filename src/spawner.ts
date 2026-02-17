@@ -19,6 +19,7 @@ import {
   getExecutionAllowedTools,
   getPlanningAllowedTools,
 } from "./prompt.js";
+import { loadRepoConfig } from "./repo-config.js";
 import {
   formatFailure,
   formatPlanningComplete,
@@ -186,6 +187,12 @@ export class Spawner {
       const plansDir = `${workDir}/critters/plans`;
       mkdirSync(plansDir, { recursive: true });
 
+      // Load per-repo config if present
+      const repoConfig = loadRepoConfig(workDir);
+      if (repoConfig) {
+        logTask(task.identifier, "Found per-repo .critters.yaml");
+      }
+
       // 3. Phase 1: Planning
       await commentOnIssue(task.issueId, "Planning...");
       logTask(task.identifier, "Starting Phase 1: Planning");
@@ -196,7 +203,7 @@ export class Spawner {
       const planStart = Date.now();
       const planResult = this.config.noTmux
         ? await spawnClaudeSubprocess(
-            buildPlanningPrompt(task),
+            buildPlanningPrompt(task, repoConfig),
             planAllowedTools,
             workDir,
             this.config.maxPlanningTurns,
@@ -206,7 +213,7 @@ export class Spawner {
             abortController.signal,
           )
         : await spawnClaude(
-            buildPlanningPrompt(task),
+            buildPlanningPrompt(task, repoConfig),
             planAllowedTools,
             workDir,
             this.config.maxPlanningTurns,
@@ -247,11 +254,11 @@ export class Spawner {
       logTask(task.identifier, "Starting Phase 2: Execution");
 
       const execStart = Date.now();
-      const execAllowedTools = getExecutionAllowedTools(this.config, task);
+      const execAllowedTools = getExecutionAllowedTools(this.config, task, repoConfig);
       logTask(task.identifier, `Execution phase allowed tools: ${execAllowedTools.join(", ")}`);
       const execResult = this.config.noTmux
         ? await spawnClaudeSubprocess(
-            buildExecutionPrompt(task, execAllowedTools, { resuming }),
+            buildExecutionPrompt(task, execAllowedTools, { resuming, repoConfig }),
             execAllowedTools,
             workDir,
             this.config.maxExecutionTurns,
@@ -261,7 +268,7 @@ export class Spawner {
             abortController.signal,
           )
         : await spawnClaude(
-            buildExecutionPrompt(task, execAllowedTools, { resuming }),
+            buildExecutionPrompt(task, execAllowedTools, { resuming, repoConfig }),
             execAllowedTools,
             workDir,
             this.config.maxExecutionTurns,
