@@ -1,5 +1,5 @@
-import type { ReviewTask } from "./types.js";
 import { stripRepoLine } from "./prompt.js";
+import type { ReviewTask } from "./types.js";
 
 export function getReviewAllowedTools(): string[] {
   return [

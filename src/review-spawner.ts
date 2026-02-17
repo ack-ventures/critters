@@ -11,7 +11,7 @@ import {
   sendSlackNotification,
 } from "./slack.js";
 import type { Config, ReviewResult, ReviewTask, TeamStatuses } from "./types.js";
-import { formatDuration, formatPhaseStats, runCommand, sleep, tailLines } from "./utils.js";
+import { formatDuration, formatPhaseStats, runCommand, tailLines } from "./utils.js";
 
 interface QueuedReview {
   task: ReviewTask;
