@@ -264,12 +264,15 @@ export class Spawner {
       }
 
       // Upload logs and plan file as attachments for debugging
-      const attachmentUrls = await uploadFailureLogs(task, workDir);
+      const { uploaded: attachmentUrls, fallbackExcerpts } = await uploadFailureLogs(task, workDir);
 
       try {
         let failComment = `Critter failed after ${totalDuration}: ${error}`;
         if (attachmentUrls.length > 0) {
           failComment += `\n\nAttached logs:\n${attachmentUrls.map((a) => `- [${a.name}](${a.url})`).join("\n")}`;
+        }
+        if (fallbackExcerpts) {
+          failComment += `\n\n<details><summary>Log excerpts</summary>\n\n${fallbackExcerpts}\n</details>`;
         }
         await commentOnIssue(task.issueId, failComment);
       } catch {
@@ -312,8 +315,9 @@ const MAX_LOG_SIZE = 5 * 1024 * 1024; // 5MB cap per file
 async function uploadFailureLogs(
   task: CritterTask,
   workDir: string,
-): Promise<Array<{ name: string; url: string }>> {
+): Promise<{ uploaded: Array<{ name: string; url: string }>; fallbackExcerpts: string }> {
   const uploaded: Array<{ name: string; url: string }> = [];
+  let fallbackExcerpts = "";
 
   const logFiles = [
     { path: `${workDir}/.critter-output-plan.json`, name: `${task.identifier}-plan-output.txt` },
@@ -331,17 +335,31 @@ async function uploadFailureLogs(
       if (content.length > MAX_LOG_SIZE) {
         content = content.subarray(content.length - MAX_LOG_SIZE);
       }
-      const url = await uploadFileToIssue(task.issueId, file.name, content, "text/plain");
+      const url = await uploadFileToIssue(task.issueId, file.name, content, "text/plain", task.identifier);
       if (url) {
         uploaded.push({ name: file.name, url });
         logTask(task.identifier, `Uploaded ${file.name}`);
+      } else if (file.name.endsWith("-stderr.txt")) {
+        // Upload returned null — add fallback excerpt for stderr files
+        const excerpt = tailLines(content.toString("utf-8"), 50);
+        fallbackExcerpts += `### ${file.name} (last 50 lines)\n\`\`\`\n${excerpt}\n\`\`\`\n\n`;
       }
-    } catch {
-      logTaskError(task.identifier, `Failed to upload ${file.name}`);
+    } catch (err) {
+      logTaskError(task.identifier, `Failed to upload ${file.name}: ${err}`);
+      // Add fallback excerpt for stderr files that threw during upload
+      if (file.name.endsWith("-stderr.txt")) {
+        try {
+          const raw = readFileSync(file.path, "utf-8");
+          const excerpt = tailLines(raw, 50);
+          fallbackExcerpts += `### ${file.name} (last 50 lines)\n\`\`\`\n${excerpt}\n\`\`\`\n\n`;
+        } catch {
+          // Can't even read the file — skip
+        }
+      }
     }
   }
 
-  return uploaded;
+  return { uploaded, fallbackExcerpts: fallbackExcerpts.trim() };
 }
 
 async function detectPr(
