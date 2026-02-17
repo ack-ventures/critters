@@ -195,6 +195,14 @@ export async function findReviewIssues(reviewLabel: string): Promise<CritterTask
   );
 }
 
+export async function getIssueByIdentifier(identifier: string) {
+  const result = await client.issues({
+    filter: { identifier: { eq: identifier } },
+    first: 1,
+  });
+  return result.nodes[0] ?? null;
+}
+
 export async function getIssueComments(issueId: string): Promise<string[]> {
   const issue = await client.issue(issueId);
   const comments = await issue.comments();

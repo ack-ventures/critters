@@ -36,6 +36,7 @@ Usage: critters [command] [flags]
 
 Commands:
   (none)      Start the daemon
+  retry       Retry a failed critter (reset to Todo)
   version     Show version
   update      Check for and apply updates
   init        Interactive config setup (~/.critters/)
@@ -68,6 +69,18 @@ if (subcommand === "init") {
 if (subcommand === "logs") {
   const { runLogs } = await import("./logs.js");
   await runLogs(Bun.argv.slice(3));
+  process.exit(0);
+}
+
+if (subcommand === "retry") {
+  const identifier = Bun.argv[3];
+  if (!identifier) {
+    console.error("Usage: critters retry <issue-identifier> [--force]\n\nExample: critters retry ACK-101");
+    process.exit(1);
+  }
+  const force = Bun.argv.includes("--force");
+  const { runRetry } = await import("./cli-retry.js");
+  await runRetry(identifier, force);
   process.exit(0);
 }
 
