@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 const CRITTERS_DIR = join(homedir(), ".critters");
 const CONFIG_PATH = join(CRITTERS_DIR, "config.yaml");
@@ -14,6 +15,8 @@ triggerLabel: "Critter"
 maxPlanningTurns: 50
 maxExecutionTurns: 75
 tmuxSession: critters
+planningModel: opus
+executionModel: opus
 
 defaultAllowedTools:
   - "Read"
@@ -43,12 +46,32 @@ teamRepos:
   # "team-uuid-1": "git@github.com:your-org/default-repo.git"
 
 # Review critter settings
-# reviewTriggerLabel: "Critter Review"
-# reviewModel: opus
-# reviewConcurrency: 2
-# reviewTimeoutMinutes: 15
-# maxReviewTurns: 30
+reviewTriggerLabel: "Critter Review"
+reviewModel: opus
+reviewConcurrency: 2
+reviewTimeoutMinutes: 15
+maxReviewTurns: 30
 `;
+
+export function mergeConfig(
+  existingYaml: string,
+  defaultYaml: string,
+): { merged: string; added: string[] } {
+  const existing = parseYaml(existingYaml) as Record<string, unknown> | null;
+  const defaults = parseYaml(defaultYaml) as Record<string, unknown>;
+
+  const merged = existing != null ? { ...existing } : {};
+  const added: string[] = [];
+
+  for (const [key, defaultValue] of Object.entries(defaults)) {
+    if (!(key in merged)) {
+      merged[key] = defaultValue;
+      added.push(key);
+    }
+  }
+
+  return { merged: stringifyYaml(merged), added };
+}
 
 export async function runInit(): Promise<void> {
   console.log("Critters Setup");
@@ -67,7 +90,21 @@ export async function runInit(): Promise<void> {
     writeFileSync(CONFIG_PATH, DEFAULT_CONFIG);
     console.log(`Wrote default config to ${CONFIG_PATH}`);
   } else {
-    console.log(`${CONFIG_PATH} already exists, skipping`);
+    const existingRaw = readFileSync(CONFIG_PATH, "utf-8");
+    const { merged, added } = mergeConfig(existingRaw, DEFAULT_CONFIG);
+
+    if (added.length > 0) {
+      writeFileSync(CONFIG_PATH, merged);
+      const defaults = parseYaml(DEFAULT_CONFIG) as Record<string, unknown>;
+      for (const field of added) {
+        const value = defaults[field];
+        const display = typeof value === "object" ? "(default structure)" : `(default: ${value})`;
+        console.log(`Added missing field: ${field} ${display}`);
+      }
+      console.log("\nNote: YAML comments have been removed during merge.");
+    } else {
+      console.log("Config is up to date");
+    }
   }
 
   // Handle .env
