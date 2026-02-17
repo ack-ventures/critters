@@ -267,11 +267,24 @@ export class Spawner {
         }
       }
 
+      // Attempt to salvage partial progress
+      const salvage = await salvagePartialProgress(workDir, branch, task.identifier, task.title);
+      if (salvage.prUrl) {
+        logTask(task.identifier, `Salvaged partial progress — draft PR: ${salvage.prUrl}`);
+      } else if (salvage.branchPushed) {
+        logTask(task.identifier, `Salvaged partial progress — branch pushed: ${branch}`);
+      }
+
       // Upload logs and plan file as attachments for debugging
       const { uploaded: attachmentUrls, fallbackExcerpts } = await uploadFailureLogs(task, workDir);
 
       try {
         let failComment = `Critter failed after ${totalDuration}: ${error}`;
+        if (salvage.prUrl) {
+          failComment += `\n\nPartial progress was saved as a draft PR: ${salvage.prUrl}`;
+        } else if (salvage.branchPushed) {
+          failComment += `\n\nPartial commits were pushed to branch \`${branch}\`.`;
+        }
         if (attachmentUrls.length > 0) {
           failComment += `\n\nAttached logs:\n${attachmentUrls.map((a) => `- [${a.name}](${a.url})`).join("\n")}`;
         }
@@ -296,6 +309,76 @@ export class Spawner {
       cleanupWorkDir(workDir);
       logTask(task.identifier, "Cleaned up work directory");
     }
+  }
+}
+
+export async function salvagePartialProgress(
+  workDir: string,
+  branch: string,
+  identifier: string,
+  title: string,
+): Promise<{ prUrl?: string; branchPushed?: boolean }> {
+  try {
+    // Auto-commit any uncommitted changes so they're not lost
+    try {
+      if (await hasUncommittedChanges(workDir)) {
+        await autoCommit(workDir, identifier, `[${identifier}] Auto-commit in-progress work`);
+      }
+    } catch {
+      logTaskError(identifier, "Salvage: auto-commit failed, continuing anyway");
+    }
+
+    // Check if there are any commits worth saving
+    if (!(await hasCommitsOnBranch(workDir, branch, identifier))) {
+      return {};
+    }
+
+    // Check if a PR already exists for this branch
+    const listResult = await runCommand(
+      "gh",
+      ["pr", "list", "--head", branch, "--json", "url", "--limit", "1"],
+      { cwd: workDir },
+    );
+    if (listResult.code === 0) {
+      try {
+        const prs = JSON.parse(listResult.stdout);
+        if (prs.length > 0) {
+          return { prUrl: prs[0].url, branchPushed: true };
+        }
+      } catch {
+        // JSON parse failed — continue to push and create PR
+      }
+    }
+
+    // Push the branch
+    const pushResult = await runCommand("git", ["push", "origin", branch], { cwd: workDir });
+    if (pushResult.code !== 0) {
+      logTaskError(identifier, `Salvage: push failed: ${pushResult.stderr}`);
+      return {};
+    }
+
+    // Create a draft PR
+    const prResult = await runCommand(
+      "gh",
+      [
+        "pr", "create", "--draft",
+        "--head", branch,
+        "--title", `[${identifier}] ${title} (partial)`,
+        "--body", "Critter failed mid-execution. See Linear issue for details.",
+      ],
+      { cwd: workDir },
+    );
+    if (prResult.code === 0) {
+      const prUrl = prResult.stdout.trim();
+      return { prUrl, branchPushed: true };
+    }
+
+    // PR creation failed but branch was pushed
+    logTaskError(identifier, `Salvage: draft PR creation failed: ${prResult.stderr}`);
+    return { branchPushed: true };
+  } catch (err) {
+    logTaskError(identifier, `Salvage failed entirely: ${err}`);
+    return {};
   }
 }
 
