@@ -18,9 +18,9 @@ import {
   getExecutionAllowedTools,
   getPlanningAllowedTools,
 } from "./prompt.js";
+import { withRetry } from "./retry.js";
 import { formatFailure, formatSuccess, sendSlackNotification } from "./slack.js";
 import type { Config, CritterResult, CritterTask, SpawnResult, TeamStatuses } from "./types.js";
-import { withRetry } from "./retry.js";
 import { branchName, formatDuration, formatPhaseStats, runCommand, tailLines } from "./utils.js";
 
 interface QueuedTask {
