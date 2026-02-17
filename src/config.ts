@@ -117,6 +117,8 @@ export function loadConfig(configPath?: string): Config {
     defaultAllowedTools: (yaml.defaultAllowedTools as string[]) ?? [],
     tmuxSession: (yaml.tmuxSession as string) ?? "critters",
     noTmux: false,
+    planningModel: (yaml.planningModel as string) ?? "opus",
+    executionModel: (yaml.executionModel as string) ?? "opus",
     repos,
     teamRepos,
     linearApiKey,

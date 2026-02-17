@@ -354,6 +354,8 @@ describe("src/prompt.ts", () => {
       teamRepos: {},
       tmuxSession: "critters",
       noTmux: false,
+      planningModel: "opus",
+      executionModel: "opus",
       linearApiKey: "test",
     };
 

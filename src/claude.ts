@@ -27,6 +27,7 @@ export async function spawnClaude(
   identifier: string,
   phase: string,
   tmuxSession: string,
+  model: string,
   signal?: AbortSignal,
 ): Promise<SpawnResult> {
   const windowName = `${identifier}-${phase}`;
@@ -59,7 +60,7 @@ echo -e "${color.label}━━━ ${identifier} / ${phase} ━━━${reset}"
 echo ""
 cd ${shellEscape(workDir)}
 claude -p "$(cat ${shellEscape(promptFile)})" \\
-  --model opus \\
+  --model ${shellEscape(model)} \\
   --allowedTools ${shellEscape(allowedTools.join(","))} \\
   --max-turns ${maxTurns} \\
   --verbose \\
@@ -223,6 +224,7 @@ export async function spawnClaudeSubprocess(
   maxTurns: number,
   identifier: string,
   phase: string,
+  model: string,
   signal?: AbortSignal,
 ): Promise<SpawnResult> {
   const promptFile = `${workDir}/.critter-prompt-${phase}`;
@@ -240,7 +242,7 @@ export async function spawnClaudeSubprocess(
     "unset CLAUDECODE",
     `cd ${shellEscape(workDir)}`,
     `exec claude -p "$(cat ${shellEscape(promptFile)})"` +
-      ` --model opus` +
+      ` --model ${shellEscape(model)}` +
       ` --allowedTools ${shellEscape(allowedTools.join(","))}` +
       ` --max-turns ${maxTurns}` +
       ` --verbose` +
