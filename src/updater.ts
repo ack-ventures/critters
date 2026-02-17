@@ -1,6 +1,7 @@
 import { chmodSync, existsSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { log, logError } from "./logger.js";
 
+// Canonical release source — update this if the repo ever moves.
 const RELEASES_URL = "https://api.github.com/repos/ack-ventures/critters/releases/latest";
 
 function compareSemver(a: string, b: string): number {

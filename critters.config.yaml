@@ -27,9 +27,9 @@ defaultAllowedTools:
 repos:
   # Linear project ID → repo config
   # "project-uuid-1":
-  #   url: "git@github.com:ackventures/some-repo.git"
+  #   url: "git@github.com:your-org/your-repo.git"
   #   extraAllowedTools: ["Bash(poetry:*)"]
 
 teamRepos:
   # Fallback: Linear team ID → repo URL
-  # "a1f75c61-6db2-41fb-a5c3-988d9d2d82dd": "git@github.com:ackventures/default-repo.git"
+  # "team-uuid-1": "git@github.com:your-org/default-repo.git"
