@@ -5,8 +5,11 @@ import { runCommand } from "../utils.js";
 
 const tmpDir = "/tmp/critters-jq-test";
 
+// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ESC matching for ANSI stripping
+const ANSI_RE = /\x1b\[[0-9;]*m/g;
+
 function stripAnsi(s: string): string {
-  return s.replace(/\x1b\[[0-9;]*m/g, "");
+  return s.replace(ANSI_RE, "");
 }
 
 async function runJqFilter(input: string): Promise<string> {
