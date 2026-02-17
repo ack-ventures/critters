@@ -5,9 +5,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { loadConfig } from "./config.js";
 import { runInit } from "./init.js";
-import { ensureCritterFailedStatus, ensureLabel, initLinear, loadTeamStatuses } from "./linear.js";
+import { ensureCritterFailedStatus, ensureHumanReviewStatus, ensureLabel, initLinear, loadTeamStatuses } from "./linear.js";
 import { initFileLogging, log, logError } from "./logger.js";
 import { checkPrerequisites } from "./prerequisites.js";
+import { ReviewSpawner } from "./review-spawner.js";
+import { ReviewWatcher } from "./review-watcher.js";
 import { Spawner } from "./spawner.js";
 import { checkForUpdate } from "./updater.js";
 import { runCommand } from "./utils.js";
@@ -129,12 +131,14 @@ async function main() {
   initLinear(config);
   log("Connected to Linear");
 
-  // Auto-create label
+  // Auto-create labels
   await ensureLabel(config.triggerLabel);
+  await ensureLabel(config.reviewTriggerLabel);
 
-  // Load team statuses + ensure "Critter Failed" exists
+  // Load team statuses + ensure required workflow states exist
   let teamStatuses = await loadTeamStatuses();
   teamStatuses = await ensureCritterFailedStatus(teamStatuses);
+  teamStatuses = await ensureHumanReviewStatus(teamStatuses);
 
   // Create spawner + cleanup stale work dirs
   const spawner = new Spawner(config, teamStatuses);
@@ -142,13 +146,20 @@ async function main() {
   spawner.startPeriodicCleanup();
   log("Cleaned up stale work directories");
 
-  // Create watcher
+  // Create watchers
   const watcher = new Watcher(config, spawner);
+
+  // Create review spawner + watcher
+  const reviewSpawner = new ReviewSpawner(config, teamStatuses);
+  const reviewWatcher = new ReviewWatcher(config, reviewSpawner);
+
+  log(`Review config: concurrency=${config.reviewConcurrency}, timeout=${config.reviewTimeoutMinutes}min, model=${config.reviewModel}`);
 
   // Signal handlers
   const shutdown = () => {
     log("Shutting down...");
     watcher.stop();
+    reviewWatcher.stop();
     // Give running tasks a moment to clean up
     setTimeout(() => {
       log("Exiting");
@@ -159,8 +170,8 @@ async function main() {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  // Start watching
-  await watcher.start();
+  // Start watching (both run concurrently)
+  await Promise.all([watcher.start(), reviewWatcher.start()]);
 }
 
 main().catch((err) => {

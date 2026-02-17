@@ -62,9 +62,18 @@ Linear (issues with "Critter" label in "Todo")
     │  2. create branch critter/<ID>-<slug>
     │  3. Phase 1: planning Claude (explores, writes plan, reviewer loop)
     │  4. Phase 2: execution Claude (implements plan, commits, pushes, creates PR)
-    │  5. detect PR via `gh pr list`, update Linear
+    │  5. detect PR via `gh pr list`, update Linear → "In Review"
     ▼
-  Human reviews draft PR
+  ReviewWatcher (src/review-watcher.ts) — polls "Critter Review" label in "In Review"
+    │  → extracts PR URL from comments, dedup by issue ID
+    ▼
+  ReviewSpawner (src/review-spawner.ts) — max 2 concurrent
+    │  1. shallow clone, checkout PR branch
+    │  2. single Claude phase: review diff, approve/request changes
+    │  3. If approved + CI green → merge PR → "Done"
+    │  4. If needs changes or CI fails → "Human Review"
+    ▼
+  Human reviews (if needed)
 ```
 
 Each phase runs `claude -p` with `--output-format stream-json` in a tmux pane. Output is piped through `jq` using `src/stream-filter.jq` for readable display.
@@ -82,6 +91,20 @@ Optional but recommended:
 
 The watcher picks up matching issues every 120 seconds. Once picked up, status moves to "In Progress" → "In Review" (on PR) or "Critter Failed" (on error).
 
+## Creating review tickets
+
+To trigger an automated review of a critter's PR:
+- **Label**: "Critter Review" (exact match, configurable via `reviewTriggerLabel`)
+- **Status**: "In Review"
+- The issue must have a comment containing `PR created: <url>` (created automatically by the create critter)
+
+The review watcher picks up matching issues and dispatches a review critter that:
+1. Checks out the PR branch and reviews the diff
+2. If the code looks good: approves, waits for CI, and merges (squash)
+3. If the code needs changes: requests changes on the PR and moves the issue to "Human Review"
+
+Status flow: "In Review" → "Done" (merged) | "Human Review" (needs changes) | "Critter Failed" (error)
+
 ## Config (`critters.config.yaml`)
 
 | Field | Default | Description |
@@ -96,6 +119,11 @@ The watcher picks up matching issues every 120 seconds. Once picked up, status m
 | `repos` | {} | Project ID → repo URL + extra tools |
 | `tmuxSession` | "critters" | Name of the tmux session to use |
 | `teamRepos` | {} | Team ID → fallback repo URL |
+| `reviewTriggerLabel` | "Critter Review" | Label that triggers review pickup |
+| `reviewModel` | "opus" | Claude model for reviews |
+| `reviewConcurrency` | 2 | Max parallel review critters |
+| `reviewTimeoutMinutes` | 15 | Timeout per review (increase for slow CI) |
+| `maxReviewTurns` | 30 | Max Claude turns per review |
 
 ### Allowed tools
 
@@ -126,6 +154,9 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 | `src/stream-filter.jq` | jq filter for pretty-printing stream-json |
 | `src/config.ts` | Load YAML + env |
 | `src/logger.ts` | Timestamped console logging |
+| `src/review-prompt.ts` | Build review prompt, review allowed tools |
+| `src/review-spawner.ts` | Review queue, lifecycle, outcome parsing |
+| `src/review-watcher.ts` | Review poll loop, PR URL extraction |
 | `src/slack.ts` | Webhook notifications |
 | `critters/plans/<ID>.md` | Planning phase output — critters write their implementation plans here, committed to the repo |
 

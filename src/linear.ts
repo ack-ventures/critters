@@ -1,5 +1,5 @@
 import { LinearClient } from "@linear/sdk";
-import { log, logError, logTaskError } from "./logger.js";
+import { log, logError, logTask, logTaskError } from "./logger.js";
 import type { Config, CritterTask, TeamStatuses } from "./types.js";
 
 let client: LinearClient;
@@ -125,6 +125,65 @@ export async function findCritterIssues(triggerLabel: string): Promise<CritterTa
   }
 
   return tasks;
+}
+
+export async function findReviewIssues(reviewLabel: string): Promise<CritterTask[]> {
+  const issues = await client.issues({
+    filter: {
+      labels: { some: { name: { eq: reviewLabel } } },
+      state: { name: { eq: "In Review" } },
+    },
+    first: 20,
+  });
+
+  const tasks: CritterTask[] = [];
+  for (const issue of issues.nodes) {
+    const team = await issue.team;
+    const project = await issue.project;
+    if (!team) continue;
+
+    tasks.push({
+      issueId: issue.id,
+      identifier: issue.identifier,
+      title: issue.title,
+      description: issue.description ?? "",
+      repoUrl: "",
+      teamId: team.id,
+      projectId: project?.id,
+    });
+  }
+
+  return tasks;
+}
+
+export async function getIssueComments(issueId: string): Promise<string[]> {
+  const issue = await client.issue(issueId);
+  const comments = await issue.comments();
+  return comments.nodes.map((c) => c.body);
+}
+
+export async function ensureHumanReviewStatus(teamStatuses: TeamStatuses): Promise<TeamStatuses> {
+  const teams = await client.teams();
+
+  for (const team of teams.nodes) {
+    if (!teamStatuses[team.id]?.["Human Review"]) {
+      log(`Creating "Human Review" status for team ${team.name}...`);
+      const result = await client.createWorkflowState({
+        teamId: team.id,
+        name: "Human Review",
+        type: "started",
+        color: "#F59E0B",
+      });
+      const state = await result.workflowState;
+      if (state) {
+        if (!teamStatuses[team.id]) teamStatuses[team.id] = {};
+        teamStatuses[team.id]["Human Review"] = state.id;
+        log(`Created "Human Review" status for team ${team.name}`);
+      }
+    }
+  }
+
+  return teamStatuses;
 }
 
 export async function updateIssueStatus(
