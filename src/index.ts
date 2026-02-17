@@ -8,6 +8,7 @@ import { loadConfig } from "./config.js";
 import { startHealthServer } from "./health.js";
 import { runInit } from "./init.js";
 import { runInitRepo } from "./init-repo.js";
+import { runStatus } from "./status.js";
 import { ensureCritterFailedStatus, ensureHumanReviewStatus, ensureLabel, initLinear, loadTeamStatuses } from "./linear.js";
 import { initFileLogging, log, logError } from "./logger.js";
 import { initMetrics } from "./metrics.js";
@@ -37,6 +38,7 @@ Usage: critters [command] [flags]
 Commands:
   (none)      Start the daemon
   retry       Retry a failed critter (reset to Todo)
+  status      Show daemon status
   version     Show version
   update      Check for and apply updates
   init        Interactive config setup (~/.critters/)
@@ -58,6 +60,11 @@ Logs flags:
 
 if (subcommand === "update") {
   await checkForUpdate(VERSION, { force: true });
+  process.exit(0);
+}
+
+if (subcommand === "status") {
+  await runStatus();
   process.exit(0);
 }
 
