@@ -1,5 +1,5 @@
 import { LinearClient } from "@linear/sdk";
-import { log, logError } from "./logger.js";
+import { log, logError, logTaskError } from "./logger.js";
 import type { Config, CritterTask, TeamStatuses } from "./types.js";
 
 let client: LinearClient;
@@ -146,11 +146,21 @@ export async function uploadFileToIssue(
   filename: string,
   content: Buffer,
   contentType: string,
+  identifier?: string,
 ): Promise<string | null> {
-  const payload = await client.fileUpload(contentType, filename, content.length);
+  const logErr = identifier
+    ? (msg: string) => logTaskError(identifier, msg)
+    : (msg: string) => logError(msg);
+
+  const payload = await client.fileUpload(contentType, filename, content.length).catch((err: unknown) => {
+    logErr(`fileUpload() failed for ${filename}: ${err}`);
+    return null;
+  });
+  if (!payload) return null;
+
   const uploadFile = payload.uploadFile;
   if (!uploadFile) {
-    logError("File upload failed: no uploadFile in payload");
+    logErr(`File upload failed: no uploadFile in payload for ${filename}`);
     return null;
   }
 
@@ -163,18 +173,27 @@ export async function uploadFileToIssue(
     method: "PUT",
     headers,
     body: new Uint8Array(content),
+  }).catch((err: unknown) => {
+    logErr(`PUT upload failed for ${filename}: ${err}`);
+    return null;
   });
+  if (!resp) return null;
 
   if (!resp.ok) {
-    logError(`File upload failed: PUT request returned HTTP ${resp.status}`);
+    const body = await resp.text().catch(() => "");
+    logErr(`PUT upload failed for ${filename}: HTTP ${resp.status} ${resp.statusText}${body ? ` — ${body}` : ""}`);
     return null;
   }
 
-  await client.createAttachment({
+  const attachment = await client.createAttachment({
     issueId,
     url: uploadFile.assetUrl,
     title: filename,
+  }).catch((err: unknown) => {
+    logErr(`createAttachment() failed for ${filename}: ${err}`);
+    return null;
   });
+  if (!attachment) return null;
 
   return uploadFile.assetUrl;
 }
