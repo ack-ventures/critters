@@ -2,13 +2,15 @@
 
 Critters is a TypeScript daemon that polls [Linear](https://linear.app) for issues labeled "Critter", spawns [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI instances to plan and implement the work, and opens draft pull requests for human review. It runs on [Bun](https://bun.sh) and orchestrates everything through `tmux` panes.
 
+Inspired by [Stripe's Minions](https://stripe.dev/blog/minions-stripes-one-shot-end-to-end-coding-agents).
+
 ## Quick start
 
 **Prerequisites:** [Bun](https://bun.sh), [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), [`gh` CLI](https://cli.github.com) (authenticated), `tmux`, `jq`
 
 ```bash
 # Clone and install
-git clone <repo-url> && cd critters
+git clone https://github.com/ack-ventures/critters && cd critters
 bun install
 
 # Configure
