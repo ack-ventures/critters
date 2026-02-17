@@ -139,6 +139,32 @@ describe("GET /metrics", () => {
   });
 });
 
+describe("GET / (dashboard)", () => {
+  test("returns 200 with HTML content type", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    server = startHealthServer(port, defaultStatus);
+
+    const res = await fetch(`http://localhost:${port}/`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+
+    const html = await res.text();
+    expect(html).toContain("<!DOCTYPE html>");
+    expect(html).toContain("Critters Dashboard");
+  });
+
+  test("/dashboard returns same content as /", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    server = startHealthServer(port, defaultStatus);
+
+    const res = await fetch(`http://localhost:${port}/dashboard`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+  });
+});
+
 describe("unknown routes", () => {
   test("returns 404", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
