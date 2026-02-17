@@ -1,7 +1,17 @@
 {
   "name": "critters",
   "version": "0.1.0",
-  "private": true,
+  "description": "TypeScript daemon that watches Linear for issues and spawns Claude Code CLI instances to produce draft PRs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ack-ventures/critters.git"
+  },
+  "homepage": "https://github.com/ack-ventures/critters#readme",
+  "bugs": {
+    "url": "https://github.com/ack-ventures/critters/issues"
+  },
+  "keywords": ["linear", "claude-code", "automation", "ai", "pull-requests"],
   "bin": {
     "critters": "src/index.ts"
   },
