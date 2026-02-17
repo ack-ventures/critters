@@ -6,6 +6,8 @@ triggerLabel: "Critter"
 maxPlanningTurns: 50
 maxExecutionTurns: 75
 tmuxSession: critters
+# planningModel: opus
+# executionModel: opus
 
 defaultAllowedTools:
   - "Read"

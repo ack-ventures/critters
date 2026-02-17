@@ -146,6 +146,7 @@ export class Spawner {
             this.config.maxPlanningTurns,
             task.identifier,
             "plan",
+            this.config.planningModel,
             abortController.signal,
           )
         : await spawnClaude(
@@ -156,6 +157,7 @@ export class Spawner {
             task.identifier,
             "plan",
             this.config.tmuxSession,
+            this.config.planningModel,
             abortController.signal,
           );
 
@@ -195,6 +197,7 @@ export class Spawner {
             this.config.maxExecutionTurns,
             task.identifier,
             "exec",
+            this.config.executionModel,
             abortController.signal,
           )
         : await spawnClaude(
@@ -205,6 +208,7 @@ export class Spawner {
             task.identifier,
             "exec",
             this.config.tmuxSession,
+            this.config.executionModel,
             abortController.signal,
           );
 
