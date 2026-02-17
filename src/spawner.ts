@@ -18,7 +18,14 @@ import {
   getExecutionAllowedTools,
   getPlanningAllowedTools,
 } from "./prompt.js";
-import { formatFailure, formatSuccess, sendSlackNotification } from "./slack.js";
+import {
+  formatFailure,
+  formatPlanningComplete,
+  formatSuccess,
+  formatTaskPickedUp,
+  formatTimeoutWarning,
+  sendSlackNotification,
+} from "./slack.js";
 import type { Config, CritterResult, CritterTask, SpawnResult, TeamStatuses } from "./types.js";
 import { branchName, formatDuration, formatPhaseStats, runCommand, sleep, tailLines } from "./utils.js";
 
@@ -103,6 +110,14 @@ export class Spawner {
       abortController.abort();
     }, this.config.timeoutMinutes * 60 * 1000);
 
+    const warningTimeout = setTimeout(async () => {
+      const elapsedMinutes = Math.round(this.config.timeoutMinutes * 0.8);
+      await sendSlackNotification(
+        this.config.slackWebhookUrl,
+        formatTimeoutWarning(task.identifier, task.title, elapsedMinutes, this.config.timeoutMinutes),
+      );
+    }, this.config.timeoutMinutes * 0.8 * 60 * 1000);
+
     try {
       // Ensure work dir base exists
       if (!existsSync(this.config.workDir)) {
@@ -145,6 +160,11 @@ export class Spawner {
 
       // Exclude critter temp files from git so they don't trigger warnings
       appendFileSync(`${workDir}/.git/info/exclude`, "\n.critter-*\n");
+
+      await sendSlackNotification(
+        this.config.slackWebhookUrl,
+        formatTaskPickedUp(task.identifier, task.title, task.repoUrl),
+      );
 
       // Ensure plans directory exists
       const plansDir = `${workDir}/critters/plans`;
@@ -193,6 +213,10 @@ export class Spawner {
       const planStats = `Planning completed in ${formatDuration(planDuration)}${formatPhaseStats(planResult)}`;
       logTask(task.identifier, planStats);
       await commentOnIssue(task.issueId, planStats);
+      await sendSlackNotification(
+        this.config.slackWebhookUrl,
+        formatPlanningComplete(task.identifier, task.title, planResult.numTurns, planResult.costUsd),
+      );
 
       // Commit plan file to branch
       await commitFile(
@@ -341,6 +365,7 @@ export class Spawner {
       return { success: false, error };
     } finally {
       clearTimeout(timeout);
+      clearTimeout(warningTimeout);
       this.activeProcesses.delete(abortController);
       this.activeWorkDirs.delete(workDir);
       cleanupWorkDir(workDir);

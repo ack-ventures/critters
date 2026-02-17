@@ -8,6 +8,7 @@ import {
   formatReviewFailure,
   formatReviewMerged,
   formatReviewNeedsChanges,
+  formatReviewStarted,
   sendSlackNotification,
 } from "./slack.js";
 import type { Config, ReviewResult, ReviewTask, TeamStatuses } from "./types.js";
@@ -184,6 +185,11 @@ export class ReviewSpawner {
       if (checkoutResult.code !== 0) {
         throw new Error(`Failed to checkout PR branch: ${checkoutResult.stderr}`);
       }
+
+      await sendSlackNotification(
+        this.config.slackWebhookUrl,
+        formatReviewStarted(task.identifier, task.title, task.prUrl),
+      );
 
       // 5. Spawn Claude review phase
       logTask(task.identifier, "Starting review phase");
