@@ -14,6 +14,60 @@ function compareSemver(a: string, b: string): number {
   return 0;
 }
 
+async function downloadWithProgress(
+  response: Response,
+  showProgress: boolean,
+): Promise<Buffer> {
+  const contentLength = response.headers.get("Content-Length");
+  const totalBytes =
+    contentLength !== null ? Number.parseInt(contentLength, 10) : null;
+
+  if (!showProgress || !response.body) {
+    return Buffer.from(await response.arrayBuffer());
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let receivedBytes = 0;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    chunks.push(value);
+    receivedBytes += value.length;
+
+    const receivedMB = (receivedBytes / 1_048_576).toFixed(1);
+
+    if (totalBytes !== null && !Number.isNaN(totalBytes) && totalBytes > 0) {
+      const pct = Math.min(
+        100,
+        Math.floor((receivedBytes / totalBytes) * 100),
+      );
+      const totalMB = (totalBytes / 1_048_576).toFixed(1);
+      const filled = Math.round((pct / 100) * 20);
+      const bar = "█".repeat(filled) + "░".repeat(20 - filled);
+      process.stdout.write(
+        `\rDownloading... [${bar}] ${pct}% ${receivedMB}MB/${totalMB}MB`,
+      );
+    } else {
+      process.stdout.write(`\rDownloading... ${receivedMB}MB`);
+    }
+  }
+
+  // Clear the progress line
+  process.stdout.write(`\r${" ".repeat(60)}\r`);
+
+  const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return Buffer.from(result);
+}
+
 export async function checkForUpdate(
   currentVersion: string,
   opts?: { force?: boolean },
@@ -81,7 +135,7 @@ export async function checkForUpdate(
     }
 
     const downloadResponse = await fetch(asset.browser_download_url, {
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(120_000),
     });
 
     if (!downloadResponse.ok) {
@@ -89,8 +143,8 @@ export async function checkForUpdate(
       return;
     }
 
-    const arrayBuffer = await downloadResponse.arrayBuffer();
-    writeFileSync(tempPath, Buffer.from(arrayBuffer));
+    const buffer = await downloadWithProgress(downloadResponse, force);
+    writeFileSync(tempPath, buffer);
     chmodSync(tempPath, 0o755);
     renameSync(tempPath, process.execPath);
     print(`Update applied (v${currentVersion} → v${latestVersion}). Will take effect on next restart.`);
