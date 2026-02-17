@@ -7,6 +7,7 @@ import { loadConfig } from "./config.js";
 import { runInit } from "./init.js";
 import { ensureCritterFailedStatus, ensureHumanReviewStatus, ensureLabel, initLinear, loadTeamStatuses } from "./linear.js";
 import { initFileLogging, log, logError } from "./logger.js";
+import { initMetrics } from "./metrics.js";
 import { checkPrerequisites } from "./prerequisites.js";
 import { ReviewSpawner } from "./review-spawner.js";
 import { ReviewWatcher } from "./review-watcher.js";
@@ -126,6 +127,7 @@ async function main() {
     await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-format", "#{pane_title}"]).catch(() => {});
   }
   log(`Config loaded: concurrency=${config.concurrency}, timeout=${config.timeoutMinutes}min, poll=${config.pollIntervalSeconds}s, noTmux=${noTmux}`);
+  initMetrics();
 
   // Init Linear client
   initLinear(config);

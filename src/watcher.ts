@@ -1,5 +1,6 @@
 import { commentOnIssue, findCritterIssues } from "./linear.js";
 import { log, logError, logTask, logTaskError } from "./logger.js";
+import { recordMetric } from "./metrics.js";
 import { resolveRepoUrl } from "./prompt.js";
 import type { Spawner } from "./spawner.js";
 import type { Config } from "./types.js";
@@ -21,7 +22,8 @@ export class Watcher {
 
     while (!this.stopped) {
       try {
-        await this.poll();
+        const issuesFound = await this.poll();
+        recordMetric({ timestamp: "", event: "poll_completed", outcome: `${issuesFound} issues found` });
       } catch (err) {
         logError(`Poll failed: ${err}`);
       }
@@ -35,7 +37,7 @@ export class Watcher {
     this.spawner.stop();
   }
 
-  private async poll(): Promise<void> {
+  private async poll(): Promise<number> {
     const issues = await findCritterIssues(this.config.triggerLabel);
 
     for (const task of issues) {
@@ -84,5 +86,7 @@ export class Watcher {
         logTaskError(task.identifier, `Dispatch failed: ${err}`);
       });
     }
+
+    return issues.length;
   }
 }

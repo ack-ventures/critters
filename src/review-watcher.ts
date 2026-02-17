@@ -1,5 +1,6 @@
 import { commentOnIssue, findReviewIssues, getIssueComments } from "./linear.js";
 import { log, logError, logTask, logTaskError } from "./logger.js";
+import { recordMetric } from "./metrics.js";
 import { resolveRepoUrl } from "./prompt.js";
 import type { ReviewSpawner } from "./review-spawner.js";
 import type { Config, ReviewTask } from "./types.js";
@@ -34,7 +35,8 @@ export class ReviewWatcher {
 
     while (!this.stopped) {
       try {
-        await this.poll();
+        const issuesFound = await this.poll();
+        recordMetric({ timestamp: "", event: "poll_completed", outcome: `${issuesFound} review issues found` });
       } catch (err) {
         logError(`Review poll failed: ${err}`);
       }
@@ -48,7 +50,7 @@ export class ReviewWatcher {
     this.spawner.stop();
   }
 
-  private async poll(): Promise<void> {
+  private async poll(): Promise<number> {
     const issues = await findReviewIssues(this.config.reviewTriggerLabel);
 
     for (const issue of issues) {
@@ -109,5 +111,7 @@ export class ReviewWatcher {
         logTaskError(issue.identifier, `Review dispatch failed: ${err}`);
       });
     }
+
+    return issues.length;
   }
 }
