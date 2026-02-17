@@ -1,4 +1,5 @@
 import { readCustomPrompt, stripRepoLine } from "./prompt.js";
+import type { PerRepoConfig } from "./repo-config.js";
 import type { ReviewTask } from "./types.js";
 
 export function getReviewAllowedTools(): string[] {
@@ -8,7 +9,7 @@ export function getReviewAllowedTools(): string[] {
   ];
 }
 
-export function buildReviewPrompt(task: ReviewTask): string {
+export function buildReviewPrompt(task: ReviewTask, repoConfig?: PerRepoConfig | null): string {
   const cleanedDescription = stripRepoLine(task.description);
 
   let prompt = `You are reviewing a pull request for issue ${task.identifier}: ${task.title}
@@ -61,6 +62,10 @@ Compare the PR against the original task description above. Check:
   const custom = readCustomPrompt("review-prompt.md");
   if (custom) {
     prompt += `\n\n## Additional Context\n${custom}`;
+  }
+
+  if (repoConfig?.reviewPrompt) {
+    prompt += `\n\n## Repo-Specific Instructions\n${repoConfig.reviewPrompt.trim()}`;
   }
 
   return prompt;

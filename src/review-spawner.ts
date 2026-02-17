@@ -5,6 +5,7 @@ import { triggerHook } from "./hooks.js";
 import { commentOnIssue, updateIssueStatus, uploadFileToIssue } from "./linear.js";
 import { logTask, logTaskError } from "./logger.js";
 import { recordMetric } from "./metrics.js";
+import { loadRepoConfig } from "./repo-config.js";
 import { buildReviewPrompt, getReviewAllowedTools } from "./review-prompt.js";
 import {
   formatReviewFailure,
@@ -214,6 +215,11 @@ export class ReviewSpawner {
         throw new Error(`Failed to checkout PR branch: ${checkoutResult.stderr}`);
       }
 
+      const repoConfig = loadRepoConfig(workDir);
+      if (repoConfig) {
+        logTask(task.identifier, "Found per-repo .critters.yaml");
+      }
+
       await sendSlackNotification(
         this.config.slackWebhookUrl,
         formatReviewStarted(task.identifier, task.title, task.prUrl),
@@ -237,7 +243,7 @@ export class ReviewSpawner {
 
       const reviewResult = this.config.noTmux
         ? await spawnClaudeSubprocess(
-            buildReviewPrompt(task),
+            buildReviewPrompt(task, repoConfig),
             allowedTools,
             workDir,
             this.config.maxReviewTurns,
@@ -247,7 +253,7 @@ export class ReviewSpawner {
             abortController.signal,
           )
         : await spawnClaude(
-            buildReviewPrompt(task),
+            buildReviewPrompt(task, repoConfig),
             allowedTools,
             workDir,
             this.config.maxReviewTurns,
