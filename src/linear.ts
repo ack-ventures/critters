@@ -1,5 +1,6 @@
 import { LinearClient } from "@linear/sdk";
 import { log, logError, logTaskError } from "./logger.js";
+import { withRetry } from "./retry.js";
 import type { Config, CritterTask, TeamStatuses } from "./types.js";
 
 const MAX_PAGINATED_ISSUES = 200;
@@ -91,85 +92,107 @@ export async function ensureCritterFailedStatus(teamStatuses: TeamStatuses): Pro
 }
 
 export async function findCritterIssues(triggerLabel: string): Promise<CritterTask[]> {
-  const issueConnection = await client.issues({
-    filter: {
-      labels: { some: { name: { eq: triggerLabel } } },
-      state: { type: { eq: "unstarted" } },
-    },
-  });
-  const allIssues = await fetchAllNodes(issueConnection);
+  return withRetry(
+    async () => {
+      const issueConnection = await client.issues({
+        filter: {
+          labels: { some: { name: { eq: triggerLabel } } },
+          state: { type: { eq: "unstarted" } },
+        },
+      });
+      const allIssues = await fetchAllNodes(issueConnection);
 
-  const tasks: CritterTask[] = [];
-  for (const issue of allIssues) {
-    const team = await issue.team;
-    const project = await issue.project;
-    if (!team) continue;
+      const tasks: CritterTask[] = [];
+      for (const issue of allIssues) {
+        const team = await issue.team;
+        const project = await issue.project;
+        if (!team) continue;
 
-    // Fetch inverse relations to find issues that block this one.
-    // inverseRelations() returns relations where this issue is the relatedIssue (object).
-    // A relation with type "blocks" means: relation.issue blocks relation.relatedIssue.
-    // So relation.issue is the blocker.
-    const relations = await issue.inverseRelations();
-    const blockedBy: { identifier: string; status: string }[] = [];
+        // Fetch inverse relations to find issues that block this one.
+        // inverseRelations() returns relations where this issue is the relatedIssue (object).
+        // A relation with type "blocks" means: relation.issue blocks relation.relatedIssue.
+        // So relation.issue is the blocker.
+        const relations = await issue.inverseRelations();
+        const blockedBy: { identifier: string; status: string }[] = [];
 
-    for (const relation of relations.nodes) {
-      if (relation.type === "blocks") {
-        const blocker = await relation.issue;
-        if (!blocker) continue;
-        const blockerState = await blocker.state;
-        if (!blockerState) continue;
+        for (const relation of relations.nodes) {
+          if (relation.type === "blocks") {
+            const blocker = await relation.issue;
+            if (!blocker) continue;
+            const blockerState = await blocker.state;
+            if (!blockerState) continue;
 
-        if (blockerState.type !== "completed" && blockerState.type !== "canceled") {
-          blockedBy.push({
-            identifier: blocker.identifier,
-            status: blockerState.name,
-          });
+            if (blockerState.type !== "completed" && blockerState.type !== "canceled") {
+              blockedBy.push({
+                identifier: blocker.identifier,
+                status: blockerState.name,
+              });
+            }
+          }
         }
+
+        tasks.push({
+          issueId: issue.id,
+          identifier: issue.identifier,
+          title: issue.title,
+          description: issue.description ?? "",
+          repoUrl: "",
+          teamId: team.id,
+          projectId: project?.id,
+          ...(blockedBy.length > 0 ? { blockedBy } : {}),
+        });
       }
-    }
 
-    tasks.push({
-      issueId: issue.id,
-      identifier: issue.identifier,
-      title: issue.title,
-      description: issue.description ?? "",
-      repoUrl: "",
-      teamId: team.id,
-      projectId: project?.id,
-      ...(blockedBy.length > 0 ? { blockedBy } : {}),
-    });
-  }
-
-  return tasks;
+      return tasks;
+    },
+    {
+      maxRetries: 3,
+      baseDelayMs: 2000,
+      onRetry: (_error, attempt, delayMs) => {
+        log(`findCritterIssues failed, retrying in ${Math.round(delayMs)}ms... (attempt ${attempt + 1}/3)`);
+      },
+    },
+  );
 }
 
 export async function findReviewIssues(reviewLabel: string): Promise<CritterTask[]> {
-  const issueConnection = await client.issues({
-    filter: {
-      labels: { some: { name: { eq: reviewLabel } } },
-      state: { name: { eq: "In Review" } },
+  return withRetry(
+    async () => {
+      const issueConnection = await client.issues({
+        filter: {
+          labels: { some: { name: { eq: reviewLabel } } },
+          state: { name: { eq: "In Review" } },
+        },
+      });
+      const allIssues = await fetchAllNodes(issueConnection);
+
+      const tasks: CritterTask[] = [];
+      for (const issue of allIssues) {
+        const team = await issue.team;
+        const project = await issue.project;
+        if (!team) continue;
+
+        tasks.push({
+          issueId: issue.id,
+          identifier: issue.identifier,
+          title: issue.title,
+          description: issue.description ?? "",
+          repoUrl: "",
+          teamId: team.id,
+          projectId: project?.id,
+        });
+      }
+
+      return tasks;
     },
-  });
-  const allIssues = await fetchAllNodes(issueConnection);
-
-  const tasks: CritterTask[] = [];
-  for (const issue of allIssues) {
-    const team = await issue.team;
-    const project = await issue.project;
-    if (!team) continue;
-
-    tasks.push({
-      issueId: issue.id,
-      identifier: issue.identifier,
-      title: issue.title,
-      description: issue.description ?? "",
-      repoUrl: "",
-      teamId: team.id,
-      projectId: project?.id,
-    });
-  }
-
-  return tasks;
+    {
+      maxRetries: 3,
+      baseDelayMs: 2000,
+      onRetry: (_error, attempt, delayMs) => {
+        log(`findReviewIssues failed, retrying in ${Math.round(delayMs)}ms... (attempt ${attempt + 1}/3)`);
+      },
+    },
+  );
 }
 
 export async function getIssueComments(issueId: string): Promise<string[]> {
