@@ -40,6 +40,7 @@ Commands:
   help        Show this help
 
 Flags:
+  --dry-run       Poll once, show what would happen, and exit
   --no-tmux       Run without tmux (log to file instead)
   --skip-update   Skip auto-update check on startup
   --config PATH   Use a custom config file`);
@@ -66,9 +67,10 @@ if (subcommand && !subcommand.startsWith("--")) {
 async function main() {
   const noTmux = Bun.argv.includes("--no-tmux");
   const skipUpdate = Bun.argv.includes("--skip-update");
+  const dryRun = Bun.argv.includes("--dry-run");
 
   // Auto-launch inside tmux if not already there
-  if (!noTmux && !process.env.TMUX) {
+  if (!noTmux && !dryRun && !process.env.TMUX) {
     const esc = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
     const args = process.argv.slice(1).filter((a) => !a.startsWith("/$bunfs/"));
     // Pass caller's PATH through so the re-launched binary inside tmux can
@@ -105,6 +107,31 @@ async function main() {
     }
   }
 
+  // Load config (needed for both normal and dry-run modes)
+  const configIdx = Bun.argv.indexOf("--config");
+  const configPath = configIdx !== -1 && Bun.argv[configIdx + 1]
+    ? Bun.argv[configIdx + 1]
+    : undefined;
+  const config = loadConfig(configPath);
+  config.noTmux = noTmux || dryRun;
+
+  if (dryRun) {
+    log(`Critters v${VERSION} — dry run`);
+    initLinear(config);
+    await loadTeamStatuses();
+
+    const watcher = new Watcher(config, null);
+    const reviewWatcher = new ReviewWatcher(config, null);
+
+    const critterSummary = await watcher.dryRunPoll();
+    const reviewSummary = await reviewWatcher.dryRunPoll();
+
+    log("");
+    log(`Dry run complete: ${critterSummary.total} critter issues found, ${critterSummary.wouldPickUp} would be picked up, ${critterSummary.blocked} blocked, ${critterSummary.skipped} skipped (no repo)`);
+    log(`Review: ${reviewSummary.total} review issues found, ${reviewSummary.wouldPickUp} would be picked up, ${reviewSummary.skipped} skipped`);
+    process.exit(0);
+  }
+
   log(`Critters v${VERSION} starting...`);
 
   if (!skipUpdate && VERSION !== "dev") {
@@ -113,14 +140,6 @@ async function main() {
 
   // Verify required CLI tools are available
   await checkPrerequisites();
-
-  // Load config
-  const configIdx = Bun.argv.indexOf("--config");
-  const configPath = configIdx !== -1 && Bun.argv[configIdx + 1]
-    ? Bun.argv[configIdx + 1]
-    : undefined;
-  const config = loadConfig(configPath);
-  config.noTmux = noTmux;
 
   if (!noTmux) {
     // Enable pane titles in the tmux session

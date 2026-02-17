@@ -31,22 +31,27 @@ export function stripRepoLine(description: string): string {
   return cleaned.replace(REPO_LINE_RE, "").trim();
 }
 
-export function resolveRepoUrl(task: CritterTask, config: Config): string | null {
-  // 1. Check description for repo: line
+export function resolveRepoUrlWithSource(
+  task: CritterTask,
+  config: Config,
+): { url: string; source: string } | null {
   const fromDescription = parseRepoUrl(task.description);
-  if (fromDescription) return fromDescription;
+  if (fromDescription) return { url: fromDescription, source: "from description" };
 
-  // 2. Check project config
   if (task.projectId && config.repos[task.projectId]) {
-    return config.repos[task.projectId].url;
+    return { url: config.repos[task.projectId].url, source: "from project config" };
   }
 
-  // 3. Check team config
   if (config.teamRepos[task.teamId]) {
-    return config.teamRepos[task.teamId];
+    return { url: config.teamRepos[task.teamId], source: "from team config" };
   }
 
   return null;
+}
+
+export function resolveRepoUrl(task: CritterTask, config: Config): string | null {
+  const result = resolveRepoUrlWithSource(task, config);
+  return result ? result.url : null;
 }
 
 export function getPlanningAllowedTools(): string[] {
