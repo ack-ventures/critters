@@ -7,12 +7,14 @@ import { ensureCritterFailedStatus, ensureLabel, initLinear, loadTeamStatuses } 
 import { initFileLogging, log, logError } from "./logger.js";
 import { checkPrerequisites } from "./prerequisites.js";
 import { Spawner } from "./spawner.js";
+import { checkForUpdate } from "./updater.js";
 import { runCommand } from "./utils.js";
 import { Watcher } from "./watcher.js";
 
 async function main() {
   // Parse CLI flags early so file logging captures all output
   const noTmux = Bun.argv.includes("--no-tmux");
+  const skipUpdate = Bun.argv.includes("--skip-update");
   if (noTmux) {
     // Ignore SIGHUP (terminal disconnect) and SIGPIPE so the process
     // survives when backgrounded (e.g., `critters --no-tmux &`)
@@ -47,6 +49,10 @@ async function main() {
     // In compiled binary, import.meta.url won't resolve to the source tree
   }
   log(`Critters v${version} starting...`);
+
+  if (!skipUpdate && version !== "unknown") {
+    await checkForUpdate(version);
+  }
 
   // Verify required CLI tools are available
   await checkPrerequisites();
