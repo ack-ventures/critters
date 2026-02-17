@@ -13,6 +13,7 @@ import {
   formatPhaseStats,
   formatTokenCount,
   slugify,
+  tailLines,
 } from "../utils.js";
 
 // ---------------------------------------------------------------------------
@@ -210,6 +211,38 @@ describe("src/utils.ts", () => {
       expect(
         formatPhaseStats({ numTurns: 2, inputTokens: 500, outputTokens: 200 }),
       ).toBe(" (2 turns, 500 in / 200 out)");
+    });
+  });
+
+  describe("tailLines", () => {
+    test("more lines than N", () => {
+      expect(tailLines("a\nb\nc\nd\ne", 3)).toBe("c\nd\ne");
+    });
+
+    test("fewer lines than N", () => {
+      expect(tailLines("a\nb", 5)).toBe("a\nb");
+    });
+
+    test("empty string", () => {
+      expect(tailLines("", 3)).toBe("");
+    });
+
+    test("single line", () => {
+      expect(tailLines("hello", 3)).toBe("hello");
+    });
+
+    test("N = 0", () => {
+      // slice(-0) is slice(0) in JS, so returns the full array
+      expect(tailLines("a\nb\nc", 0)).toBe("a\nb\nc");
+    });
+
+    test("exact match (N equals line count)", () => {
+      expect(tailLines("a\nb\nc", 3)).toBe("a\nb\nc");
+    });
+
+    test("trailing newline", () => {
+      // "a\nb\n" splits to ["a","b",""], last 2 → ["b",""] → "b\n"
+      expect(tailLines("a\nb\n", 2)).toBe("b\n");
     });
   });
 });
