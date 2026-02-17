@@ -90,7 +90,7 @@ Optionally, assign the issue to the relevant Linear project and include implemen
 
 - **Create a `/critter` slash command in Claude Code** to speed up ticket creation. Instead of manually formatting Linear issues, describe what you want and let Claude create the ticket with the right label, status, and `repo:` line. You can batch-create several at once.
 
-- **Claude Max 20x is ideal for running lots of critters.** Each critter spawns `claude -p` under the hood, so a plan with high concurrency burns through API calls fast. The 20x rate limit gives you headroom to run multiple critters in parallel without throttling.
+- **Claude Max 20x is ideal for running lots of critters.** Each critter spawns `claude -p` under the hood, so having lots of tokens to available to you is a good thing.
 
 - **Map Linear projects to repos in the config** so you don't need a `repo:` line in every ticket description. Once a project is mapped, any "Critter"-labeled issue in that project automatically targets the right repo.
 
