@@ -115,15 +115,30 @@ function getOsGuidance(): string {
   return "You are running on Linux.";
 }
 
-export function buildExecutionPrompt(task: CritterTask, allowedTools: string[]): string {
+export function buildExecutionPrompt(task: CritterTask, allowedTools: string[], options?: { resuming?: boolean }): string {
   const bashTools = allowedTools
     .filter((t) => t.startsWith("Bash("))
     .map((t) => t.replace(/^Bash\(([^:]+):.*\)$/, "$1"));
 
-  let prompt = `You are working on issue ${task.identifier}: ${task.title}
+  const resuming = options?.resuming ?? false;
+
+  const resumePreamble = resuming
+    ? `## Resuming from checkpoint
+This is a RETRY of a previously failed attempt. A checkpoint file exists at \`critters/plans/${task.identifier}.checkpoint.md\`.
+Read it first to see which steps were already completed. Skip completed steps and continue from where the previous attempt left off.
+Review the existing code changes on this branch to confirm the completed steps are actually done before skipping them.
+
+`
+    : "";
+
+  const planInstruction = resuming
+    ? `Continue executing the plan from where the previous attempt stopped.`
+    : `Execute the plan completely.`;
+
+  let prompt = `${resumePreamble}You are working on issue ${task.identifier}: ${task.title}
 
 Read critters/plans/${task.identifier}.md — it contains an approved implementation plan.
-Execute the plan completely. Then:
+${planInstruction} Then:
 - Commit your changes with a message referencing ${task.identifier}
 - Push your branch
 - Create a PR using \`gh pr create --head <branch-name>\` with title "[${task.identifier}] ${task.title}" and body that includes a link to the Linear issue and "Automated by Critters". Always use the --head flag.
@@ -131,6 +146,17 @@ Execute the plan completely. Then:
 ## Editing Files
 - Always read a file before editing it. Pay attention to whether it uses tabs or spaces for indentation — the Read tool's line numbers can make tabs look like spaces.
 - Do not fire more than 3-4 Edit calls in parallel. If one fails, all sibling parallel edits are cancelled too.
+
+## Checkpointing
+After completing each major section/step of the plan, update a checkpoint file at \`critters/plans/${task.identifier}.checkpoint.md\`.
+The file should be a checklist mirroring the plan's sections, e.g.:
+\`\`\`
+- [x] Step 1: Set up the retry utility
+- [x] Step 2: Migrate git.ts
+- [ ] Step 3: Migrate spawner.ts
+- [ ] Step 4: Add tests
+\`\`\`
+Commit the checkpoint file alongside your code changes (include it in the same commit, not separately).
 
 ## Tool Restrictions
 You have a limited set of tools. Only these Bash commands are available: ${bashTools.join(", ")}.

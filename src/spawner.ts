@@ -120,8 +120,28 @@ export class Spawner {
       // 1. Clone repo
       await shallowClone(task.repoUrl, workDir, task.identifier, this.config.workDir);
 
-      // 2. Create branch
-      await createBranch(workDir, branch, task.identifier);
+      // 2. Create branch (or reuse existing remote branch for resume)
+      let resuming = false;
+      const lsRemote = await runCommand("git", ["ls-remote", "--heads", "origin", branch], { cwd: workDir });
+      if (lsRemote.code === 0 && lsRemote.stdout.trim().length > 0) {
+        // Branch exists remotely — check it out for resume
+        logTask(task.identifier, `Branch ${branch} exists remotely, checking out for resume`);
+        const fetchResult = await runCommand("git", ["fetch", "origin", branch], { cwd: workDir });
+        if (fetchResult.code !== 0) {
+          throw new Error(`Failed to fetch existing branch: ${fetchResult.stderr}`);
+        }
+        const checkoutResult = await runCommand("git", ["checkout", "-b", branch, `origin/${branch}`], { cwd: workDir });
+        if (checkoutResult.code !== 0) {
+          throw new Error(`Failed to checkout existing branch: ${checkoutResult.stderr}`);
+        }
+        resuming = true;
+      } else {
+        await createBranch(workDir, branch, task.identifier);
+      }
+
+      if (resuming) {
+        await commentOnIssue(task.issueId, "Resuming from previous attempt (branch already exists)...");
+      }
 
       // Exclude critter temp files from git so they don't trigger warnings
       appendFileSync(`${workDir}/.git/info/exclude`, "\n.critter-*\n");
@@ -191,7 +211,7 @@ export class Spawner {
       logTask(task.identifier, `Execution phase allowed tools: ${execAllowedTools.join(", ")}`);
       const execResult = this.config.noTmux
         ? await spawnClaudeSubprocess(
-            buildExecutionPrompt(task, execAllowedTools),
+            buildExecutionPrompt(task, execAllowedTools, { resuming }),
             execAllowedTools,
             workDir,
             this.config.maxExecutionTurns,
@@ -201,7 +221,7 @@ export class Spawner {
             abortController.signal,
           )
         : await spawnClaude(
-            buildExecutionPrompt(task, execAllowedTools),
+            buildExecutionPrompt(task, execAllowedTools, { resuming }),
             execAllowedTools,
             workDir,
             this.config.maxExecutionTurns,
@@ -270,6 +290,22 @@ export class Spawner {
       // Upload logs and plan file as attachments for debugging
       const { uploaded: attachmentUrls, fallbackExcerpts } = await uploadFailureLogs(task, workDir);
 
+      // Read checkpoint file if it exists
+      let checkpointStatus = "";
+      const checkpointFile = `${workDir}/critters/plans/${task.identifier}.checkpoint.md`;
+      if (existsSync(checkpointFile)) {
+        try {
+          const checkpointContent = readFileSync(checkpointFile, "utf-8");
+          const completed = (checkpointContent.match(/- \[x\]/gi) || []).length;
+          const total = (checkpointContent.match(/- \[[ x]\]/gi) || []).length;
+          if (total > 0) {
+            checkpointStatus = `\n\nCheckpoint: completed ${completed}/${total} steps before failure.`;
+          }
+        } catch {
+          // Best effort — don't fail the failure handler
+        }
+      }
+
       try {
         let failComment = `Critter failed after ${totalDuration}: ${error}`;
         if (attachmentUrls.length > 0) {
@@ -278,6 +314,7 @@ export class Spawner {
         if (fallbackExcerpts) {
           failComment += `\n\n<details><summary>Log excerpts</summary>\n\n${fallbackExcerpts}\n</details>`;
         }
+        failComment += checkpointStatus;
         await commentOnIssue(task.issueId, failComment);
       } catch {
         logTaskError(task.identifier, "Failed to post error comment");
@@ -329,6 +366,7 @@ async function uploadFailureLogs(
     { path: `${workDir}/.critter-output-exec.json`, name: `${task.identifier}-exec-output.txt` },
     { path: `${workDir}/.critter-err-exec.log`, name: `${task.identifier}-exec-stderr.txt` },
     { path: `${workDir}/critters/plans/${task.identifier}.md`, name: `${task.identifier}-plan.md` },
+    { path: `${workDir}/critters/plans/${task.identifier}.checkpoint.md`, name: `${task.identifier}-checkpoint.md` },
   ];
 
   for (const file of logFiles) {
