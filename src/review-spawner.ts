@@ -3,6 +3,7 @@ import { spawnClaude, spawnClaudeSubprocess } from "./claude.js";
 import { cleanupWorkDir, shallowClone } from "./git.js";
 import { commentOnIssue, updateIssueStatus, uploadFileToIssue } from "./linear.js";
 import { log, logTask, logTaskError } from "./logger.js";
+import { recordMetric } from "./metrics.js";
 import { buildReviewPrompt, getReviewAllowedTools } from "./review-prompt.js";
 import {
   formatReviewFailure,
@@ -104,6 +105,14 @@ export class ReviewSpawner {
       if (!item) break;
       this.running++;
       logTask(item.task.identifier, `Review started (queue: ${this.queue.length}, running: ${this.running})`);
+      recordMetric({
+        timestamp: "",
+        event: "review_started",
+        issueId: item.task.issueId,
+        identifier: item.task.identifier,
+        repoUrl: item.task.repoUrl,
+        prUrl: item.task.prUrl,
+      });
       this.runReview(item.task).then((result) => {
         this.running--;
         logTask(item.task.identifier, `Review finished (queue: ${this.queue.length}, running: ${this.running})`);
@@ -152,6 +161,16 @@ export class ReviewSpawner {
           await updateIssueStatus(task.issueId, doneId);
         }
         await commentOnIssue(task.issueId, "PR was already merged.");
+        recordMetric({
+          timestamp: "",
+          event: "review_completed",
+          issueId: task.issueId,
+          identifier: task.identifier,
+          repoUrl: task.repoUrl,
+          prUrl: task.prUrl,
+          duration: Date.now() - taskStart,
+          outcome: "merged",
+        });
         return { success: true, merged: true };
       }
       if (state === "CLOSED") {
@@ -259,6 +278,21 @@ export class ReviewSpawner {
           formatReviewMerged(task.identifier, task.title, task.prUrl, totalDuration),
         );
         logTask(task.identifier, `Review complete — PR merged`);
+        recordMetric({
+          timestamp: "",
+          event: "review_completed",
+          issueId: task.issueId,
+          identifier: task.identifier,
+          repoUrl: task.repoUrl,
+          prUrl: task.prUrl,
+          duration: Date.now() - taskStart,
+          outcome: "merged",
+          numTurns: reviewResult.numTurns,
+          inputTokens: reviewResult.inputTokens,
+          outputTokens: reviewResult.outputTokens,
+          cacheReadTokens: reviewResult.cacheReadTokens,
+          costUsd: reviewResult.costUsd,
+        });
         return { success: true, merged: true };
       }
 
@@ -274,6 +308,21 @@ export class ReviewSpawner {
           formatReviewNeedsChanges(task.identifier, task.title, outcome.reason!, totalDuration),
         );
         logTask(task.identifier, `Review complete — needs changes: ${outcome.reason}`);
+        recordMetric({
+          timestamp: "",
+          event: "review_completed",
+          issueId: task.issueId,
+          identifier: task.identifier,
+          repoUrl: task.repoUrl,
+          prUrl: task.prUrl,
+          duration: Date.now() - taskStart,
+          outcome: "needs_changes",
+          numTurns: reviewResult.numTurns,
+          inputTokens: reviewResult.inputTokens,
+          outputTokens: reviewResult.outputTokens,
+          cacheReadTokens: reviewResult.cacheReadTokens,
+          costUsd: reviewResult.costUsd,
+        });
         return { success: true, merged: false };
       }
 
@@ -316,6 +365,16 @@ export class ReviewSpawner {
         formatReviewFailure(task.identifier, task.title, error, totalDuration),
       );
 
+      recordMetric({
+        timestamp: "",
+        event: "review_failed",
+        issueId: task.issueId,
+        identifier: task.identifier,
+        repoUrl: task.repoUrl,
+        prUrl: task.prUrl,
+        duration: Date.now() - taskStart,
+        error,
+      });
       return { success: false, error };
     } finally {
       clearTimeout(timeout);

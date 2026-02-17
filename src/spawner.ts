@@ -12,6 +12,7 @@ import {
 } from "./git.js";
 import { commentOnIssue, updateIssueStatus, uploadFileToIssue } from "./linear.js";
 import { log, logTask, logTaskError } from "./logger.js";
+import { recordMetric } from "./metrics.js";
 import {
   buildExecutionPrompt,
   buildPlanningPrompt,
@@ -81,6 +82,13 @@ export class Spawner {
       if (!item) break;
       this.running++;
       logTask(item.task.identifier, `Task started (queue: ${this.queue.length}, running: ${this.running})`);
+      recordMetric({
+        timestamp: "",
+        event: "task_started",
+        issueId: item.task.issueId,
+        identifier: item.task.identifier,
+        repoUrl: item.task.repoUrl,
+      });
       this.runTask(item.task).then((result) => {
         this.running--;
         logTask(item.task.identifier, `Task finished (queue: ${this.queue.length}, running: ${this.running})`);
@@ -245,6 +253,20 @@ export class Spawner {
           formatSuccess(task.identifier, task.title, prUrl, totalDuration),
         );
         logTask(task.identifier, `Success — PR: ${prUrl}`);
+        recordMetric({
+          timestamp: "",
+          event: "task_completed",
+          issueId: task.issueId,
+          identifier: task.identifier,
+          repoUrl: task.repoUrl,
+          duration: Date.now() - taskStart,
+          prUrl,
+          numTurns: (planResult.numTurns ?? 0) + (execResult.numTurns ?? 0),
+          inputTokens: (planResult.inputTokens ?? 0) + (execResult.inputTokens ?? 0),
+          outputTokens: (planResult.outputTokens ?? 0) + (execResult.outputTokens ?? 0),
+          cacheReadTokens: (planResult.cacheReadTokens ?? 0) + (execResult.cacheReadTokens ?? 0),
+          costUsd: (planResult.costUsd ?? 0) + (execResult.costUsd ?? 0),
+        });
         return { success: true, prUrl };
       } else {
         // Commits exist but no PR — still a partial success
@@ -288,6 +310,15 @@ export class Spawner {
         formatFailure(task.identifier, task.title, error, totalDuration),
       );
 
+      recordMetric({
+        timestamp: "",
+        event: "task_failed",
+        issueId: task.issueId,
+        identifier: task.identifier,
+        repoUrl: task.repoUrl,
+        duration: Date.now() - taskStart,
+        error,
+      });
       return { success: false, error };
     } finally {
       clearTimeout(timeout);
