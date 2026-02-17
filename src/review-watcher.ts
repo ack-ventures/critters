@@ -1,7 +1,7 @@
 import { commentOnIssue, findReviewIssues, getIssueComments } from "./linear.js";
 import { log, logError, logTask, logTaskError } from "./logger.js";
 import { recordMetric } from "./metrics.js";
-import { resolveRepoUrl } from "./prompt.js";
+import { resolveRepoUrl, resolveRepoUrlWithSource } from "./prompt.js";
 import type { ReviewSpawner } from "./review-spawner.js";
 import type { Config, ReviewTask } from "./types.js";
 import { sleep } from "./utils.js";
@@ -21,12 +21,12 @@ export function extractPrFromComments(comments: string[]): { prUrl: string; prNu
 
 export class ReviewWatcher {
   private config: Config;
-  private spawner: ReviewSpawner;
+  private spawner: ReviewSpawner | null;
   private activeIssueIds = new Set<string>();
   private stopped = false;
   private onPoll?: () => void;
 
-  constructor(config: Config, spawner: ReviewSpawner, onPoll?: () => void) {
+  constructor(config: Config, spawner: ReviewSpawner | null, onPoll?: () => void) {
     this.config = config;
     this.spawner = spawner;
     this.onPoll = onPoll;
@@ -50,7 +50,45 @@ export class ReviewWatcher {
 
   stop(): void {
     this.stopped = true;
-    this.spawner.stop();
+    this.spawner?.stop();
+  }
+
+  async dryRunPoll(): Promise<{ total: number; wouldPickUp: number; skipped: number }> {
+    const issues = await findReviewIssues(this.config.reviewTriggerLabel);
+    let wouldPickUp = 0;
+    let skipped = 0;
+
+    for (const issue of issues) {
+      const resolved = resolveRepoUrlWithSource(issue, this.config);
+      if (!resolved) {
+        log(`[DRY RUN] Skipping review ${issue.identifier} "${issue.title}" — no repo URL found`);
+        skipped++;
+        continue;
+      }
+
+      let comments: string[];
+      try {
+        comments = await getIssueComments(issue.issueId);
+      } catch {
+        log(`[DRY RUN] Skipping review ${issue.identifier} "${issue.title}" — failed to fetch comments`);
+        skipped++;
+        continue;
+      }
+
+      const prInfo = extractPrFromComments(comments);
+      if (!prInfo) {
+        log(`[DRY RUN] Skipping review ${issue.identifier} "${issue.title}" — no PR URL in comments`);
+        skipped++;
+        continue;
+      }
+
+      log(`[DRY RUN] Would pick up review ${issue.identifier} "${issue.title}"`);
+      log(`  repo: ${resolved.url} (${resolved.source})`);
+      log(`  PR: ${prInfo.prUrl}`);
+      wouldPickUp++;
+    }
+
+    return { total: issues.length, wouldPickUp, skipped };
   }
 
   private async poll(): Promise<number> {
@@ -102,7 +140,7 @@ export class ReviewWatcher {
       this.activeIssueIds.add(issue.issueId);
       logTask(issue.identifier, `Picked up for review: ${issue.title} (PR #${prInfo.prNumber})`);
 
-      this.spawner.dispatch(reviewTask).then((result) => {
+      this.spawner?.dispatch(reviewTask).then((result) => {
         this.activeIssueIds.delete(issue.issueId);
         if (result.success) {
           logTask(issue.identifier, result.merged ? "Review completed — merged" : "Review completed — needs changes");
