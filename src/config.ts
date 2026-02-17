@@ -99,6 +99,8 @@ export function loadConfig(configPath?: string): Config {
     }
   }
 
+  const hooks = yaml.hooks as Config["hooks"] | undefined;
+
   const workDir = (yaml.workDir as string) ?? "/tmp/critters-work";
   validateWorkDir(workDir);
 
@@ -129,6 +131,7 @@ export function loadConfig(configPath?: string): Config {
     teamRepos,
     linearApiKey,
     slackWebhookUrl,
+    hooks,
   };
 
   validateConfig(config);

@@ -10,6 +10,7 @@ import {
   hasUncommittedChanges,
   shallowClone,
 } from "./git.js";
+import { triggerHook } from "./hooks.js";
 import { commentOnIssue, updateIssueStatus, uploadFileToIssue } from "./linear.js";
 import { log, logTask, logTaskError } from "./logger.js";
 import { recordMetric } from "./metrics.js";
@@ -182,6 +183,14 @@ export class Spawner {
         formatTaskPickedUp(task.identifier, task.title, task.repoUrl),
       );
 
+      triggerHook(this.config, "onTaskStarted", {
+        CRITTER_ISSUE_ID: task.issueId,
+        CRITTER_IDENTIFIER: task.identifier,
+        CRITTER_TITLE: task.title,
+        CRITTER_REPO_URL: task.repoUrl,
+        CRITTER_BRANCH: branch,
+      }, task.identifier);
+
       // Ensure plans directory exists
       const plansDir = `${workDir}/critters/plans`;
       mkdirSync(plansDir, { recursive: true });
@@ -319,6 +328,14 @@ export class Spawner {
           cacheReadTokens: (planResult.cacheReadTokens ?? 0) + (execResult.cacheReadTokens ?? 0),
           costUsd: (planResult.costUsd ?? 0) + (execResult.costUsd ?? 0),
         });
+        triggerHook(this.config, "onPrCreated", {
+          CRITTER_ISSUE_ID: task.issueId,
+          CRITTER_IDENTIFIER: task.identifier,
+          CRITTER_TITLE: task.title,
+          CRITTER_REPO_URL: task.repoUrl,
+          CRITTER_BRANCH: branch,
+          CRITTER_PR_URL: prUrl,
+        }, task.identifier);
         return { success: true, prUrl };
       } else {
         // Commits exist but no PR — still a partial success
@@ -401,6 +418,13 @@ export class Spawner {
         duration: Date.now() - taskStart,
         error,
       });
+      triggerHook(this.config, "onTaskFailed", {
+        CRITTER_ISSUE_ID: task.issueId,
+        CRITTER_IDENTIFIER: task.identifier,
+        CRITTER_TITLE: task.title,
+        CRITTER_REPO_URL: task.repoUrl,
+        CRITTER_BRANCH: branch,
+      }, task.identifier);
       return { success: false, error };
     } finally {
       clearTimeout(timeout);
