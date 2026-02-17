@@ -21,7 +21,7 @@ elif .type == "assistant" then
       (if $sub then "\u001b[2m  " + $tag + .text + "\u001b[0m" else .text end)
     elif .type == "tool_use" then
       (if $sub then "  " + $tag else "" end) +
-      "\u001b[36m\u2192 " + .name +
+      $tool_color + "\u2192 " + .name +
       (if .name == "Read" or .name == "Write" or .name == "Edit" then
         " " + (.input.file_path // "")
       elif .name == "Bash" then
