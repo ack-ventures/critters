@@ -84,9 +84,37 @@ ${cleanedDescription}
 2. Design an implementation plan for this task
 3. Write your plan to critters/plans/${task.identifier}.md (the directory already exists — do not create it)
 4. Spawn a reviewer subagent using the Task tool with this prompt:
-   "Review the implementation plan in critters/plans/${task.identifier}.md for the task: ${task.title}. Read the plan and the relevant source files it references. Check for: completeness, correctness, potential issues, missing edge cases, and whether it aligns with the codebase's patterns. If the plan is solid, respond with exactly 'APPROVED'. Otherwise, provide specific actionable feedback."
-5. If the reviewer provides feedback (not APPROVED), revise the plan file and spawn another reviewer
-6. Repeat until the reviewer responds with APPROVED (max 3 review rounds — if not approved after 3, stop and exit with an error)
+   "Review the implementation plan in critters/plans/${task.identifier}.md for the task: ${task.title}. Read the plan and the relevant source files it references. Check for: completeness, correctness, potential issues, missing edge cases, and whether it aligns with the codebase's patterns.
+
+   Output your review in this exact format:
+
+   REVIEW_STATUS: APPROVED
+
+   OR:
+
+   REVIEW_STATUS: NEEDS_REVISION
+
+   ## Issues Found
+   - [MUST_FIX] <description>
+   - [SHOULD_FIX] <description>
+   - [CONSIDER] <description>
+
+   Severity levels:
+   - MUST_FIX: Blocks approval. Correctness issues, missing requirements, security problems, or architectural mistakes that must be addressed.
+   - SHOULD_FIX: Should be addressed but won't block approval alone. Code quality, pattern consistency, or minor gaps.
+   - CONSIDER: Suggestions for improvement. Won't block approval.
+
+   Approval requires zero MUST_FIX items. SHOULD_FIX items alone do not block approval but should be noted.
+
+   If this is a re-review (round 2+), you will see a '## Previous Review Items' section in the plan. Verify that all prior MUST_FIX items have been adequately addressed. If a prior MUST_FIX was not addressed, re-list it as MUST_FIX with a note that it is unresolved from a prior round."
+5. If the reviewer output contains REVIEW_STATUS: NEEDS_REVISION, revise your plan:
+   a. Add a "## Previous Review Items" section at the end of the plan file
+   b. For each MUST_FIX and SHOULD_FIX item from the reviewer, quote the item and explain how you addressed it (or why you chose not to address a SHOULD_FIX). Format:
+      > [MUST_FIX] <original item>
+      Addressed: <explanation of what changed>
+   c. Update the relevant sections of the plan to incorporate the fixes
+   d. Spawn another reviewer subagent with the same prompt
+6. Repeat until the reviewer responds with REVIEW_STATUS: APPROVED (max 3 review rounds — if not approved after 3, stop and exit with an error)
 7. Once approved, you are done — do not implement anything
 
 ## Plan Format

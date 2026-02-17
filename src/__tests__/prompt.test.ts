@@ -113,6 +113,16 @@ describe("buildPlanningPrompt with custom content", () => {
     expect(prompt).toContain("ACK-42");
     expect(prompt).toContain("Add login button");
   });
+
+  test("contains structured reviewer format instructions", () => {
+    const prompt = buildPlanningPrompt(task);
+    expect(prompt).toContain("REVIEW_STATUS: APPROVED");
+    expect(prompt).toContain("REVIEW_STATUS: NEEDS_REVISION");
+    expect(prompt).toContain("[MUST_FIX]");
+    expect(prompt).toContain("[SHOULD_FIX]");
+    expect(prompt).toContain("[CONSIDER]");
+    expect(prompt).toContain("Previous Review Items");
+  });
 });
 
 describe("buildExecutionPrompt with custom content", () => {
