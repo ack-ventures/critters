@@ -14,11 +14,26 @@ function compareSemver(a: string, b: string): number {
   return 0;
 }
 
-export async function checkForUpdate(currentVersion: string): Promise<void> {
+export async function checkForUpdate(
+  currentVersion: string,
+  opts?: { force?: boolean },
+): Promise<void> {
+  const force = opts?.force ?? false;
+  const print = force ? console.log.bind(console) : log;
+  const printError = force ? console.error.bind(console) : logError;
+
   // Only auto-update when running as a compiled binary — when running via
   // `bun run src/index.ts`, process.execPath points to the bun binary and
   // we must not overwrite it.
-  if (process.execPath.includes("bun")) return;
+  if (process.execPath.includes("bun")) {
+    if (force) printError("Cannot update: running via bun, not as a compiled binary. Use install.sh to install.");
+    return;
+  }
+
+  if (currentVersion === "dev") {
+    if (force) printError("Cannot check for updates: running a dev build.");
+    return;
+  }
 
   const tempPath = `${process.execPath}.update`;
 
@@ -32,7 +47,7 @@ export async function checkForUpdate(currentVersion: string): Promise<void> {
     });
 
     if (!response.ok) {
-      logError(`Update check failed: GitHub API returned ${response.status}`);
+      printError(`Update check failed: GitHub API returned ${response.status}`);
       return;
     }
 
@@ -40,17 +55,18 @@ export async function checkForUpdate(currentVersion: string): Promise<void> {
     const { tag_name, assets } = data as { tag_name: unknown; assets: unknown };
 
     if (typeof tag_name !== "string" || !Array.isArray(assets)) {
-      logError("Update check failed: unexpected API response format");
+      printError("Update check failed: unexpected API response format");
       return;
     }
 
     const latestVersion = tag_name.replace(/^v/, "").replace(/-.*$/, "");
 
     if (compareSemver(latestVersion, currentVersion) <= 0) {
+      if (force) print(`Already up to date (v${currentVersion})`);
       return;
     }
 
-    log(`Update available: v${currentVersion} → v${latestVersion}`);
+    print(`Update available: v${currentVersion} → v${latestVersion}`);
 
     const expectedName = `critters-${process.platform}-${process.arch}`;
     const asset = assets.find(
@@ -58,7 +74,7 @@ export async function checkForUpdate(currentVersion: string): Promise<void> {
     ) as { name: string; browser_download_url?: string } | undefined;
 
     if (!asset || typeof asset.browser_download_url !== "string") {
-      logError(`Update: no valid binary asset found for ${process.platform}-${process.arch}`);
+      printError(`Update: no valid binary asset found for ${process.platform}-${process.arch}`);
       return;
     }
 
@@ -67,7 +83,7 @@ export async function checkForUpdate(currentVersion: string): Promise<void> {
     });
 
     if (!downloadResponse.ok) {
-      logError(`Update download failed: HTTP ${downloadResponse.status}`);
+      printError(`Update download failed: HTTP ${downloadResponse.status}`);
       return;
     }
 
@@ -75,7 +91,7 @@ export async function checkForUpdate(currentVersion: string): Promise<void> {
     writeFileSync(tempPath, Buffer.from(arrayBuffer));
     chmodSync(tempPath, 0o755);
     renameSync(tempPath, process.execPath);
-    log(`Update applied (v${currentVersion} → v${latestVersion}). Will take effect on next restart.`);
+    print(`Update applied (v${currentVersion} → v${latestVersion}). Will take effect on next restart.`);
   } catch (err) {
     try {
       if (existsSync(tempPath)) {
@@ -84,6 +100,6 @@ export async function checkForUpdate(currentVersion: string): Promise<void> {
     } catch {
       // best-effort cleanup
     }
-    logError(`Update failed: ${err instanceof Error ? err.message : String(err)}`);
+    printError(`Update failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }

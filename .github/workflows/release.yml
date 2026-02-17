@@ -33,6 +33,11 @@ jobs:
             exit 1
           fi
 
+      - name: Embed version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "export const VERSION = \"$VERSION\";" > src/version.ts
+
       - name: Compile binary
         run: bun build --compile src/index.ts --outfile ${{ matrix.name }}
 
