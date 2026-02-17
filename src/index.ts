@@ -3,9 +3,11 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { loadConfig } from "./config.js";
 import { startHealthServer } from "./health.js";
 import { runInit } from "./init.js";
+import { runInitRepo } from "./init-repo.js";
 import { ensureCritterFailedStatus, ensureHumanReviewStatus, ensureLabel, initLinear, loadTeamStatuses } from "./linear.js";
 import { initFileLogging, log, logError } from "./logger.js";
 import { initMetrics } from "./metrics.js";
@@ -38,9 +40,11 @@ Commands:
   update      Check for and apply updates
   init        Interactive config setup (~/.critters/)
   logs        Show logs for a critter run
+  init-repo   Scaffold .critters.yaml in current repo
   help        Show this help
 
 Flags:
+  --dry-run       Poll once, show what would happen, and exit
   --no-tmux       Run without tmux (log to file instead)
   --skip-update   Skip auto-update check on startup
   --config PATH   Use a custom config file
@@ -67,6 +71,11 @@ if (subcommand === "logs") {
   process.exit(0);
 }
 
+if (subcommand === "init-repo") {
+  await runInitRepo();
+  process.exit(0);
+}
+
 if (subcommand && !subcommand.startsWith("--")) {
   console.error(`Unknown command: ${subcommand}\nRun 'critters help' for usage.`);
   process.exit(1);
@@ -77,9 +86,10 @@ if (subcommand && !subcommand.startsWith("--")) {
 async function main() {
   const noTmux = Bun.argv.includes("--no-tmux");
   const skipUpdate = Bun.argv.includes("--skip-update");
+  const dryRun = Bun.argv.includes("--dry-run");
 
   // Auto-launch inside tmux if not already there
-  if (!noTmux && !process.env.TMUX) {
+  if (!noTmux && !dryRun && !process.env.TMUX) {
     const esc = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
     const args = process.argv.slice(1).filter((a) => !a.startsWith("/$bunfs/"));
     // Pass caller's PATH through so the re-launched binary inside tmux can
@@ -95,7 +105,6 @@ async function main() {
   if (noTmux) {
     process.on("SIGHUP", () => {});
     process.on("SIGPIPE", () => {});
-    initFileLogging();
   }
 
   // Load ~/.critters/.env as fallback if CWD .env doesn't exist
@@ -116,6 +125,31 @@ async function main() {
     }
   }
 
+  // Load config (needed for both normal and dry-run modes)
+  const configIdx = Bun.argv.indexOf("--config");
+  const configPath = configIdx !== -1 && Bun.argv[configIdx + 1]
+    ? Bun.argv[configIdx + 1]
+    : undefined;
+  const config = loadConfig(configPath);
+  config.noTmux = noTmux || dryRun;
+
+  if (dryRun) {
+    log(`Critters v${VERSION} — dry run`);
+    initLinear(config);
+    await loadTeamStatuses();
+
+    const watcher = new Watcher(config, null);
+    const reviewWatcher = new ReviewWatcher(config, null);
+
+    const critterSummary = await watcher.dryRunPoll();
+    const reviewSummary = await reviewWatcher.dryRunPoll();
+
+    log("");
+    log(`Dry run complete: ${critterSummary.total} critter issues found, ${critterSummary.wouldPickUp} would be picked up, ${critterSummary.blocked} blocked, ${critterSummary.skipped} skipped (no repo)`);
+    log(`Review: ${reviewSummary.total} review issues found, ${reviewSummary.wouldPickUp} would be picked up, ${reviewSummary.skipped} skipped`);
+    process.exit(0);
+  }
+
   log(`Critters v${VERSION} starting...`);
 
   if (!skipUpdate && VERSION !== "dev") {
@@ -125,13 +159,10 @@ async function main() {
   // Verify required CLI tools are available
   await checkPrerequisites();
 
-  // Load config
-  const configIdx = Bun.argv.indexOf("--config");
-  const configPath = configIdx !== -1 && Bun.argv[configIdx + 1]
-    ? Bun.argv[configIdx + 1]
-    : undefined;
-  const config = loadConfig(configPath);
-  config.noTmux = noTmux;
+  if (noTmux) {
+    initFileLogging(config.maxLogSizeMb);
+  }
+
 
   if (!noTmux) {
     // Enable pane titles in the tmux session
@@ -167,13 +198,14 @@ async function main() {
   let healthServer: { stop: () => void } | null = null;
   let lastPollAt: string | null = null;
   if (config.healthPort !== 0) {
+    const metricsPath = join(homedir(), ".critters", "metrics.jsonl");
     healthServer = startHealthServer(config.healthPort, () => ({
       activeCritters: spawner.getActiveCount(),
       queuedCritters: spawner.getQueueSize(),
       activeReviews: reviewSpawner.getActiveCount(),
       queuedReviews: reviewSpawner.getQueueSize(),
       lastPollAt,
-    }));
+    }), metricsPath);
   }
 
   const updatePollTime = () => { lastPollAt = new Date().toISOString(); };

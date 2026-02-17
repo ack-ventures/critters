@@ -34,9 +34,18 @@ export interface Config {
   reviewConcurrency: number;
   reviewTimeoutMinutes: number;
   maxReviewTurns: number;
+  maxLogSizeMb: number;
   healthPort: number;
   linearApiKey: string;
   slackWebhookUrl?: string;
+  hooks?: {
+    onTaskStarted?: string;
+    onPrCreated?: string;
+    onTaskFailed?: string;
+    onReviewStarted?: string;
+    onMerged?: string;
+    onNeedsChanges?: string;
+  };
 }
 
 export interface TeamStatusMap {

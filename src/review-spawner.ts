@@ -1,9 +1,11 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { spawnClaude, spawnClaudeSubprocess } from "./claude.js";
 import { cleanupWorkDir, shallowClone } from "./git.js";
+import { triggerHook } from "./hooks.js";
 import { commentOnIssue, updateIssueStatus, uploadFileToIssue } from "./linear.js";
 import { logTask, logTaskError } from "./logger.js";
 import { recordMetric } from "./metrics.js";
+import { loadRepoConfig } from "./repo-config.js";
 import { buildReviewPrompt, getReviewAllowedTools } from "./review-prompt.js";
 import {
   formatReviewFailure,
@@ -213,10 +215,24 @@ export class ReviewSpawner {
         throw new Error(`Failed to checkout PR branch: ${checkoutResult.stderr}`);
       }
 
+      const repoConfig = loadRepoConfig(workDir);
+      if (repoConfig) {
+        logTask(task.identifier, "Found per-repo .critters.yaml");
+      }
+
       await sendSlackNotification(
         this.config.slackWebhookUrl,
         formatReviewStarted(task.identifier, task.title, task.prUrl),
       );
+
+      triggerHook(this.config, "onReviewStarted", {
+        CRITTER_ISSUE_ID: task.issueId,
+        CRITTER_IDENTIFIER: task.identifier,
+        CRITTER_TITLE: task.title,
+        CRITTER_REPO_URL: task.repoUrl,
+        CRITTER_BRANCH: task.prBranch,
+        CRITTER_PR_URL: task.prUrl,
+      }, task.identifier);
 
       // 5. Spawn Claude review phase
       logTask(task.identifier, "Starting review phase");
@@ -227,7 +243,7 @@ export class ReviewSpawner {
 
       const reviewResult = this.config.noTmux
         ? await spawnClaudeSubprocess(
-            buildReviewPrompt(task),
+            buildReviewPrompt(task, repoConfig),
             allowedTools,
             workDir,
             this.config.maxReviewTurns,
@@ -237,7 +253,7 @@ export class ReviewSpawner {
             abortController.signal,
           )
         : await spawnClaude(
-            buildReviewPrompt(task),
+            buildReviewPrompt(task, repoConfig),
             allowedTools,
             workDir,
             this.config.maxReviewTurns,
@@ -307,6 +323,14 @@ export class ReviewSpawner {
           cacheReadTokens: reviewResult.cacheReadTokens,
           costUsd: reviewResult.costUsd,
         });
+        triggerHook(this.config, "onMerged", {
+          CRITTER_ISSUE_ID: task.issueId,
+          CRITTER_IDENTIFIER: task.identifier,
+          CRITTER_TITLE: task.title,
+          CRITTER_REPO_URL: task.repoUrl,
+          CRITTER_BRANCH: task.prBranch,
+          CRITTER_PR_URL: task.prUrl,
+        }, task.identifier);
         return { success: true, merged: true };
       }
 
@@ -337,6 +361,14 @@ export class ReviewSpawner {
           cacheReadTokens: reviewResult.cacheReadTokens,
           costUsd: reviewResult.costUsd,
         });
+        triggerHook(this.config, "onNeedsChanges", {
+          CRITTER_ISSUE_ID: task.issueId,
+          CRITTER_IDENTIFIER: task.identifier,
+          CRITTER_TITLE: task.title,
+          CRITTER_REPO_URL: task.repoUrl,
+          CRITTER_BRANCH: task.prBranch,
+          CRITTER_PR_URL: task.prUrl,
+        }, task.identifier);
         return { success: true, merged: false };
       }
 

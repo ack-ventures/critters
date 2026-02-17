@@ -10,6 +10,7 @@ import {
   hasUncommittedChanges,
   shallowClone,
 } from "./git.js";
+import { triggerHook } from "./hooks.js";
 import { commentOnIssue, updateIssueStatus, uploadFileToIssue } from "./linear.js";
 import { log, logTask, logTaskError } from "./logger.js";
 import { recordMetric } from "./metrics.js";
@@ -19,6 +20,8 @@ import {
   getExecutionAllowedTools,
   getPlanningAllowedTools,
 } from "./prompt.js";
+import { loadRepoConfig } from "./repo-config.js";
+import { withRetry } from "./retry.js";
 import {
   formatFailure,
   formatPlanningComplete,
@@ -28,7 +31,7 @@ import {
   sendSlackNotification,
 } from "./slack.js";
 import type { Config, CritterResult, CritterTask, SpawnResult, TeamStatuses } from "./types.js";
-import { branchName, formatDuration, formatPhaseStats, runCommand, sleep, tailLines } from "./utils.js";
+import { branchName, formatDuration, formatPhaseStats, runCommand, tailLines } from "./utils.js";
 
 interface QueuedTask {
   task: CritterTask;
@@ -182,9 +185,23 @@ export class Spawner {
         formatTaskPickedUp(task.identifier, task.title, task.repoUrl),
       );
 
+      triggerHook(this.config, "onTaskStarted", {
+        CRITTER_ISSUE_ID: task.issueId,
+        CRITTER_IDENTIFIER: task.identifier,
+        CRITTER_TITLE: task.title,
+        CRITTER_REPO_URL: task.repoUrl,
+        CRITTER_BRANCH: branch,
+      }, task.identifier);
+
       // Ensure plans directory exists
       const plansDir = `${workDir}/critters/plans`;
       mkdirSync(plansDir, { recursive: true });
+
+      // Load per-repo config if present
+      const repoConfig = loadRepoConfig(workDir);
+      if (repoConfig) {
+        logTask(task.identifier, "Found per-repo .critters.yaml");
+      }
 
       // 3. Phase 1: Planning
       await commentOnIssue(task.issueId, "Planning...");
@@ -196,7 +213,7 @@ export class Spawner {
       const planStart = Date.now();
       const planResult = this.config.noTmux
         ? await spawnClaudeSubprocess(
-            buildPlanningPrompt(task),
+            buildPlanningPrompt(task, repoConfig),
             planAllowedTools,
             workDir,
             this.config.maxPlanningTurns,
@@ -206,7 +223,7 @@ export class Spawner {
             abortController.signal,
           )
         : await spawnClaude(
-            buildPlanningPrompt(task),
+            buildPlanningPrompt(task, repoConfig),
             planAllowedTools,
             workDir,
             this.config.maxPlanningTurns,
@@ -247,11 +264,11 @@ export class Spawner {
       logTask(task.identifier, "Starting Phase 2: Execution");
 
       const execStart = Date.now();
-      const execAllowedTools = getExecutionAllowedTools(this.config, task);
+      const execAllowedTools = getExecutionAllowedTools(this.config, task, repoConfig);
       logTask(task.identifier, `Execution phase allowed tools: ${execAllowedTools.join(", ")}`);
       const execResult = this.config.noTmux
         ? await spawnClaudeSubprocess(
-            buildExecutionPrompt(task, execAllowedTools, { resuming }),
+            buildExecutionPrompt(task, execAllowedTools, { resuming, repoConfig }),
             execAllowedTools,
             workDir,
             this.config.maxExecutionTurns,
@@ -261,7 +278,7 @@ export class Spawner {
             abortController.signal,
           )
         : await spawnClaude(
-            buildExecutionPrompt(task, execAllowedTools, { resuming }),
+            buildExecutionPrompt(task, execAllowedTools, { resuming, repoConfig }),
             execAllowedTools,
             workDir,
             this.config.maxExecutionTurns,
@@ -319,6 +336,14 @@ export class Spawner {
           cacheReadTokens: (planResult.cacheReadTokens ?? 0) + (execResult.cacheReadTokens ?? 0),
           costUsd: (planResult.costUsd ?? 0) + (execResult.costUsd ?? 0),
         });
+        triggerHook(this.config, "onPrCreated", {
+          CRITTER_ISSUE_ID: task.issueId,
+          CRITTER_IDENTIFIER: task.identifier,
+          CRITTER_TITLE: task.title,
+          CRITTER_REPO_URL: task.repoUrl,
+          CRITTER_BRANCH: branch,
+          CRITTER_PR_URL: prUrl,
+        }, task.identifier);
         return { success: true, prUrl };
       } else {
         // Commits exist but no PR — still a partial success
@@ -401,6 +426,13 @@ export class Spawner {
         duration: Date.now() - taskStart,
         error,
       });
+      triggerHook(this.config, "onTaskFailed", {
+        CRITTER_ISSUE_ID: task.issueId,
+        CRITTER_IDENTIFIER: task.identifier,
+        CRITTER_TITLE: task.title,
+        CRITTER_REPO_URL: task.repoUrl,
+        CRITTER_BRANCH: branch,
+      }, task.identifier);
       return { success: false, error };
     } finally {
       clearTimeout(timeout);
@@ -556,35 +588,36 @@ async function detectPr(
   branch: string,
   identifier: string,
 ): Promise<string | null> {
-  const MAX_RETRIES = 5;
-  const RETRY_DELAY_MS = 3000;
+  try {
+    return await withRetry(
+      async () => {
+        const { code, stdout, stderr } = await runCommand(
+          "gh",
+          ["pr", "list", "--head", branch, "--json", "url", "--limit", "1"],
+          { cwd: workDir },
+        );
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    const { code, stdout, stderr } = await runCommand(
-      "gh",
-      ["pr", "list", "--head", branch, "--json", "url", "--limit", "1"],
-      { cwd: workDir },
-    );
+        if (code !== 0) {
+          throw new Error(`gh pr list failed: ${stderr}`);
+        }
 
-    if (code !== 0) {
-      logTaskError(identifier, `gh pr list failed (attempt ${attempt}/${MAX_RETRIES}): ${stderr}`);
-    } else {
-      try {
         const prs = JSON.parse(stdout);
         if (prs.length > 0) {
-          return prs[0].url;
+          return prs[0].url as string;
         }
-      } catch {
-        logTaskError(identifier, `Failed to parse gh pr list output: ${stdout}`);
-      }
-    }
-
-    if (attempt < MAX_RETRIES) {
-      logTask(identifier, `PR not found yet, retrying in ${RETRY_DELAY_MS / 1000}s (attempt ${attempt}/${MAX_RETRIES})`);
-      await sleep(RETRY_DELAY_MS);
-    }
+        throw new Error("PR not found yet");
+      },
+      {
+        maxRetries: 4,
+        baseDelayMs: 3000,
+        maxDelayMs: 15000,
+        onRetry: (_error, attempt, delayMs) => {
+          logTask(identifier, `PR not found yet, retrying in ${Math.round(delayMs)}ms... (attempt ${attempt + 1}/4)`);
+        },
+      },
+    );
+  } catch {
+    logTaskError(identifier, "PR not detected after 5 attempts");
+    return null;
   }
-
-  logTaskError(identifier, `PR not detected after ${MAX_RETRIES} attempts`);
-  return null;
 }
