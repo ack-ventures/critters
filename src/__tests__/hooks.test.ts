@@ -39,6 +39,7 @@ function makeConfig(hooks?: Config["hooks"]): Config {
     reviewConcurrency: 1,
     reviewTimeoutMinutes: 15,
     maxReviewTurns: 30,
+    maxLogSizeMb: 10,
     healthPort: 0,
     linearApiKey: "test-key",
     hooks,

@@ -126,6 +126,7 @@ export function loadConfig(configPath?: string): Config {
     reviewConcurrency: (yaml.reviewConcurrency as number) ?? 2,
     reviewTimeoutMinutes: (yaml.reviewTimeoutMinutes as number) ?? 15,
     maxReviewTurns: (yaml.maxReviewTurns as number) ?? 30,
+    maxLogSizeMb: (yaml.maxLogSizeMb as number) ?? 10,
     healthPort: (yaml.healthPort as number) ?? 3847,
     repos,
     teamRepos,
@@ -177,6 +178,9 @@ function validateConfig(config: Config): void {
   }
   if (config.maxReviewTurns <= 0) {
     throw new Error(`Invalid config: maxReviewTurns must be > 0, got ${config.maxReviewTurns}`);
+  }
+  if (config.maxLogSizeMb <= 0) {
+    throw new Error(`Invalid config: maxLogSizeMb must be > 0, got ${config.maxLogSizeMb}`);
   }
   if (config.healthPort !== 0 && (config.healthPort < 1024 || config.healthPort > 65535)) {
     throw new Error(`Invalid config: healthPort must be 0 (disabled) or 1024-65535, got ${config.healthPort}`);

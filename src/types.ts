@@ -34,6 +34,7 @@ export interface Config {
   reviewConcurrency: number;
   reviewTimeoutMinutes: number;
   maxReviewTurns: number;
+  maxLogSizeMb: number;
   healthPort: number;
   linearApiKey: string;
   slackWebhookUrl?: string;

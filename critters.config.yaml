@@ -6,6 +6,7 @@ triggerLabel: "Critter"
 maxPlanningTurns: 50
 maxExecutionTurns: 75
 tmuxSession: critters
+# maxLogSizeMb: 10          # Max log file size before rotation (keeps 3 rotated files)
 # Health check HTTP server port (0 to disable, must be 1024-65535)
 healthPort: 3847
 # planningModel: opus

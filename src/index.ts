@@ -94,7 +94,6 @@ async function main() {
   if (noTmux) {
     process.on("SIGHUP", () => {});
     process.on("SIGPIPE", () => {});
-    initFileLogging();
   }
 
   // Load ~/.critters/.env as fallback if CWD .env doesn't exist
@@ -148,6 +147,11 @@ async function main() {
 
   // Verify required CLI tools are available
   await checkPrerequisites();
+
+  if (noTmux) {
+    initFileLogging(config.maxLogSizeMb);
+  }
+
 
   if (!noTmux) {
     // Enable pane titles in the tmux session
