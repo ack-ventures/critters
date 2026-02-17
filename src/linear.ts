@@ -1,7 +1,9 @@
 import { LinearClient } from "@linear/sdk";
-import { log, logError, logTask, logTaskError } from "./logger.js";
+import { log, logError, logTaskError } from "./logger.js";
 import { withRetry } from "./retry.js";
 import type { Config, CritterTask, TeamStatuses } from "./types.js";
+
+const MAX_PAGINATED_ISSUES = 200;
 
 let client: LinearClient;
 
@@ -11,6 +13,20 @@ export function initLinear(config: Config): void {
 
 export function getClient(): LinearClient {
   return client;
+}
+
+async function fetchAllNodes<T>(connection: {
+  nodes: T[];
+  pageInfo: { hasNextPage: boolean };
+  fetchNext(): Promise<unknown>;
+}): Promise<T[]> {
+  while (connection.pageInfo.hasNextPage && connection.nodes.length < MAX_PAGINATED_ISSUES) {
+    await connection.fetchNext();
+  }
+  if (connection.nodes.length >= MAX_PAGINATED_ISSUES) {
+    log(`Warning: hit pagination cap of ${MAX_PAGINATED_ISSUES} issues — some issues may be skipped`);
+  }
+  return connection.nodes;
 }
 
 export async function ensureLabel(labelName: string): Promise<string> {
@@ -78,16 +94,16 @@ export async function ensureCritterFailedStatus(teamStatuses: TeamStatuses): Pro
 export async function findCritterIssues(triggerLabel: string): Promise<CritterTask[]> {
   return withRetry(
     async () => {
-      const issues = await client.issues({
+      const issueConnection = await client.issues({
         filter: {
           labels: { some: { name: { eq: triggerLabel } } },
           state: { type: { eq: "unstarted" } },
         },
-        first: 20,
       });
+      const allIssues = await fetchAllNodes(issueConnection);
 
       const tasks: CritterTask[] = [];
-      for (const issue of issues.nodes) {
+      for (const issue of allIssues) {
         const team = await issue.team;
         const project = await issue.project;
         if (!team) continue;
@@ -142,16 +158,16 @@ export async function findCritterIssues(triggerLabel: string): Promise<CritterTa
 export async function findReviewIssues(reviewLabel: string): Promise<CritterTask[]> {
   return withRetry(
     async () => {
-      const issues = await client.issues({
+      const issueConnection = await client.issues({
         filter: {
           labels: { some: { name: { eq: reviewLabel } } },
           state: { name: { eq: "In Review" } },
         },
-        first: 20,
       });
+      const allIssues = await fetchAllNodes(issueConnection);
 
       const tasks: CritterTask[] = [];
-      for (const issue of issues.nodes) {
+      for (const issue of allIssues) {
         const team = await issue.team;
         const project = await issue.project;
         if (!team) continue;

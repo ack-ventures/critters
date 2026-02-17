@@ -6,6 +6,8 @@ triggerLabel: "Critter"
 maxPlanningTurns: 50
 maxExecutionTurns: 75
 tmuxSession: critters
+# Health check HTTP server port (0 to disable, must be 1024-65535)
+healthPort: 3847
 # planningModel: opus
 # executionModel: opus
 
@@ -42,3 +44,12 @@ repos:
 teamRepos:
   # Fallback: Linear team ID → repo URL
   # "team-uuid-1": "git@github.com:your-org/default-repo.git"
+
+# Shell hooks — commands run on lifecycle events
+# Environment variables available: CRITTER_ISSUE_ID, CRITTER_IDENTIFIER,
+# CRITTER_TITLE, CRITTER_REPO_URL, CRITTER_BRANCH, CRITTER_PR_URL (when applicable)
+# hooks:
+#   onTaskStarted: "echo 'Task started'"
+#   onPrCreated: "curl -X POST https://example.com/notify"
+#   onMerged: "./scripts/post-merge.sh"
+#   onTaskFailed: ""

@@ -10,16 +10,26 @@ import {
   hasUncommittedChanges,
   shallowClone,
 } from "./git.js";
+import { triggerHook } from "./hooks.js";
 import { commentOnIssue, updateIssueStatus, uploadFileToIssue } from "./linear.js";
 import { log, logTask, logTaskError } from "./logger.js";
+import { recordMetric } from "./metrics.js";
 import {
   buildExecutionPrompt,
   buildPlanningPrompt,
   getExecutionAllowedTools,
   getPlanningAllowedTools,
 } from "./prompt.js";
+import { loadRepoConfig } from "./repo-config.js";
 import { withRetry } from "./retry.js";
-import { formatFailure, formatSuccess, sendSlackNotification } from "./slack.js";
+import {
+  formatFailure,
+  formatPlanningComplete,
+  formatSuccess,
+  formatTaskPickedUp,
+  formatTimeoutWarning,
+  sendSlackNotification,
+} from "./slack.js";
 import type { Config, CritterResult, CritterTask, SpawnResult, TeamStatuses } from "./types.js";
 import { branchName, formatDuration, formatPhaseStats, runCommand, tailLines } from "./utils.js";
 
@@ -57,6 +67,14 @@ export class Spawner {
     this.cleanupInterval.unref();
   }
 
+  getActiveCount(): number {
+    return this.running;
+  }
+
+  getQueueSize(): number {
+    return this.queue.length;
+  }
+
   async dispatch(task: CritterTask): Promise<CritterResult> {
     return new Promise((resolve) => {
       this.queue.push({ task, resolve });
@@ -82,6 +100,13 @@ export class Spawner {
       if (!item) break;
       this.running++;
       logTask(item.task.identifier, `Task started (queue: ${this.queue.length}, running: ${this.running})`);
+      recordMetric({
+        timestamp: "",
+        event: "task_started",
+        issueId: item.task.issueId,
+        identifier: item.task.identifier,
+        repoUrl: item.task.repoUrl,
+      });
       this.runTask(item.task).then((result) => {
         this.running--;
         logTask(item.task.identifier, `Task finished (queue: ${this.queue.length}, running: ${this.running})`);
@@ -104,6 +129,14 @@ export class Spawner {
       abortController.abort();
     }, this.config.timeoutMinutes * 60 * 1000);
 
+    const warningTimeout = setTimeout(async () => {
+      const elapsedMinutes = Math.round(this.config.timeoutMinutes * 0.8);
+      await sendSlackNotification(
+        this.config.slackWebhookUrl,
+        formatTimeoutWarning(task.identifier, task.title, elapsedMinutes, this.config.timeoutMinutes),
+      );
+    }, this.config.timeoutMinutes * 0.8 * 60 * 1000);
+
     try {
       // Ensure work dir base exists
       if (!existsSync(this.config.workDir)) {
@@ -121,15 +154,54 @@ export class Spawner {
       // 1. Clone repo
       await shallowClone(task.repoUrl, workDir, task.identifier, this.config.workDir);
 
-      // 2. Create branch
-      await createBranch(workDir, branch, task.identifier);
+      // 2. Create branch (or reuse existing remote branch for resume)
+      let resuming = false;
+      const lsRemote = await runCommand("git", ["ls-remote", "--heads", "origin", branch], { cwd: workDir });
+      if (lsRemote.code === 0 && lsRemote.stdout.trim().length > 0) {
+        // Branch exists remotely — check it out for resume
+        logTask(task.identifier, `Branch ${branch} exists remotely, checking out for resume`);
+        const fetchResult = await runCommand("git", ["fetch", "origin", branch], { cwd: workDir });
+        if (fetchResult.code !== 0) {
+          throw new Error(`Failed to fetch existing branch: ${fetchResult.stderr}`);
+        }
+        const checkoutResult = await runCommand("git", ["checkout", "-b", branch, `origin/${branch}`], { cwd: workDir });
+        if (checkoutResult.code !== 0) {
+          throw new Error(`Failed to checkout existing branch: ${checkoutResult.stderr}`);
+        }
+        resuming = true;
+      } else {
+        await createBranch(workDir, branch, task.identifier);
+      }
+
+      if (resuming) {
+        await commentOnIssue(task.issueId, "Resuming from previous attempt (branch already exists)...");
+      }
 
       // Exclude critter temp files from git so they don't trigger warnings
       appendFileSync(`${workDir}/.git/info/exclude`, "\n.critter-*\n");
 
+      await sendSlackNotification(
+        this.config.slackWebhookUrl,
+        formatTaskPickedUp(task.identifier, task.title, task.repoUrl),
+      );
+
+      triggerHook(this.config, "onTaskStarted", {
+        CRITTER_ISSUE_ID: task.issueId,
+        CRITTER_IDENTIFIER: task.identifier,
+        CRITTER_TITLE: task.title,
+        CRITTER_REPO_URL: task.repoUrl,
+        CRITTER_BRANCH: branch,
+      }, task.identifier);
+
       // Ensure plans directory exists
       const plansDir = `${workDir}/critters/plans`;
       mkdirSync(plansDir, { recursive: true });
+
+      // Load per-repo config if present
+      const repoConfig = loadRepoConfig(workDir);
+      if (repoConfig) {
+        logTask(task.identifier, "Found per-repo .critters.yaml");
+      }
 
       // 3. Phase 1: Planning
       await commentOnIssue(task.issueId, "Planning...");
@@ -141,7 +213,7 @@ export class Spawner {
       const planStart = Date.now();
       const planResult = this.config.noTmux
         ? await spawnClaudeSubprocess(
-            buildPlanningPrompt(task),
+            buildPlanningPrompt(task, repoConfig),
             planAllowedTools,
             workDir,
             this.config.maxPlanningTurns,
@@ -151,7 +223,7 @@ export class Spawner {
             abortController.signal,
           )
         : await spawnClaude(
-            buildPlanningPrompt(task),
+            buildPlanningPrompt(task, repoConfig),
             planAllowedTools,
             workDir,
             this.config.maxPlanningTurns,
@@ -174,6 +246,10 @@ export class Spawner {
       const planStats = `Planning completed in ${formatDuration(planDuration)}${formatPhaseStats(planResult)}`;
       logTask(task.identifier, planStats);
       await commentOnIssue(task.issueId, planStats);
+      await sendSlackNotification(
+        this.config.slackWebhookUrl,
+        formatPlanningComplete(task.identifier, task.title, planResult.numTurns, planResult.costUsd),
+      );
 
       // Commit plan file to branch
       await commitFile(
@@ -188,11 +264,11 @@ export class Spawner {
       logTask(task.identifier, "Starting Phase 2: Execution");
 
       const execStart = Date.now();
-      const execAllowedTools = getExecutionAllowedTools(this.config, task);
+      const execAllowedTools = getExecutionAllowedTools(this.config, task, repoConfig);
       logTask(task.identifier, `Execution phase allowed tools: ${execAllowedTools.join(", ")}`);
       const execResult = this.config.noTmux
         ? await spawnClaudeSubprocess(
-            buildExecutionPrompt(task, execAllowedTools),
+            buildExecutionPrompt(task, execAllowedTools, { resuming, repoConfig }),
             execAllowedTools,
             workDir,
             this.config.maxExecutionTurns,
@@ -202,7 +278,7 @@ export class Spawner {
             abortController.signal,
           )
         : await spawnClaude(
-            buildExecutionPrompt(task, execAllowedTools),
+            buildExecutionPrompt(task, execAllowedTools, { resuming, repoConfig }),
             execAllowedTools,
             workDir,
             this.config.maxExecutionTurns,
@@ -246,6 +322,28 @@ export class Spawner {
           formatSuccess(task.identifier, task.title, prUrl, totalDuration),
         );
         logTask(task.identifier, `Success — PR: ${prUrl}`);
+        recordMetric({
+          timestamp: "",
+          event: "task_completed",
+          issueId: task.issueId,
+          identifier: task.identifier,
+          repoUrl: task.repoUrl,
+          duration: Date.now() - taskStart,
+          prUrl,
+          numTurns: (planResult.numTurns ?? 0) + (execResult.numTurns ?? 0),
+          inputTokens: (planResult.inputTokens ?? 0) + (execResult.inputTokens ?? 0),
+          outputTokens: (planResult.outputTokens ?? 0) + (execResult.outputTokens ?? 0),
+          cacheReadTokens: (planResult.cacheReadTokens ?? 0) + (execResult.cacheReadTokens ?? 0),
+          costUsd: (planResult.costUsd ?? 0) + (execResult.costUsd ?? 0),
+        });
+        triggerHook(this.config, "onPrCreated", {
+          CRITTER_ISSUE_ID: task.issueId,
+          CRITTER_IDENTIFIER: task.identifier,
+          CRITTER_TITLE: task.title,
+          CRITTER_REPO_URL: task.repoUrl,
+          CRITTER_BRANCH: branch,
+          CRITTER_PR_URL: prUrl,
+        }, task.identifier);
         return { success: true, prUrl };
       } else {
         // Commits exist but no PR — still a partial success
@@ -268,17 +366,47 @@ export class Spawner {
         }
       }
 
+      // Attempt to salvage partial progress
+      const salvage = await salvagePartialProgress(workDir, branch, task.identifier, task.title);
+      if (salvage.prUrl) {
+        logTask(task.identifier, `Salvaged partial progress — draft PR: ${salvage.prUrl}`);
+      } else if (salvage.branchPushed) {
+        logTask(task.identifier, `Salvaged partial progress — branch pushed: ${branch}`);
+      }
+
       // Upload logs and plan file as attachments for debugging
       const { uploaded: attachmentUrls, fallbackExcerpts } = await uploadFailureLogs(task, workDir);
 
+      // Read checkpoint file if it exists
+      let checkpointStatus = "";
+      const checkpointFile = `${workDir}/critters/plans/${task.identifier}.checkpoint.md`;
+      if (existsSync(checkpointFile)) {
+        try {
+          const checkpointContent = readFileSync(checkpointFile, "utf-8");
+          const completed = (checkpointContent.match(/- \[x\]/gi) || []).length;
+          const total = (checkpointContent.match(/- \[[ x]\]/gi) || []).length;
+          if (total > 0) {
+            checkpointStatus = `\n\nCheckpoint: completed ${completed}/${total} steps before failure.`;
+          }
+        } catch {
+          // Best effort — don't fail the failure handler
+        }
+      }
+
       try {
         let failComment = `Critter failed after ${totalDuration}: ${error}`;
+        if (salvage.prUrl) {
+          failComment += `\n\nPartial progress was saved as a draft PR: ${salvage.prUrl}`;
+        } else if (salvage.branchPushed) {
+          failComment += `\n\nPartial commits were pushed to branch \`${branch}\`.`;
+        }
         if (attachmentUrls.length > 0) {
           failComment += `\n\nAttached logs:\n${attachmentUrls.map((a) => `- [${a.name}](${a.url})`).join("\n")}`;
         }
         if (fallbackExcerpts) {
           failComment += `\n\n<details><summary>Log excerpts</summary>\n\n${fallbackExcerpts}\n</details>`;
         }
+        failComment += checkpointStatus;
         await commentOnIssue(task.issueId, failComment);
       } catch {
         logTaskError(task.identifier, "Failed to post error comment");
@@ -289,14 +417,101 @@ export class Spawner {
         formatFailure(task.identifier, task.title, error, totalDuration),
       );
 
+      recordMetric({
+        timestamp: "",
+        event: "task_failed",
+        issueId: task.issueId,
+        identifier: task.identifier,
+        repoUrl: task.repoUrl,
+        duration: Date.now() - taskStart,
+        error,
+      });
+      triggerHook(this.config, "onTaskFailed", {
+        CRITTER_ISSUE_ID: task.issueId,
+        CRITTER_IDENTIFIER: task.identifier,
+        CRITTER_TITLE: task.title,
+        CRITTER_REPO_URL: task.repoUrl,
+        CRITTER_BRANCH: branch,
+      }, task.identifier);
       return { success: false, error };
     } finally {
       clearTimeout(timeout);
+      clearTimeout(warningTimeout);
       this.activeProcesses.delete(abortController);
       this.activeWorkDirs.delete(workDir);
       cleanupWorkDir(workDir);
       logTask(task.identifier, "Cleaned up work directory");
     }
+  }
+}
+
+export async function salvagePartialProgress(
+  workDir: string,
+  branch: string,
+  identifier: string,
+  title: string,
+): Promise<{ prUrl?: string; branchPushed?: boolean }> {
+  try {
+    // Auto-commit any uncommitted changes so they're not lost
+    try {
+      if (await hasUncommittedChanges(workDir)) {
+        await autoCommit(workDir, identifier, `[${identifier}] Auto-commit in-progress work`);
+      }
+    } catch {
+      logTaskError(identifier, "Salvage: auto-commit failed, continuing anyway");
+    }
+
+    // Check if there are any commits worth saving
+    if (!(await hasCommitsOnBranch(workDir, branch, identifier))) {
+      return {};
+    }
+
+    // Check if a PR already exists for this branch
+    const listResult = await runCommand(
+      "gh",
+      ["pr", "list", "--head", branch, "--json", "url", "--limit", "1"],
+      { cwd: workDir },
+    );
+    if (listResult.code === 0) {
+      try {
+        const prs = JSON.parse(listResult.stdout);
+        if (prs.length > 0) {
+          return { prUrl: prs[0].url, branchPushed: true };
+        }
+      } catch {
+        // JSON parse failed — continue to push and create PR
+      }
+    }
+
+    // Push the branch
+    const pushResult = await runCommand("git", ["push", "origin", branch], { cwd: workDir });
+    if (pushResult.code !== 0) {
+      logTaskError(identifier, `Salvage: push failed: ${pushResult.stderr}`);
+      return {};
+    }
+
+    // Create a draft PR
+    const prResult = await runCommand(
+      "gh",
+      [
+        "pr", "create", "--draft",
+        "--head", branch,
+        "--title", `[${identifier}] ${title} (partial)`,
+        "--body", "Critter failed mid-execution. See Linear issue for details.",
+      ],
+      { cwd: workDir },
+    );
+    if (prResult.code === 0) {
+      const prUrl = prResult.stdout.trim();
+      return { prUrl, branchPushed: true };
+    }
+
+    // PR creation failed but branch was pushed
+    logTaskError(identifier, `Salvage: draft PR creation failed: ${prResult.stderr}`);
+    return { branchPushed: true };
+  } catch (err) {
+    logTaskError(identifier, `Salvage failed entirely: ${err}`);
+    return {};
   }
 }
 
@@ -330,6 +545,7 @@ async function uploadFailureLogs(
     { path: `${workDir}/.critter-output-exec.json`, name: `${task.identifier}-exec-output.txt` },
     { path: `${workDir}/.critter-err-exec.log`, name: `${task.identifier}-exec-stderr.txt` },
     { path: `${workDir}/critters/plans/${task.identifier}.md`, name: `${task.identifier}-plan.md` },
+    { path: `${workDir}/critters/plans/${task.identifier}.checkpoint.md`, name: `${task.identifier}-checkpoint.md` },
   ];
 
   for (const file of logFiles) {

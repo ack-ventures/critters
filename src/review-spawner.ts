@@ -1,13 +1,17 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { spawnClaude, spawnClaudeSubprocess } from "./claude.js";
 import { cleanupWorkDir, shallowClone } from "./git.js";
+import { triggerHook } from "./hooks.js";
 import { commentOnIssue, updateIssueStatus, uploadFileToIssue } from "./linear.js";
-import { log, logTask, logTaskError } from "./logger.js";
+import { logTask, logTaskError } from "./logger.js";
+import { recordMetric } from "./metrics.js";
+import { loadRepoConfig } from "./repo-config.js";
 import { buildReviewPrompt, getReviewAllowedTools } from "./review-prompt.js";
 import {
   formatReviewFailure,
   formatReviewMerged,
   formatReviewNeedsChanges,
+  formatReviewStarted,
   sendSlackNotification,
 } from "./slack.js";
 import type { Config, ReviewResult, ReviewTask, TeamStatuses } from "./types.js";
@@ -83,6 +87,14 @@ export class ReviewSpawner {
     this.teamStatuses = teamStatuses;
   }
 
+  getActiveCount(): number {
+    return this.running;
+  }
+
+  getQueueSize(): number {
+    return this.queue.length;
+  }
+
   async dispatch(task: ReviewTask): Promise<ReviewResult> {
     return new Promise((resolve) => {
       this.queue.push({ task, resolve });
@@ -104,6 +116,14 @@ export class ReviewSpawner {
       if (!item) break;
       this.running++;
       logTask(item.task.identifier, `Review started (queue: ${this.queue.length}, running: ${this.running})`);
+      recordMetric({
+        timestamp: "",
+        event: "review_started",
+        issueId: item.task.issueId,
+        identifier: item.task.identifier,
+        repoUrl: item.task.repoUrl,
+        prUrl: item.task.prUrl,
+      });
       this.runReview(item.task).then((result) => {
         this.running--;
         logTask(item.task.identifier, `Review finished (queue: ${this.queue.length}, running: ${this.running})`);
@@ -147,11 +167,21 @@ export class ReviewSpawner {
       const state = prState.stdout.trim();
       if (state === "MERGED") {
         logTask(task.identifier, "PR already merged, moving to Done");
-        const doneId = this.teamStatuses[task.teamId]?.["Done"];
+        const doneId = this.teamStatuses[task.teamId]?.Done;
         if (doneId) {
           await updateIssueStatus(task.issueId, doneId);
         }
         await commentOnIssue(task.issueId, "PR was already merged.");
+        recordMetric({
+          timestamp: "",
+          event: "review_completed",
+          issueId: task.issueId,
+          identifier: task.identifier,
+          repoUrl: task.repoUrl,
+          prUrl: task.prUrl,
+          duration: Date.now() - taskStart,
+          outcome: "merged",
+        });
         return { success: true, merged: true };
       }
       if (state === "CLOSED") {
@@ -185,6 +215,25 @@ export class ReviewSpawner {
         throw new Error(`Failed to checkout PR branch: ${checkoutResult.stderr}`);
       }
 
+      const repoConfig = loadRepoConfig(workDir);
+      if (repoConfig) {
+        logTask(task.identifier, "Found per-repo .critters.yaml");
+      }
+
+      await sendSlackNotification(
+        this.config.slackWebhookUrl,
+        formatReviewStarted(task.identifier, task.title, task.prUrl),
+      );
+
+      triggerHook(this.config, "onReviewStarted", {
+        CRITTER_ISSUE_ID: task.issueId,
+        CRITTER_IDENTIFIER: task.identifier,
+        CRITTER_TITLE: task.title,
+        CRITTER_REPO_URL: task.repoUrl,
+        CRITTER_BRANCH: task.prBranch,
+        CRITTER_PR_URL: task.prUrl,
+      }, task.identifier);
+
       // 5. Spawn Claude review phase
       logTask(task.identifier, "Starting review phase");
       await commentOnIssue(task.issueId, "Reviewing PR...");
@@ -194,7 +243,7 @@ export class ReviewSpawner {
 
       const reviewResult = this.config.noTmux
         ? await spawnClaudeSubprocess(
-            buildReviewPrompt(task),
+            buildReviewPrompt(task, repoConfig),
             allowedTools,
             workDir,
             this.config.maxReviewTurns,
@@ -204,7 +253,7 @@ export class ReviewSpawner {
             abortController.signal,
           )
         : await spawnClaude(
-            buildReviewPrompt(task),
+            buildReviewPrompt(task, repoConfig),
             allowedTools,
             workDir,
             this.config.maxReviewTurns,
@@ -249,7 +298,7 @@ export class ReviewSpawner {
 
       if (outcome.decision === "merged") {
         // Move to Done
-        const doneId = this.teamStatuses[task.teamId]?.["Done"];
+        const doneId = this.teamStatuses[task.teamId]?.Done;
         if (doneId) {
           await updateIssueStatus(task.issueId, doneId);
         }
@@ -259,6 +308,29 @@ export class ReviewSpawner {
           formatReviewMerged(task.identifier, task.title, task.prUrl, totalDuration),
         );
         logTask(task.identifier, `Review complete — PR merged`);
+        recordMetric({
+          timestamp: "",
+          event: "review_completed",
+          issueId: task.issueId,
+          identifier: task.identifier,
+          repoUrl: task.repoUrl,
+          prUrl: task.prUrl,
+          duration: Date.now() - taskStart,
+          outcome: "merged",
+          numTurns: reviewResult.numTurns,
+          inputTokens: reviewResult.inputTokens,
+          outputTokens: reviewResult.outputTokens,
+          cacheReadTokens: reviewResult.cacheReadTokens,
+          costUsd: reviewResult.costUsd,
+        });
+        triggerHook(this.config, "onMerged", {
+          CRITTER_ISSUE_ID: task.issueId,
+          CRITTER_IDENTIFIER: task.identifier,
+          CRITTER_TITLE: task.title,
+          CRITTER_REPO_URL: task.repoUrl,
+          CRITTER_BRANCH: task.prBranch,
+          CRITTER_PR_URL: task.prUrl,
+        }, task.identifier);
         return { success: true, merged: true };
       }
 
@@ -271,9 +343,32 @@ export class ReviewSpawner {
         await commentOnIssue(task.issueId, `Review critter requested changes: ${outcome.reason}`);
         await sendSlackNotification(
           this.config.slackWebhookUrl,
-          formatReviewNeedsChanges(task.identifier, task.title, outcome.reason!, totalDuration),
+          formatReviewNeedsChanges(task.identifier, task.title, outcome.reason ?? "No reason provided", totalDuration),
         );
         logTask(task.identifier, `Review complete — needs changes: ${outcome.reason}`);
+        recordMetric({
+          timestamp: "",
+          event: "review_completed",
+          issueId: task.issueId,
+          identifier: task.identifier,
+          repoUrl: task.repoUrl,
+          prUrl: task.prUrl,
+          duration: Date.now() - taskStart,
+          outcome: "needs_changes",
+          numTurns: reviewResult.numTurns,
+          inputTokens: reviewResult.inputTokens,
+          outputTokens: reviewResult.outputTokens,
+          cacheReadTokens: reviewResult.cacheReadTokens,
+          costUsd: reviewResult.costUsd,
+        });
+        triggerHook(this.config, "onNeedsChanges", {
+          CRITTER_ISSUE_ID: task.issueId,
+          CRITTER_IDENTIFIER: task.identifier,
+          CRITTER_TITLE: task.title,
+          CRITTER_REPO_URL: task.repoUrl,
+          CRITTER_BRANCH: task.prBranch,
+          CRITTER_PR_URL: task.prUrl,
+        }, task.identifier);
         return { success: true, merged: false };
       }
 
@@ -316,6 +411,16 @@ export class ReviewSpawner {
         formatReviewFailure(task.identifier, task.title, error, totalDuration),
       );
 
+      recordMetric({
+        timestamp: "",
+        event: "review_failed",
+        issueId: task.issueId,
+        identifier: task.identifier,
+        repoUrl: task.repoUrl,
+        prUrl: task.prUrl,
+        duration: Date.now() - taskStart,
+        error,
+      });
       return { success: false, error };
     } finally {
       clearTimeout(timeout);
