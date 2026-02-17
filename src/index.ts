@@ -3,13 +3,60 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { loadConfig } from "./config.js";
+import { runInit } from "./init.js";
 import { ensureCritterFailedStatus, ensureLabel, initLinear, loadTeamStatuses } from "./linear.js";
 import { initFileLogging, log, logError } from "./logger.js";
 import { checkPrerequisites } from "./prerequisites.js";
 import { Spawner } from "./spawner.js";
 import { checkForUpdate } from "./updater.js";
 import { runCommand } from "./utils.js";
+import { VERSION } from "./version.js";
 import { Watcher } from "./watcher.js";
+
+// ── Subcommand routing ──────────────────────────────────────────────────────
+
+const subcommand = Bun.argv[2];
+
+if (subcommand === "version") {
+  console.log(`Critters v${VERSION}`);
+  process.exit(0);
+}
+
+if (subcommand === "help") {
+  console.log(`Critters v${VERSION}
+
+Usage: critters [command] [flags]
+
+Commands:
+  (none)      Start the daemon
+  version     Show version
+  update      Check for and apply updates
+  init        Interactive config setup (~/.critters/)
+  help        Show this help
+
+Flags:
+  --no-tmux       Run without tmux (log to file instead)
+  --skip-update   Skip auto-update check on startup
+  --config PATH   Use a custom config file`);
+  process.exit(0);
+}
+
+if (subcommand === "update") {
+  await checkForUpdate(VERSION, { force: true });
+  process.exit(0);
+}
+
+if (subcommand === "init") {
+  await runInit();
+  process.exit(0);
+}
+
+if (subcommand && !subcommand.startsWith("--")) {
+  console.error(`Unknown command: ${subcommand}\nRun 'critters help' for usage.`);
+  process.exit(1);
+}
+
+// ── Daemon ──────────────────────────────────────────────────────────────────
 
 async function main() {
   // Parse CLI flags early so file logging captures all output
@@ -41,17 +88,10 @@ async function main() {
     }
   }
 
-  let version = "unknown";
-  try {
-    const pkg = await Bun.file(new URL("../package.json", import.meta.url)).json();
-    version = pkg.version;
-  } catch {
-    // In compiled binary, import.meta.url won't resolve to the source tree
-  }
-  log(`Critters v${version} starting...`);
+  log(`Critters v${VERSION} starting...`);
 
-  if (!skipUpdate && version !== "unknown") {
-    await checkForUpdate(version);
+  if (!skipUpdate && VERSION !== "dev") {
+    await checkForUpdate(VERSION);
   }
 
   // Verify required CLI tools are available

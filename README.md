@@ -4,7 +4,23 @@ Critters is a TypeScript daemon that polls [Linear](https://linear.app) for issu
 
 Inspired by [Stripe's Minions](https://stripe.dev/blog/minions-stripes-one-shot-end-to-end-coding-agents).
 
-## Quick start
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ack-ventures/critters/main/install.sh | bash
+```
+
+This downloads the latest binary, installs it to your PATH, and walks you through initial setup.
+
+### Commands
+
+- `critters` — start the daemon
+- `critters version` — show version
+- `critters update` — check for and apply updates
+- `critters init` — (re-)configure `~/.critters/`
+- `critters help` — show usage
+
+## Development quick start
 
 **Prerequisites:** [Bun](https://bun.sh), [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), [`gh` CLI](https://cli.github.com) (authenticated), `tmux`, `jq`
 
