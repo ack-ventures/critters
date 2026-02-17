@@ -14,6 +14,8 @@ triggerLabel: "Critter"
 maxPlanningTurns: 50
 maxExecutionTurns: 75
 tmuxSession: critters
+planningModel: opus
+executionModel: opus
 
 defaultAllowedTools:
   - "Read"
@@ -43,11 +45,11 @@ teamRepos:
   # "team-uuid-1": "git@github.com:your-org/default-repo.git"
 
 # Review critter settings
-# reviewTriggerLabel: "Critter Review"
-# reviewModel: opus
-# reviewConcurrency: 2
-# reviewTimeoutMinutes: 15
-# maxReviewTurns: 30
+reviewTriggerLabel: "Critter Review"
+reviewModel: opus
+reviewConcurrency: 2
+reviewTimeoutMinutes: 15
+maxReviewTurns: 30
 `;
 
 export async function runInit(): Promise<void> {
