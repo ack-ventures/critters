@@ -6,10 +6,10 @@ import { runCommand, sleep } from "./utils.js";
 
 // Rotating colors for critter panes — each critter gets a distinct look
 const PANE_COLORS = [
-  { bg: "colour17",  fg: "colour39",  label: "\x1b[1;36m" },  // deep blue bg, cyan text
-  { bg: "colour52",  fg: "colour209", label: "\x1b[1;33m" },  // dark red bg, orange text
-  { bg: "colour22",  fg: "colour119", label: "\x1b[1;32m" },  // dark green bg, lime text
-  { bg: "colour53",  fg: "colour177", label: "\x1b[1;35m" },  // purple bg, magenta text
+  { bg: "colour17",  fg: "colour39",  label: "\x1b[1;36m", toolColor: "\x1b[36m"  },  // cyan
+  { bg: "colour52",  fg: "colour209", label: "\x1b[1;33m", toolColor: "\x1b[33m"  },  // yellow
+  { bg: "colour22",  fg: "colour119", label: "\x1b[1;32m", toolColor: "\x1b[32m"  },  // green
+  { bg: "colour53",  fg: "colour177", label: "\x1b[1;35m", toolColor: "\x1b[35m"  },  // magenta
 ];
 let colorIndex = 0;
 
@@ -57,7 +57,7 @@ claude -p "$(cat ${shellEscape(promptFile)})" \\
   --output-format stream-json \\
   2>${shellEscape(errLog)} | \\
   tee ${shellEscape(jsonLogFile)} | \\
-  jq --unbuffered -cr -f ${shellEscape(filterFile)}
+  jq --unbuffered -cr --arg tool_color '${color.toolColor}' -f ${shellEscape(filterFile)}
 EXIT_CODE=\${PIPESTATUS[0]}
 if [ $EXIT_CODE -ne 0 ]; then
   echo ""
