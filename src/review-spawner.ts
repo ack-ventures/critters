@@ -2,7 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { spawnClaude, spawnClaudeSubprocess } from "./claude.js";
 import { cleanupWorkDir, shallowClone } from "./git.js";
 import { commentOnIssue, updateIssueStatus, uploadFileToIssue } from "./linear.js";
-import { log, logTask, logTaskError } from "./logger.js";
+import { logTask, logTaskError } from "./logger.js";
 import { recordMetric } from "./metrics.js";
 import { buildReviewPrompt, getReviewAllowedTools } from "./review-prompt.js";
 import {
@@ -85,6 +85,14 @@ export class ReviewSpawner {
     this.teamStatuses = teamStatuses;
   }
 
+  getActiveCount(): number {
+    return this.running;
+  }
+
+  getQueueSize(): number {
+    return this.queue.length;
+  }
+
   async dispatch(task: ReviewTask): Promise<ReviewResult> {
     return new Promise((resolve) => {
       this.queue.push({ task, resolve });
@@ -157,7 +165,7 @@ export class ReviewSpawner {
       const state = prState.stdout.trim();
       if (state === "MERGED") {
         logTask(task.identifier, "PR already merged, moving to Done");
-        const doneId = this.teamStatuses[task.teamId]?.["Done"];
+        const doneId = this.teamStatuses[task.teamId]?.Done;
         if (doneId) {
           await updateIssueStatus(task.issueId, doneId);
         }
@@ -274,7 +282,7 @@ export class ReviewSpawner {
 
       if (outcome.decision === "merged") {
         // Move to Done
-        const doneId = this.teamStatuses[task.teamId]?.["Done"];
+        const doneId = this.teamStatuses[task.teamId]?.Done;
         if (doneId) {
           await updateIssueStatus(task.issueId, doneId);
         }
@@ -311,7 +319,7 @@ export class ReviewSpawner {
         await commentOnIssue(task.issueId, `Review critter requested changes: ${outcome.reason}`);
         await sendSlackNotification(
           this.config.slackWebhookUrl,
-          formatReviewNeedsChanges(task.identifier, task.title, outcome.reason!, totalDuration),
+          formatReviewNeedsChanges(task.identifier, task.title, outcome.reason ?? "No reason provided", totalDuration),
         );
         logTask(task.identifier, `Review complete — needs changes: ${outcome.reason}`);
         recordMetric({

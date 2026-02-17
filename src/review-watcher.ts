@@ -24,10 +24,12 @@ export class ReviewWatcher {
   private spawner: ReviewSpawner;
   private activeIssueIds = new Set<string>();
   private stopped = false;
+  private onPoll?: () => void;
 
-  constructor(config: Config, spawner: ReviewSpawner) {
+  constructor(config: Config, spawner: ReviewSpawner, onPoll?: () => void) {
     this.config = config;
     this.spawner = spawner;
+    this.onPoll = onPoll;
   }
 
   async start(): Promise<void> {
@@ -37,6 +39,7 @@ export class ReviewWatcher {
       try {
         const issuesFound = await this.poll();
         recordMetric({ timestamp: "", event: "poll_completed", outcome: `${issuesFound} review issues found` });
+        this.onPoll?.();
       } catch (err) {
         logError(`Review poll failed: ${err}`);
       }

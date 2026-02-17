@@ -64,6 +64,14 @@ export class Spawner {
     this.cleanupInterval.unref();
   }
 
+  getActiveCount(): number {
+    return this.running;
+  }
+
+  getQueueSize(): number {
+    return this.queue.length;
+  }
+
   async dispatch(task: CritterTask): Promise<CritterResult> {
     return new Promise((resolve) => {
       this.queue.push({ task, resolve });

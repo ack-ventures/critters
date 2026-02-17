@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { loadConfig } from "./config.js";
+import { startHealthServer } from "./health.js";
 import { runInit } from "./init.js";
 import { ensureCritterFailedStatus, ensureHumanReviewStatus, ensureLabel, initLinear, loadTeamStatuses } from "./linear.js";
 import { initFileLogging, log, logError } from "./logger.js";
@@ -148,18 +149,34 @@ async function main() {
   spawner.startPeriodicCleanup();
   log("Cleaned up stale work directories");
 
-  // Create watchers
-  const watcher = new Watcher(config, spawner);
-
-  // Create review spawner + watcher
+  // Create review spawner
   const reviewSpawner = new ReviewSpawner(config, teamStatuses);
-  const reviewWatcher = new ReviewWatcher(config, reviewSpawner);
+
+  // Start health server
+  let healthServer: { stop: () => void } | null = null;
+  let lastPollAt: string | null = null;
+  if (config.healthPort !== 0) {
+    healthServer = startHealthServer(config.healthPort, () => ({
+      activeCritters: spawner.getActiveCount(),
+      queuedCritters: spawner.getQueueSize(),
+      activeReviews: reviewSpawner.getActiveCount(),
+      queuedReviews: reviewSpawner.getQueueSize(),
+      lastPollAt,
+    }));
+  }
+
+  const updatePollTime = () => { lastPollAt = new Date().toISOString(); };
+
+  // Create watchers
+  const watcher = new Watcher(config, spawner, updatePollTime);
+  const reviewWatcher = new ReviewWatcher(config, reviewSpawner, updatePollTime);
 
   log(`Review config: concurrency=${config.reviewConcurrency}, timeout=${config.reviewTimeoutMinutes}min, model=${config.reviewModel}`);
 
   // Signal handlers
   const shutdown = () => {
     log("Shutting down...");
+    healthServer?.stop();
     watcher.stop();
     reviewWatcher.stop();
     // Give running tasks a moment to clean up
