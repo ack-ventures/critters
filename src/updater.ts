@@ -14,6 +14,11 @@ function compareSemver(a: string, b: string): number {
 }
 
 export async function checkForUpdate(currentVersion: string): Promise<void> {
+  // Only auto-update when running as a compiled binary — when running via
+  // `bun run src/index.ts`, process.execPath points to the bun binary and
+  // we must not overwrite it.
+  if (process.execPath.includes("bun")) return;
+
   const tempPath = `${process.execPath}.update`;
 
   try {
@@ -48,11 +53,11 @@ export async function checkForUpdate(currentVersion: string): Promise<void> {
 
     const expectedName = `critters-${process.platform}-${process.arch}`;
     const asset = assets.find(
-      (a: { name: string }) => a.name === expectedName,
-    ) as { name: string; browser_download_url: string } | undefined;
+      (a: { name?: string }) => a.name === expectedName,
+    ) as { name: string; browser_download_url?: string } | undefined;
 
-    if (!asset) {
-      logError(`Update: no binary asset found for ${process.platform}-${process.arch}`);
+    if (!asset || typeof asset.browser_download_url !== "string") {
+      logError(`Update: no valid binary asset found for ${process.platform}-${process.arch}`);
       return;
     }
 
