@@ -37,12 +37,17 @@ Commands:
   version     Show version
   update      Check for and apply updates
   init        Interactive config setup (~/.critters/)
+  logs        Show logs for a critter run
   help        Show this help
 
 Flags:
   --no-tmux       Run without tmux (log to file instead)
   --skip-update   Skip auto-update check on startup
-  --config PATH   Use a custom config file`);
+  --config PATH   Use a custom config file
+
+Logs flags:
+  --phase planning|execution|review  Show specific phase (default: most recent)
+  --follow, -f                       Tail mode (stream new output)`);
   process.exit(0);
 }
 
@@ -53,6 +58,12 @@ if (subcommand === "update") {
 
 if (subcommand === "init") {
   await runInit();
+  process.exit(0);
+}
+
+if (subcommand === "logs") {
+  const { runLogs } = await import("./logs.js");
+  await runLogs(Bun.argv.slice(3));
   process.exit(0);
 }
 

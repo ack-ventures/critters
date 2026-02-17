@@ -135,6 +135,27 @@ export function loadConfig(configPath?: string): Config {
   return config;
 }
 
+export function loadWorkDir(configPath?: string): string {
+  let resolved: string | undefined;
+  try {
+    resolved = resolveConfigPath(configPath);
+  } catch {
+    // No config file found — use default
+    return "/tmp/critters-work";
+  }
+
+  const raw = readFileSync(resolved, "utf-8");
+  const yaml = parseYaml(raw) as Record<string, unknown>;
+  const workDir = (yaml.workDir as string) ?? "/tmp/critters-work";
+  validateWorkDir(workDir);
+
+  // Resolve symlinks if the directory exists (e.g. /tmp → /private/tmp on macOS)
+  if (existsSync(workDir)) {
+    return realpathSync(workDir);
+  }
+  return workDir;
+}
+
 const GIT_URL_RE = /^(git@[\w.-]+:[\w./-]+\.git|https?:\/\/[\w.-]+\/[\w./-]+\.git)$/;
 
 function validateRepoUrls(config: Config): void {
