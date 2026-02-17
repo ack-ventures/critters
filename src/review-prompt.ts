@@ -1,4 +1,4 @@
-import { stripRepoLine } from "./prompt.js";
+import { readCustomPrompt, stripRepoLine } from "./prompt.js";
 import type { ReviewTask } from "./types.js";
 
 export function getReviewAllowedTools(): string[] {
@@ -11,7 +11,7 @@ export function getReviewAllowedTools(): string[] {
 export function buildReviewPrompt(task: ReviewTask): string {
   const cleanedDescription = stripRepoLine(task.description);
 
-  return `You are reviewing a pull request for issue ${task.identifier}: ${task.title}
+  let prompt = `You are reviewing a pull request for issue ${task.identifier}: ${task.title}
 
 ## PR
 - URL: ${task.prUrl}
@@ -57,4 +57,11 @@ Compare the PR against the original task description above. Check:
 - Do NOT modify any files or create commits — you are a reviewer only
 - Be pragmatic: minor style nits or trivial improvements should NOT block a merge. Only request changes for genuine correctness, security, or completeness issues.
 - If the PR is mostly good with a minor issue, approve it with a note rather than requesting changes.`;
+
+  const custom = readCustomPrompt("review-prompt.md");
+  if (custom) {
+    prompt += `\n\n## Additional Context\n${custom}`;
+  }
+
+  return prompt;
 }

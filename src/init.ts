@@ -6,6 +6,21 @@ const CRITTERS_DIR = join(homedir(), ".critters");
 const CONFIG_PATH = join(CRITTERS_DIR, "config.yaml");
 const ENV_PATH = join(CRITTERS_DIR, ".env");
 
+const PROMPT_FILES = [
+  {
+    filename: "planning-prompt.md",
+    comment: "<!-- Optional: Add extra context for the planning phase here. This content will be appended to the planning prompt. -->",
+  },
+  {
+    filename: "execution-prompt.md",
+    comment: "<!-- Optional: Add extra context for the execution phase here. This content will be appended to the execution prompt. -->",
+  },
+  {
+    filename: "review-prompt.md",
+    comment: "<!-- Optional: Add extra context for the review phase here. This content will be appended to the review prompt. -->",
+  },
+];
+
 const DEFAULT_CONFIG = `pollIntervalSeconds: 120
 concurrency: 2
 timeoutMinutes: 30
@@ -70,6 +85,17 @@ export async function runInit(): Promise<void> {
     console.log(`Wrote default config to ${CONFIG_PATH}`);
   } else {
     console.log(`${CONFIG_PATH} already exists, skipping`);
+  }
+
+  // Write prompt placeholder files
+  for (const { filename, comment } of PROMPT_FILES) {
+    const filePath = join(CRITTERS_DIR, filename);
+    if (!existsSync(filePath)) {
+      writeFileSync(filePath, `${comment}\n`);
+      console.log(`Wrote ${filePath}`);
+    } else {
+      console.log(`${filePath} already exists, skipping`);
+    }
   }
 
   // Handle .env
