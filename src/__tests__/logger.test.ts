@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { initFileLogging, rotateFileIfNeeded } from "../logger.js";
+import { initFileLogging, resetFileLogging, rotateFileIfNeeded } from "../logger.js";
 import { createTempDir } from "./helpers.js";
 
 let tempDir: string;
@@ -94,6 +94,10 @@ describe("rotateFileIfNeeded", () => {
 });
 
 describe("initFileLogging", () => {
+  afterEach(() => {
+    resetFileLogging();
+  });
+
   test("triggers rotation on oversized log file", () => {
     const logPath = join(tempDir, "critters.log");
     const content = "x".repeat(1.5 * 1024 * 1024);

@@ -5,6 +5,7 @@ import { join } from "node:path";
 let logFile: string | null = null;
 let storedMaxLogSizeMb = 10;
 let writeCount = 0;
+let rotationTimer: ReturnType<typeof setInterval> | null = null;
 
 export function rotateFileIfNeeded(filePath: string, maxSizeMb: number, maxFiles: number = 3): void {
   try {
@@ -36,14 +37,24 @@ export function initFileLogging(maxLogSizeMb: number = 10, logDir?: string): voi
 
   rotateFileIfNeeded(logFile, maxLogSizeMb, 3);
 
-  const timer = setInterval(() => {
+  if (rotationTimer) clearInterval(rotationTimer);
+  rotationTimer = setInterval(() => {
     try {
       if (logFile) rotateFileIfNeeded(logFile, storedMaxLogSizeMb, 3);
     } catch (_) {
       // never crash the daemon
     }
   }, 3600000);
-  timer.unref();
+  rotationTimer.unref();
+}
+
+export function resetFileLogging(): void {
+  logFile = null;
+  writeCount = 0;
+  if (rotationTimer) {
+    clearInterval(rotationTimer);
+    rotationTimer = null;
+  }
 }
 
 function timestamp(): string {
