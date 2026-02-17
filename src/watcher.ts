@@ -11,10 +11,12 @@ export class Watcher {
   private spawner: Spawner;
   private activeIssueIds = new Set<string>();
   private stopped = false;
+  private onPoll?: () => void;
 
-  constructor(config: Config, spawner: Spawner) {
+  constructor(config: Config, spawner: Spawner, onPoll?: () => void) {
     this.config = config;
     this.spawner = spawner;
+    this.onPoll = onPoll;
   }
 
   async start(): Promise<void> {
@@ -24,6 +26,7 @@ export class Watcher {
       try {
         const issuesFound = await this.poll();
         recordMetric({ timestamp: "", event: "poll_completed", outcome: `${issuesFound} issues found` });
+        this.onPoll?.();
       } catch (err) {
         logError(`Poll failed: ${err}`);
       }
