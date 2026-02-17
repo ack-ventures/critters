@@ -1,3 +1,4 @@
+import { renderDashboard } from "./dashboard.js";
 import { log } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
 import { VERSION } from "./version.js";
@@ -13,6 +14,7 @@ export interface HealthStatus {
 export function startHealthServer(
   port: number,
   getStatus: () => HealthStatus,
+  metricsPath?: string,
 ): { stop: () => void } {
   const startTime = Date.now();
 
@@ -39,6 +41,14 @@ export function startHealthServer(
       if (url.pathname === "/metrics") {
         const entries = getRecentMetrics(100);
         return Response.json(entries);
+      }
+
+      if (url.pathname === "/" || url.pathname === "/dashboard") {
+        const status = getStatus();
+        const html = renderDashboard(metricsPath ?? "", status);
+        return new Response(html, {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
       }
 
       return new Response("Not Found", { status: 404 });

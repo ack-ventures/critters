@@ -3,6 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { loadConfig } from "./config.js";
 import { startHealthServer } from "./health.js";
 import { runInit } from "./init.js";
@@ -156,13 +157,14 @@ async function main() {
   let healthServer: { stop: () => void } | null = null;
   let lastPollAt: string | null = null;
   if (config.healthPort !== 0) {
+    const metricsPath = join(homedir(), ".critters", "metrics.jsonl");
     healthServer = startHealthServer(config.healthPort, () => ({
       activeCritters: spawner.getActiveCount(),
       queuedCritters: spawner.getQueueSize(),
       activeReviews: reviewSpawner.getActiveCount(),
       queuedReviews: reviewSpawner.getQueueSize(),
       lastPollAt,
-    }));
+    }), metricsPath);
   }
 
   const updatePollTime = () => { lastPollAt = new Date().toISOString(); };
