@@ -10,20 +10,30 @@ export async function shallowClone(
   const MAX_RETRIES = 3;
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     logTask(identifier, `Cloning ${repoUrl} → ${targetDir}${attempt > 1 ? ` (attempt ${attempt}/${MAX_RETRIES})` : ""}`);
-    const { code, stderr } = await runCommand(
-      "git",
-      ["clone", "--depth", "1", repoUrl, targetDir],
-      { cwd: process.cwd() },
-    );
-    if (code === 0) return;
-    if (attempt < MAX_RETRIES && stderr.includes("ENOENT")) {
-      logTaskWarn(identifier, `git clone failed (ENOENT), retrying in ${attempt * 2}s...`);
-      // Clean up partial clone if any
-      if (existsSync(targetDir)) rmSync(targetDir, { recursive: true, force: true });
-      await sleep(attempt * 2000);
-      continue;
+    try {
+      const { code, stderr } = await runCommand(
+        "git",
+        ["clone", "--depth", "1", repoUrl, targetDir],
+        { cwd: process.cwd() },
+      );
+      if (code === 0) return;
+      if (attempt < MAX_RETRIES && stderr.includes("ENOENT")) {
+        logTaskWarn(identifier, `git clone failed (ENOENT), retrying in ${attempt * 2}s...`);
+        if (existsSync(targetDir)) rmSync(targetDir, { recursive: true, force: true });
+        await sleep(attempt * 2000);
+        continue;
+      }
+      throw new Error(`git clone failed: ${stderr}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (attempt < MAX_RETRIES && msg.includes("ENOENT")) {
+        logTaskWarn(identifier, `git clone threw (ENOENT), retrying in ${attempt * 2}s...`);
+        if (existsSync(targetDir)) rmSync(targetDir, { recursive: true, force: true });
+        await sleep(attempt * 2000);
+        continue;
+      }
+      throw err;
     }
-    throw new Error(`git clone failed: ${stderr}`);
   }
 }
 
