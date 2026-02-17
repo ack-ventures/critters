@@ -1,19 +1,28 @@
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import { logTask, logTaskError, logTaskWarn } from "./logger.js";
-import { runCommand } from "./utils.js";
+import { runCommand, sleep } from "./utils.js";
 
 export async function shallowClone(
   repoUrl: string,
   targetDir: string,
   identifier: string,
 ): Promise<void> {
-  logTask(identifier, `Cloning ${repoUrl} → ${targetDir}`);
-  const { code, stderr } = await runCommand(
-    "git",
-    ["clone", "--depth", "1", repoUrl, targetDir],
-    { cwd: process.cwd() },
-  );
-  if (code !== 0) {
+  const MAX_RETRIES = 3;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    logTask(identifier, `Cloning ${repoUrl} → ${targetDir}${attempt > 1 ? ` (attempt ${attempt}/${MAX_RETRIES})` : ""}`);
+    const { code, stderr } = await runCommand(
+      "git",
+      ["clone", "--depth", "1", repoUrl, targetDir],
+      { cwd: process.cwd() },
+    );
+    if (code === 0) return;
+    if (attempt < MAX_RETRIES && stderr.includes("ENOENT")) {
+      logTaskWarn(identifier, `git clone failed (ENOENT), retrying in ${attempt * 2}s...`);
+      // Clean up partial clone if any
+      if (existsSync(targetDir)) rmSync(targetDir, { recursive: true, force: true });
+      await sleep(attempt * 2000);
+      continue;
+    }
     throw new Error(`git clone failed: ${stderr}`);
   }
 }
