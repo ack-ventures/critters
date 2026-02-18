@@ -209,6 +209,13 @@ export async function checkForUpdate(
     ) as { name: string; browser_download_url?: string } | undefined;
 
     if (checksumAsset && typeof checksumAsset.browser_download_url === "string") {
+      if (!isAllowedDownloadUrl(checksumAsset.browser_download_url)) {
+        let hostname = "unknown";
+        try { hostname = new URL(checksumAsset.browser_download_url).hostname; } catch {}
+        printError(`Update aborted: checksum URL points to unexpected domain: ${hostname}`);
+        return;
+      }
+
       const checksumResponse = await fetch(checksumAsset.browser_download_url, {
         signal: AbortSignal.timeout(10_000),
       });
