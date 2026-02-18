@@ -196,10 +196,16 @@ async function main() {
   }
 
 
+  // Capture main pane ID so periodic title updates only affect this pane
+  let mainPaneId: string | undefined;
+
   if (!noTmux) {
-    // Set main pane title
-    await runCommand("tmux", ["select-pane", "-t", config.tmuxSession, "-T", `Critters v${VERSION}`]).catch(() => {});
-    // Configure pane border styling
+    const mainPaneResult = await runCommand("tmux", ["display-message", "-t", config.tmuxSession, "-p", "#{pane_id}"]);
+    mainPaneId = mainPaneResult.stdout.trim();
+
+    // Set main pane title (using captured pane ID)
+    await runCommand("tmux", ["select-pane", "-t", mainPaneId, "-T", `Critters v${VERSION}`]).catch(() => {});
+    // Configure pane border styling (session-level settings, not pane-level)
     await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-status", "top"]).catch(() => {});
     await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-format", " #{pane_title} "]).catch(() => {});
     await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-style", "fg=colour240"]).catch(() => {});
@@ -260,7 +266,7 @@ async function main() {
       const uptime = formatDuration(Date.now() - startTime);
       const active = spawner.getActiveCount() + reviewSpawner.getActiveCount();
       const title = `Critters v${VERSION} | up ${uptime} | ${active} active`;
-      runCommand("tmux", ["select-pane", "-t", config.tmuxSession, "-T", title]).catch(() => {});
+      runCommand("tmux", ["select-pane", "-t", mainPaneId!, "-T", title]).catch(() => {});
     }, 60_000);
     titleInterval.unref();
   }
