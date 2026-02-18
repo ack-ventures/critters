@@ -118,7 +118,7 @@ ${cleanedDescription}
    Approval requires zero MUST_FIX items. SHOULD_FIX items alone do not block approval but should be noted.
 
    If this is a re-review (round 2+), you will see a '## Previous Review Items' section in the plan. Verify that all prior MUST_FIX items have been adequately addressed. If a prior MUST_FIX was not addressed, re-list it as MUST_FIX with a note that it is unresolved from a prior round."
-5. If the reviewer output contains REVIEW_STATUS: NEEDS_REVISION, revise your plan:
+5. If the reviewer output contains REVIEW_STATUS: NEEDS_REVISION, revise your plan (use the Write tool to rewrite the entire plan file — Edit is not available):
    a. Add a "## Previous Review Items" section at the end of the plan file
    b. For each MUST_FIX and SHOULD_FIX item from the reviewer, quote the item and explain how you addressed it (or why you chose not to address a SHOULD_FIX). Format:
       > [MUST_FIX] <original item>
