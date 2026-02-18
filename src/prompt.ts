@@ -137,7 +137,8 @@ Your plan should include:
 
 ## Tool Restrictions
 You have a limited set of tools. Only these Bash commands are available: git, ls, cat, npm, node.
-If a command is blocked or requires approval, do NOT retry it — move on and find an alternative approach or skip that step.`;
+If a command is blocked or requires approval, do NOT retry it — move on and find an alternative approach or skip that step.
+Never run \`bun run src/index.ts\`, \`bun start\`, or any command that starts the critters daemon — it will destroy your working directory.`;
 
   const custom = readCustomPrompt("planning-prompt.md");
   if (custom) {
@@ -206,7 +207,10 @@ You have a limited set of tools. Only these Bash commands are available: ${bashT
 Commands like chmod, bunx, perl, python3, curl, and others are NOT available.
 Use "bun x" instead of "bunx" to run package binaries.
 ${getOsGuidance()}
-If a command is blocked or requires approval, do NOT retry it — move on and find an alternative approach or skip that step. Never retry a blocked command more than once.`;
+If a command is blocked or requires approval, do NOT retry it — move on and find an alternative approach or skip that step. Never retry a blocked command more than once.
+
+## Important: Do NOT run the project entry point
+Never run \`bun run src/index.ts\`, \`bun start\`, or any command that starts the critters daemon. This will launch a second daemon instance that cleans up work directories — including yours — and destroy your in-progress work. Use \`bun x tsc --noEmit\` for type-checking instead.`;
 
   const custom = readCustomPrompt("execution-prompt.md");
   if (custom) {
