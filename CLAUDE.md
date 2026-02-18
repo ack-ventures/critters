@@ -114,16 +114,22 @@ Status flow: "In Review" → "Done" (merged) | "Human Review" (needs changes) | 
 | `timeoutMinutes` | 30 | Total timeout per task (both phases) |
 | `workDir` | /tmp/critters-work | Temp clone directory |
 | `triggerLabel` | "Critter" | Label that triggers pickup |
-| `maxTurns` | 50 | Max Claude turns per phase |
+| `maxPlanningTurns` | 50 | Max Claude turns for planning phase |
+| `maxExecutionTurns` | 75 | Max Claude turns for execution phase |
 | `defaultAllowedTools` | see file | Tools critters can use |
 | `repos` | {} | Project ID → repo URL + extra tools |
 | `tmuxSession` | "critters" | Name of the tmux session to use |
 | `teamRepos` | {} | Team ID → fallback repo URL |
+| `planningModel` | "opus" | Claude model for planning phase |
+| `executionModel` | "opus" | Claude model for execution phase |
 | `reviewTriggerLabel` | "Critter Review" | Label that triggers review pickup |
 | `reviewModel` | "opus" | Claude model for reviews |
 | `reviewConcurrency` | 2 | Max parallel review critters |
 | `reviewTimeoutMinutes` | 15 | Timeout per review (increase for slow CI) |
 | `maxReviewTurns` | 30 | Max Claude turns per review |
+| `healthPort` | 3847 | HTTP server port for dashboard and health checks (0 to disable) |
+| `maxLogSizeMb` | 10 | Max log file size in MB before rotation (with `--no-tmux`) |
+| `hooks` | {} | Shell commands run on lifecycle events |
 
 ### Allowed tools
 
@@ -158,6 +164,23 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 | `src/review-spawner.ts` | Review queue, lifecycle, outcome parsing |
 | `src/review-watcher.ts` | Review poll loop, PR URL extraction |
 | `src/slack.ts` | Webhook notifications |
+| `src/dashboard.ts` | Web dashboard HTML rendering |
+| `src/health.ts` | HTTP health/dashboard/metrics server |
+| `src/metrics.ts` | Metrics recording and retrieval (JSONL) |
+| `src/status.ts` | `critters status` CLI command |
+| `src/hooks.ts` | Shell hook execution on lifecycle events |
+| `src/retry.ts` | Retry logic with exponential backoff |
+| `src/cli-retry.ts` | `critters retry` CLI command |
+| `src/logs.ts` | `critters logs` CLI command |
+| `src/init-repo.ts` | `critters init-repo` CLI command |
+| `src/repo-config.ts` | Per-repo `.critters.yaml` loader |
+| `src/types.ts` | Shared TypeScript type definitions |
+| `src/utils.ts` | Shared utility functions |
+| `src/version.ts` | Version constant |
+| `src/updater.ts` | Self-update check logic |
+| `src/prerequisites.ts` | Startup prerequisite checks |
+| `src/init.ts` | `critters init` CLI command |
+| `src/jq-filter.ts` | jq filter string for stream-json display |
 | `critters/plans/<ID>.md` | Planning phase output — critters write their implementation plans here, committed to the repo |
 
 ## Environment variables
