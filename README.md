@@ -18,7 +18,18 @@ This downloads the latest binary, installs it to your PATH, and walks you throug
 - `critters version` — show version
 - `critters update` — check for and apply updates
 - `critters init` — (re-)configure `~/.critters/`
+- `critters status` — show daemon status (active/queued critters, today's stats)
+- `critters retry <ID>` — retry a failed critter (reset to Todo)
+- `critters logs <ID>` — show logs for a critter run
+- `critters init-repo` — scaffold `.critters.yaml` in the current repo
 - `critters help` — show usage
+
+### Flags
+
+- `--dry-run` — poll once, show what would happen, and exit
+- `--no-tmux` — run without tmux (log to file instead)
+- `--skip-update` — skip auto-update check on startup
+- `--config PATH` — use a custom config file
 
 ## Development quick start
 
@@ -60,10 +71,17 @@ Settings live in `critters.config.yaml`:
 | `timeoutMinutes` | 30 | Total timeout per task (both phases) |
 | `workDir` | /tmp/critters-work | Temp clone directory |
 | `triggerLabel` | "Critter" | Label that triggers pickup |
-| `maxTurns` | 50 | Max Claude turns per phase |
+| `maxPlanningTurns` | 50 | Max Claude turns for planning phase |
+| `maxExecutionTurns` | 75 | Max Claude turns for execution phase |
 | `defaultAllowedTools` | see file | Tools critters can use |
 | `repos` | {} | Project ID &rarr; repo URL + extra tools |
 | `teamRepos` | {} | Team ID &rarr; fallback repo URL |
+| `tmuxSession` | "critters" | Name of the tmux session to use |
+| `planningModel` | "opus" | Claude model for planning phase |
+| `executionModel` | "opus" | Claude model for execution phase |
+| `healthPort` | 3847 | HTTP server port for dashboard and health checks (0 to disable) |
+| `maxLogSizeMb` | 10 | Max log file size in MB before rotation (with `--no-tmux`) |
+| `hooks` | {} | Shell commands run on lifecycle events (see below) |
 
 Per-repo tool overrides merge with the defaults:
 
@@ -75,6 +93,32 @@ repos:
       - "Bash(python:*)"
       - "Bash(pip:*)"
 ```
+
+### Hooks
+
+Shell commands that run on lifecycle events. Environment variables available: `CRITTER_ISSUE_ID`, `CRITTER_IDENTIFIER`, `CRITTER_TITLE`, `CRITTER_REPO_URL`, `CRITTER_BRANCH`, `CRITTER_PR_URL` (when applicable).
+
+```yaml
+hooks:
+  onTaskStarted: "echo 'Task started'"
+  onPrCreated: "curl -X POST https://example.com/notify"
+  onMerged: "./scripts/post-merge.sh"
+  onTaskFailed: ""
+  onReviewStarted: ""
+  onNeedsChanges: ""
+```
+
+## Web Dashboard
+
+The daemon runs an HTTP server on port 3847 (configurable via `healthPort`, set to 0 to disable).
+
+| Route | Description |
+|---|---|
+| `/` or `/dashboard` | Live dashboard with task stats, charts, and recent activity |
+| `/healthz` | JSON health check (uptime, version, active/queued counts, metrics summary) |
+| `/metrics` | JSON array of recent metric events |
+
+`critters status` queries the health endpoint to display a quick summary in the terminal.
 
 ## Creating tickets
 
