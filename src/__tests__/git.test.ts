@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -212,12 +212,19 @@ describe("cleanupWorkDir", () => {
 });
 
 describe("cleanupStaleWorkDirs", () => {
+	function setAge(dirPath: string, minutesAgo: number): void {
+		const time = new Date(Date.now() - minutesAgo * 60_000);
+		utimesSync(dirPath, time, time);
+	}
+
 	test("removes inactive dirs but keeps active ones", () => {
 		const { path: baseDir } = createTempDir();
 		tempDirs.push(baseDir);
 		mkdirSync(join(baseDir, "a"));
 		mkdirSync(join(baseDir, "b"));
 		mkdirSync(join(baseDir, "c"));
+		setAge(join(baseDir, "a"), 120);
+		setAge(join(baseDir, "c"), 120);
 		const activeSet = new Set([join(baseDir, "b")]);
 		cleanupStaleWorkDirs(baseDir, activeSet);
 		expect(existsSync(join(baseDir, "a"))).toBe(false);
@@ -234,9 +241,48 @@ describe("cleanupStaleWorkDirs", () => {
 		tempDirs.push(baseDir);
 		mkdirSync(join(baseDir, "x"));
 		mkdirSync(join(baseDir, "y"));
+		setAge(join(baseDir, "x"), 120);
+		setAge(join(baseDir, "y"), 120);
 		cleanupStaleWorkDirs(baseDir);
 		expect(existsSync(join(baseDir, "x"))).toBe(false);
 		expect(existsSync(join(baseDir, "y"))).toBe(false);
+	});
+
+	test("preserves recent directories even if not in active set", () => {
+		const { path: baseDir } = createTempDir();
+		tempDirs.push(baseDir);
+		mkdirSync(join(baseDir, "recent-a"));
+		mkdirSync(join(baseDir, "recent-b"));
+		cleanupStaleWorkDirs(baseDir);
+		expect(existsSync(join(baseDir, "recent-a"))).toBe(true);
+		expect(existsSync(join(baseDir, "recent-b"))).toBe(true);
+	});
+
+	test("deletes old directories but preserves recent ones", () => {
+		const { path: baseDir } = createTempDir();
+		tempDirs.push(baseDir);
+		mkdirSync(join(baseDir, "old"));
+		mkdirSync(join(baseDir, "recent"));
+		setAge(join(baseDir, "old"), 120);
+		cleanupStaleWorkDirs(baseDir);
+		expect(existsSync(join(baseDir, "old"))).toBe(false);
+		expect(existsSync(join(baseDir, "recent"))).toBe(true);
+	});
+
+	test("respects custom maxAgeMinutes", () => {
+		const { path: baseDir1 } = createTempDir();
+		tempDirs.push(baseDir1);
+		mkdirSync(join(baseDir1, "dir"));
+		setAge(join(baseDir1, "dir"), 10);
+		cleanupStaleWorkDirs(baseDir1, undefined, 5);
+		expect(existsSync(join(baseDir1, "dir"))).toBe(false);
+
+		const { path: baseDir2 } = createTempDir();
+		tempDirs.push(baseDir2);
+		mkdirSync(join(baseDir2, "dir"));
+		setAge(join(baseDir2, "dir"), 10);
+		cleanupStaleWorkDirs(baseDir2, undefined, 15);
+		expect(existsSync(join(baseDir2, "dir"))).toBe(true);
 	});
 });
 
