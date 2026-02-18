@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isAllowedDownloadUrl, isAllowedApiUrl } from "../updater.js";
+import { isAllowedApiUrl, isAllowedDownloadUrl } from "../updater.js";
 
 describe("src/updater.ts", () => {
   describe("isAllowedDownloadUrl", () => {
