@@ -14,6 +14,30 @@ export function compareSemver(a: string, b: string): number {
   return 0;
 }
 
+export function isAllowedDownloadUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return false;
+    const host = parsed.hostname;
+    return (
+      host === "github.com" ||
+      host === "objects.githubusercontent.com" ||
+      host.endsWith(".githubusercontent.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function isAllowedApiUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && parsed.hostname === "api.github.com";
+  } catch {
+    return false;
+  }
+}
+
 async function downloadWithProgress(
   response: Response,
   showProgress: boolean,
@@ -91,6 +115,11 @@ export async function checkForUpdate(
     return;
   }
 
+  if (!isAllowedApiUrl(RELEASES_URL)) {
+    printError(`Update aborted: releases URL points to unexpected domain`);
+    return;
+  }
+
   const tempPath = `${process.execPath}.update`;
 
   try {
@@ -131,6 +160,13 @@ export async function checkForUpdate(
 
     if (!asset || typeof asset.browser_download_url !== "string") {
       printError(`Update: no valid binary asset found for ${process.platform}-${process.arch}`);
+      return;
+    }
+
+    if (!isAllowedDownloadUrl(asset.browser_download_url)) {
+      let hostname = "unknown";
+      try { hostname = new URL(asset.browser_download_url).hostname; } catch {}
+      printError(`Update aborted: download URL points to unexpected domain: ${hostname}`);
       return;
     }
 
