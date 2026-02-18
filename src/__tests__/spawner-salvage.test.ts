@@ -96,7 +96,7 @@ describe("salvagePartialProgress", () => {
 
 	test("returns {} when workDir does not exist", async () => {
 		const result = await salvagePartialProgress(
-			"/tmp/critters-nonexistent-dir-" + Date.now(),
+			`/tmp/critters-nonexistent-dir-${Date.now()}`,
 			"critter/TEST-1-missing",
 			"TEST-1",
 			"Missing dir",

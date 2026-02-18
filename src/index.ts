@@ -15,6 +15,7 @@ import { checkPrerequisites } from "./prerequisites.js";
 import { ReviewSpawner } from "./review-spawner.js";
 import { ReviewWatcher } from "./review-watcher.js";
 import { Spawner } from "./spawner.js";
+import { runStatus } from "./status.js";
 import { checkForUpdate } from "./updater.js";
 import { runCommand } from "./utils.js";
 import { VERSION } from "./version.js";
@@ -37,6 +38,7 @@ Usage: critters [command] [flags]
 Commands:
   (none)      Start the daemon
   retry       Retry a failed critter (reset to Todo)
+  status      Show daemon status
   version     Show version
   update      Check for and apply updates
   init        Interactive config setup (~/.critters/)
@@ -58,6 +60,11 @@ Logs flags:
 
 if (subcommand === "update") {
   await checkForUpdate(VERSION, { force: true });
+  process.exit(0);
+}
+
+if (subcommand === "status") {
+  await runStatus();
   process.exit(0);
 }
 
