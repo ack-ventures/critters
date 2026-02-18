@@ -15,13 +15,8 @@ mock.module("@linear/sdk", () => ({
   },
 }));
 
-// Mock config to avoid needing a real config file + LINEAR_API_KEY
-mock.module("../config.js", () => ({
-  loadConfig: () => ({
-    linearApiKey: "test-key",
-    triggerLabel: "Critter",
-  }),
-}));
+// Ensure LINEAR_API_KEY is set so loadConfig() works (actual SDK is mocked above)
+process.env.LINEAR_API_KEY = process.env.LINEAR_API_KEY || "test-key";
 
 const { runRetry } = await import("../cli-retry.js");
 const linear = await import("../linear.js");
