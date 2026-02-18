@@ -267,7 +267,7 @@ async function main() {
       const active = spawner.getActiveCount() + reviewSpawner.getActiveCount();
       const title = `Critters v${VERSION} | up ${uptime} | ${active} active`;
       runCommand("tmux", ["select-pane", "-t", mainPaneId!, "-T", title]).catch(() => {});
-    }, 60_000);
+    }, 10_000);
     titleInterval.unref();
   }
 
