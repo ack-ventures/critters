@@ -1,4 +1,5 @@
-import { chmodSync, existsSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { log, logError } from "./logger.js";
 
 // Canonical release source — update this if the repo ever moves.
@@ -146,6 +147,9 @@ export async function checkForUpdate(
     const buffer = await downloadWithProgress(downloadResponse, force);
     writeFileSync(tempPath, buffer);
     chmodSync(tempPath, 0o755);
+    const backupPath = `${dirname(process.execPath)}/critters-v${currentVersion}.bak`;
+    copyFileSync(process.execPath, backupPath);
+    print(`Backup saved to ${backupPath}`);
     renameSync(tempPath, process.execPath);
     print(`Update applied (v${currentVersion} → v${latestVersion}). Will take effect on next restart.`);
   } catch (err) {
@@ -156,6 +160,18 @@ export async function checkForUpdate(
     } catch {
       // best-effort cleanup
     }
+
+    // Attempt to restore from backup
+    const backupPath = `${dirname(process.execPath)}/critters-v${currentVersion}.bak`;
+    try {
+      if (existsSync(backupPath)) {
+        copyFileSync(backupPath, process.execPath);
+        printError(`Restored previous binary from ${backupPath}`);
+      }
+    } catch {
+      // best-effort restore — if this fails too, the error message below still prints
+    }
+
     printError(`Update failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
