@@ -19,18 +19,28 @@ const PANE_COLORS = [
 ];
 const activeColors = new Set<number>();
 
+function truncateTitle(title: string, maxLen = 40): string {
+  if (title.length <= maxLen) return title;
+  return `${title.slice(0, maxLen - 1)}…`;
+}
+
+function buildPaneLabel(identifier: string, title: string, phase: string): string {
+  return `${identifier}: ${truncateTitle(title)} / ${phase}`;
+}
+
 export async function spawnClaude(
   prompt: string,
   allowedTools: string[],
   workDir: string,
   maxTurns: number,
   identifier: string,
+  title: string,
   phase: string,
   tmuxSession: string,
   model: string,
   signal?: AbortSignal,
 ): Promise<SpawnResult> {
-  const windowName = `${identifier}-${phase}`;
+  const windowName = buildPaneLabel(identifier, title, phase);
   const promptFile = `${workDir}/.critter-prompt-${phase}`;
   const exitCodeFile = `${workDir}/.critter-exit-code-${phase}`;
   const scriptFile = `${workDir}/.critter-run-${phase}.sh`;
@@ -56,7 +66,7 @@ export async function spawnClaude(
 set -o pipefail
 export PATH="$HOME/.bun/bin:$HOME/.local/bin:${currentPath}"
 unset CLAUDECODE
-echo -e "${color.label}━━━ ${identifier} / ${phase} ━━━${reset}"
+echo -e "${color.label}━━━ ${windowName} ━━━${reset}"
 echo ""
 cd ${shellEscape(workDir)}
 claude -p "$(cat ${shellEscape(promptFile)})" \\
@@ -223,6 +233,7 @@ export async function spawnClaudeSubprocess(
   workDir: string,
   maxTurns: number,
   identifier: string,
+  title: string,
   phase: string,
   model: string,
   signal?: AbortSignal,
@@ -234,7 +245,7 @@ export async function spawnClaudeSubprocess(
   // Write prompt to file (avoids ARG_MAX limits for large prompts)
   writeFileSync(promptFile, prompt);
 
-  logTask(identifier, `Spawning Claude subprocess (${phase})`);
+  logTask(identifier, `Spawning Claude subprocess: ${buildPaneLabel(identifier, title, phase)}`);
 
   const currentPath = process.env.PATH || "/usr/local/bin:/usr/bin:/bin";
   const bashCmd = [
