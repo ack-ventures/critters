@@ -48,6 +48,15 @@ function getDateKey(ts: string): string {
   }
 }
 
+function formatShortDate(dateStr: string): string {
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const parts = dateStr.split("-");
+  if (parts.length < 3) return dateStr;
+  const monthIdx = parseInt(parts[1], 10) - 1;
+  const day = parseInt(parts[2], 10);
+  return `${months[monthIdx] ?? parts[1]} ${day}`;
+}
+
 type DayStat = { date: string; completed: number; failed: number; cost: number };
 
 function computeDailyStats(metrics: MetricEvent[], days: number): DayStat[] {
@@ -144,18 +153,62 @@ export function renderDashboard(metricsPath: string, status: HealthStatus): stri
     .chart-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
     .chart-card h3 { font-size: 0.9rem; margin-bottom: 12px; color: var(--text-dim); }
     .bar-chart { display: flex; align-items: flex-end; gap: 4px; height: 120px; }
-    .bar-group { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; }
+    .bar-group { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; position: relative; }
     .bar-stack { display: flex; flex-direction: column-reverse; width: 100%; align-items: center; height: 100%; }
     .bar {
       width: 80%;
       min-width: 6px;
       border-radius: 2px 2px 0 0;
       transition: height 0.3s;
+      position: relative;
     }
     .bar.success { background: var(--success); }
     .bar.failure { background: var(--failure); border-radius: 0; }
     .bar.cost { background: #e2b93d; }
     .bar-label { font-size: 0.6rem; color: var(--text-dim); margin-top: 4px; white-space: nowrap; }
+    .bar[data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.85);
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .bar:hover { filter: brightness(1.2); }
+    .bar-group[data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.85);
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 20;
+    }
+    .chart-with-axis { display: flex; align-items: stretch; }
+    .y-axis {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding-right: 6px;
+      width: 30px;
+      flex-shrink: 0;
+    }
+    .y-axis .y-label { font-size: 0.65rem; color: var(--text-dim); line-height: 1; }
+    .chart-with-axis .bar-chart { flex: 1; }
 
     .active-section { margin-bottom: 24px; }
     .active-section h2 { font-size: 1.1rem; margin-bottom: 12px; }
@@ -235,38 +288,52 @@ export function renderDashboard(metricsPath: string, status: HealthStatus): stri
   <div class="charts">
     <div class="chart-card">
       <h3>Tasks per Day (Last 14 Days)</h3>
-      <div class="bar-chart">
+      <div class="chart-with-axis">
+        <div class="y-axis">
+          <span class="y-label">${maxTasksPerDay}</span>
+          <span class="y-label">0</span>
+        </div>
+        <div class="bar-chart">
 ${dailyStats
   .map((d) => {
     const successH = Math.round(((d.completed) / maxTasksPerDay) * 100);
     const failH = Math.round(((d.failed) / maxTasksPerDay) * 100);
     const label = d.date.slice(5);
-    return `        <div class="bar-group">
-          <div class="bar-stack">
-            <div class="bar failure" style="height:${failH}%"${failH > 0 ? ` title="${d.failed} failed"` : ""}></div>
-            <div class="bar success" style="height:${successH}%"${successH > 0 ? ` title="${d.completed} completed"` : ""}></div>
-          </div>
-          <div class="bar-label">${escapeHtml(label)}</div>
-        </div>`;
+    const shortDate = formatShortDate(d.date);
+    return `          <div class="bar-group" data-tooltip="${shortDate}: ${d.completed} completed, ${d.failed} failed">
+            <div class="bar-stack">
+              <div class="bar failure" style="height:${failH}%"${failH > 0 ? ` data-tooltip="${d.failed} failed"` : ""}></div>
+              <div class="bar success" style="height:${successH}%"${successH > 0 ? ` data-tooltip="${d.completed} completed"` : ""}></div>
+            </div>
+            <div class="bar-label">${escapeHtml(label)}</div>
+          </div>`;
   })
   .join("\n")}
+        </div>
       </div>
     </div>
     <div class="chart-card">
       <h3>Cost per Day (Last 14 Days)</h3>
-      <div class="bar-chart">
+      <div class="chart-with-axis">
+        <div class="y-axis">
+          <span class="y-label">$${maxCostPerDay.toFixed(2)}</span>
+          <span class="y-label">$0</span>
+        </div>
+        <div class="bar-chart">
 ${dailyStats
   .map((d) => {
     const h = Math.round((d.cost / maxCostPerDay) * 100);
     const label = d.date.slice(5);
-    return `        <div class="bar-group">
-          <div class="bar-stack">
-            <div class="bar cost" style="height:${h}%"${h > 0 ? ` title="$${d.cost.toFixed(2)}"` : ""}></div>
-          </div>
-          <div class="bar-label">${escapeHtml(label)}</div>
-        </div>`;
+    const shortDate = formatShortDate(d.date);
+    return `          <div class="bar-group" data-tooltip="${shortDate}: $${d.cost.toFixed(2)}">
+            <div class="bar-stack">
+              <div class="bar cost" style="height:${h}%"${h > 0 ? ` data-tooltip="$${d.cost.toFixed(2)}"` : ""}></div>
+            </div>
+            <div class="bar-label">${escapeHtml(label)}</div>
+          </div>`;
   })
   .join("\n")}
+        </div>
       </div>
     </div>
     <div class="chart-card">
@@ -274,13 +341,13 @@ ${dailyStats
       <div class="bar-chart" style="justify-content:center;gap:32px;">
         <div class="bar-group" style="max-width:80px;">
           <div class="bar-stack">
-            <div class="bar success" style="height:${totalTasks > 0 ? Math.round((succeeded / totalTasks) * 100) : 0}%" title="${succeeded} succeeded"></div>
+            <div class="bar success" style="height:${totalTasks > 0 ? Math.round((succeeded / totalTasks) * 100) : 0}%" data-tooltip="${succeeded} succeeded"></div>
           </div>
           <div class="bar-label">Pass (${succeeded})</div>
         </div>
         <div class="bar-group" style="max-width:80px;">
           <div class="bar-stack">
-            <div class="bar failure" style="height:${totalTasks > 0 ? Math.round((failed / totalTasks) * 100) : 0}%" title="${failed} failed"></div>
+            <div class="bar failure" style="height:${totalTasks > 0 ? Math.round((failed / totalTasks) * 100) : 0}%" data-tooltip="${failed} failed"></div>
           </div>
           <div class="bar-label">Fail (${failed})</div>
         </div>
