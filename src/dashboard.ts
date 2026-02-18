@@ -85,6 +85,22 @@ function computeDailyStats(metrics: MetricEvent[], days: number): DayStat[] {
   return Array.from(dateMap.values());
 }
 
+function niceMax(value: number, isCost: boolean): number {
+  if (value <= 0) return 1;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(value)));
+  const steps = isCost
+    ? [1, 2, 2.5, 3, 4, 5, 6, 7, 7.5, 8, 10]
+    : [1, 2, 2.5, 5, 10];
+  for (const n of steps) {
+    const candidate = n * magnitude;
+    if (candidate >= value) {
+      if (isCost) return parseFloat(candidate.toFixed(2));
+      return Math.round(candidate);
+    }
+  }
+  return Math.ceil(value / magnitude) * magnitude;
+}
+
 export function renderDashboard(metricsPath: string, status: HealthStatus): string {
   const allMetrics = getRecentMetrics(10000);
   const taskMetrics = allMetrics.filter(
@@ -106,8 +122,10 @@ export function renderDashboard(metricsPath: string, status: HealthStatus): stri
 
   // Chart data
   const dailyStats = computeDailyStats(allMetrics, 14);
-  const maxTasksPerDay = Math.max(1, ...dailyStats.map((d) => d.completed + d.failed));
-  const maxCostPerDay = Math.max(0.01, ...dailyStats.map((d) => d.cost));
+  const rawMaxTasks = Math.max(1, ...dailyStats.map((d) => d.completed + d.failed));
+  const maxTasksPerDay = niceMax(rawMaxTasks, false);
+  const rawMaxCost = Math.max(0.01, ...dailyStats.map((d) => d.cost));
+  const maxCostPerDay = niceMax(rawMaxCost, true);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -149,8 +167,9 @@ export function renderDashboard(metricsPath: string, status: HealthStatus): stri
     .card .value { font-size: 1.8rem; font-weight: 700; margin-top: 4px; }
     .card .sub { font-size: 0.75rem; color: var(--text-dim); margin-top: 2px; }
 
-    .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-bottom: 24px; }
     .chart-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+    .chart-card:hover { z-index: 10; position: relative; }
     .chart-card h3 { font-size: 0.9rem; margin-bottom: 12px; color: var(--text-dim); }
     .bar-chart { display: flex; align-items: flex-end; gap: 4px; height: 120px; }
     .bar-group { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; position: relative; }
@@ -204,7 +223,8 @@ export function renderDashboard(metricsPath: string, status: HealthStatus): stri
       justify-content: space-between;
       align-items: flex-end;
       padding-right: 6px;
-      width: 30px;
+      min-width: 40px;
+      width: auto;
       flex-shrink: 0;
     }
     .y-axis .y-label { font-size: 0.65rem; color: var(--text-dim); line-height: 1; }
@@ -234,6 +254,10 @@ export function renderDashboard(metricsPath: string, status: HealthStatus): stri
       .summary { grid-template-columns: repeat(2, 1fr); gap: 10px; }
       .card .value { font-size: 1.4rem; }
       .charts { grid-template-columns: 1fr; }
+      .bar-chart { gap: 2px; }
+      .bar-group:nth-child(even) .bar-label { visibility: hidden; }
+      .bar-label { transform: rotate(-45deg); transform-origin: top center; font-size: 0.55rem; }
+      .y-axis { min-width: 35px; width: auto; }
     }
   </style>
 </head>
@@ -291,6 +315,7 @@ export function renderDashboard(metricsPath: string, status: HealthStatus): stri
       <div class="chart-with-axis">
         <div class="y-axis">
           <span class="y-label">${maxTasksPerDay}</span>
+          <span class="y-label">${Math.round(maxTasksPerDay / 2)}</span>
           <span class="y-label">0</span>
         </div>
         <div class="bar-chart">
@@ -317,6 +342,7 @@ ${dailyStats
       <div class="chart-with-axis">
         <div class="y-axis">
           <span class="y-label">$${maxCostPerDay.toFixed(2)}</span>
+          <span class="y-label">$${(maxCostPerDay / 2).toFixed(2)}</span>
           <span class="y-label">$0</span>
         </div>
         <div class="bar-chart">
