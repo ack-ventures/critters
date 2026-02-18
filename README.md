@@ -21,6 +21,7 @@ This downloads the latest binary, installs it to your PATH, and walks you throug
 - `critters status` — show daemon status (active/queued critters, today's stats)
 - `critters retry <ID>` — retry a failed critter (reset to Todo)
 - `critters logs <ID>` — show logs for a critter run
+- `critters kickoff` — trigger an immediate poll (instead of waiting for the next interval)
 - `critters init-repo` — scaffold `.critters.yaml` in the current repo
 - `critters help` — show usage
 
