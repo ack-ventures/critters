@@ -11,7 +11,7 @@ const PANE_COLORS = [
   { bg: "colour22",  fg: "colour119", label: "\x1b[1;32m", toolColor: "\x1b[32m"  },  // green
   { bg: "colour53",  fg: "colour177", label: "\x1b[1;35m", toolColor: "\x1b[35m"  },  // magenta
   { bg: "colour234", fg: "colour255", label: "\x1b[1;37m", toolColor: "\x1b[37m"  },  // white
-  { bg: "colour52",  fg: "colour196", label: "\x1b[1;31m", toolColor: "\x1b[31m"  },  // red
+  { bg: "colour58",  fg: "colour220", label: "\x1b[38;5;220m", toolColor: "\x1b[38;5;220m" },  // amber
   { bg: "colour18",  fg: "colour75",  label: "\x1b[1;34m", toolColor: "\x1b[34m"  },  // blue
   { bg: "colour23",  fg: "colour44",  label: "\x1b[38;5;44m", toolColor: "\x1b[38;5;44m" },  // teal
   { bg: "colour53",  fg: "colour213", label: "\x1b[38;5;213m", toolColor: "\x1b[38;5;213m" },  // pink
