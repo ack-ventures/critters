@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { chmodSync, copyFileSync, existsSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { log, logError } from "./logger.js";
@@ -13,6 +14,50 @@ export function compareSemver(a: string, b: string): number {
     if (diff !== 0) return diff;
   }
   return 0;
+}
+
+export function isAllowedDownloadUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return false;
+    const host = parsed.hostname;
+    return (
+      host === "github.com" ||
+      host === "objects.githubusercontent.com" ||
+      host.endsWith(".githubusercontent.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function isAllowedApiUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && parsed.hostname === "api.github.com";
+  } catch {
+    return false;
+  }
+}
+
+export function parseChecksumFile(content: string): Map<string, string> {
+  const result = new Map<string, string>();
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const parts = trimmed.split(/\s+/);
+    if (parts.length >= 2) {
+      const hash = parts[0];
+      const filename = parts[1];
+      result.set(filename, hash);
+    }
+  }
+  return result;
+}
+
+export function verifyChecksum(buffer: Buffer, expectedHash: string): boolean {
+  const actual = createHash("sha256").update(buffer).digest("hex");
+  return actual.toLowerCase() === expectedHash.toLowerCase();
 }
 
 async function downloadWithProgress(
@@ -92,6 +137,11 @@ export async function checkForUpdate(
     return;
   }
 
+  if (!isAllowedApiUrl(RELEASES_URL)) {
+    printError(`Update aborted: releases URL points to unexpected domain`);
+    return;
+  }
+
   const tempPath = `${process.execPath}.update`;
 
   try {
@@ -135,6 +185,13 @@ export async function checkForUpdate(
       return;
     }
 
+    if (!isAllowedDownloadUrl(asset.browser_download_url)) {
+      let hostname = "unknown";
+      try { hostname = new URL(asset.browser_download_url).hostname; } catch {}
+      printError(`Update aborted: download URL points to unexpected domain: ${hostname}`);
+      return;
+    }
+
     const downloadResponse = await fetch(asset.browser_download_url, {
       signal: AbortSignal.timeout(120_000),
     });
@@ -145,6 +202,41 @@ export async function checkForUpdate(
     }
 
     const buffer = await downloadWithProgress(downloadResponse, force);
+
+    // Checksum verification
+    const checksumAsset = assets.find(
+      (a: { name?: string }) => a.name === "checksums-sha256.txt",
+    ) as { name: string; browser_download_url?: string } | undefined;
+
+    if (checksumAsset && typeof checksumAsset.browser_download_url === "string") {
+      const checksumResponse = await fetch(checksumAsset.browser_download_url, {
+        signal: AbortSignal.timeout(10_000),
+      });
+
+      if (!checksumResponse.ok) {
+        printError(`Update: failed to download checksum file (HTTP ${checksumResponse.status}), aborting update`);
+        return;
+      }
+
+      const checksumContent = await checksumResponse.text();
+      const checksums = parseChecksumFile(checksumContent);
+      const expectedHash = checksums.get(expectedName);
+
+      if (!expectedHash) {
+        printError(`Update: checksum for ${expectedName} not found in checksums-sha256.txt, aborting update`);
+        return;
+      }
+
+      if (!verifyChecksum(buffer, expectedHash)) {
+        printError("Update: SHA-256 checksum mismatch, aborting update (possible tampering or corruption)");
+        return;
+      }
+
+      print("Checksum verified (SHA-256)");
+    } else {
+      print("Update: checksums-sha256.txt not found in release, skipping verification");
+    }
+
     writeFileSync(tempPath, buffer);
     chmodSync(tempPath, 0o755);
     const backupPath = `${dirname(process.execPath)}/critters-v${currentVersion}.bak`;

@@ -11,6 +11,7 @@ export class Watcher {
   private spawner: Spawner | null;
   private activeIssueIds = new Set<string>();
   private stopped = false;
+  private polling = false;
   private onPoll?: () => void;
 
   constructor(config: Config, spawner: Spawner | null, onPoll?: () => void) {
@@ -23,12 +24,19 @@ export class Watcher {
     log("Polling Linear...");
 
     while (!this.stopped) {
+      if (this.polling) {
+        await sleep(this.config.pollIntervalSeconds * 1000);
+        continue;
+      }
+      this.polling = true;
       try {
         const issuesFound = await this.poll();
         recordMetric({ timestamp: "", event: "poll_completed", outcome: `${issuesFound} issues found` });
         this.onPoll?.();
       } catch (err) {
         logError(`Poll failed: ${err}`);
+      } finally {
+        this.polling = false;
       }
 
       await sleep(this.config.pollIntervalSeconds * 1000);
@@ -38,6 +46,18 @@ export class Watcher {
   stop(): void {
     this.stopped = true;
     this.spawner?.stop();
+  }
+
+  async triggerPoll(): Promise<number> {
+    if (this.polling) {
+      return 0;
+    }
+    this.polling = true;
+    try {
+      return await this.poll();
+    } finally {
+      this.polling = false;
+    }
   }
 
   async dryRunPoll(): Promise<{ total: number; wouldPickUp: number; blocked: number; skipped: number }> {

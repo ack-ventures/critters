@@ -38,6 +38,7 @@ Usage: critters [command] [flags]
 Commands:
   (none)      Start the daemon
   retry       Retry a failed critter (reset to Todo)
+  kickoff     Trigger an immediate poll cycle
   status      Show daemon status
   version     Show version
   update      Check for and apply updates
@@ -93,6 +94,12 @@ if (subcommand === "retry") {
 
 if (subcommand === "init-repo") {
   await runInitRepo();
+  process.exit(0);
+}
+
+if (subcommand === "kickoff") {
+  const { runKickoff } = await import("./cli-kickoff.js");
+  await runKickoff();
   process.exit(0);
 }
 
@@ -214,9 +221,15 @@ async function main() {
   // Create review spawner
   const reviewSpawner = new ReviewSpawner(config, teamStatuses);
 
-  // Start health server
-  let healthServer: { stop: () => void } | null = null;
   let lastPollAt: string | null = null;
+  const updatePollTime = () => { lastPollAt = new Date().toISOString(); };
+
+  // Create watchers
+  const watcher = new Watcher(config, spawner, updatePollTime);
+  const reviewWatcher = new ReviewWatcher(config, reviewSpawner, updatePollTime);
+
+  // Start health server (after watchers so trigger callbacks can reference them)
+  let healthServer: { stop: () => void } | null = null;
   if (config.healthPort !== 0) {
     const metricsPath = join(homedir(), ".critters", "metrics.jsonl");
     healthServer = startHealthServer(config.healthPort, () => ({
@@ -225,14 +238,11 @@ async function main() {
       activeReviews: reviewSpawner.getActiveCount(),
       queuedReviews: reviewSpawner.getQueueSize(),
       lastPollAt,
-    }), metricsPath);
+    }), metricsPath, {
+      triggerPoll: () => watcher.triggerPoll(),
+      triggerReviewPoll: () => reviewWatcher.triggerPoll(),
+    });
   }
-
-  const updatePollTime = () => { lastPollAt = new Date().toISOString(); };
-
-  // Create watchers
-  const watcher = new Watcher(config, spawner, updatePollTime);
-  const reviewWatcher = new ReviewWatcher(config, reviewSpawner, updatePollTime);
 
   log(`Review config: concurrency=${config.reviewConcurrency}, timeout=${config.reviewTimeoutMinutes}min, model=${config.reviewModel}`);
 
