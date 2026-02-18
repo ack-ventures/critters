@@ -59,6 +59,11 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          shasum -a 256 critters-darwin-arm64 critters-linux-x64 > checksums-sha256.txt
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -66,4 +71,5 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             artifacts/critters-darwin-arm64 \
             artifacts/critters-linux-x64 \
+            artifacts/checksums-sha256.txt \
             --generate-notes
