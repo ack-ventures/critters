@@ -2,7 +2,7 @@ import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { STREAM_FILTER } from "./jq-filter.js";
 import { logTask, logTaskError, logTaskWarn } from "./logger.js";
 import type { SpawnResult } from "./types.js";
-import { runCommand, sleep } from "./utils.js";
+import { formatDuration, runCommand, sleep } from "./utils.js";
 
 // Rotating colors for critter panes — each critter gets a distinct look
 const PANE_COLORS = [
@@ -128,6 +128,15 @@ sleep 5
   await runCommand("tmux", ["select-pane", "-t", paneId, "-T", windowName]);
   await runCommand("tmux", ["select-pane", "-t", paneId, "-P", `border-style=fg=${color.fg}`]).catch(() => {});
 
+  // Start periodic pane title update with elapsed time
+  const startTime = Date.now();
+  const titleInterval = setInterval(() => {
+    const elapsed = formatDuration(Date.now() - startTime);
+    const updatedTitle = `${buildPaneLabel(identifier, title, phase)} | ${elapsed}`;
+    runCommand("tmux", ["select-pane", "-t", paneId, "-T", updatedTitle]).catch(() => {});
+  }, 10_000);
+  titleInterval.unref();
+
   // Poll for completion
   let timedOut = false;
   while (!existsSync(exitCodeFile)) {
@@ -141,6 +150,8 @@ sleep 5
     }
     await sleep(2000);
   }
+
+  clearInterval(titleInterval);
 
   // Read results
   let exitCode = 1;
