@@ -24,6 +24,7 @@ export class ReviewWatcher {
   private spawner: ReviewSpawner | null;
   private activeIssueIds = new Set<string>();
   private stopped = false;
+  private polling = false;
   private onPoll?: () => void;
 
   constructor(config: Config, spawner: ReviewSpawner | null, onPoll?: () => void) {
@@ -36,12 +37,19 @@ export class ReviewWatcher {
     log("Polling Linear for review issues...");
 
     while (!this.stopped) {
+      if (this.polling) {
+        await sleep(this.config.pollIntervalSeconds * 1000);
+        continue;
+      }
+      this.polling = true;
       try {
         const issuesFound = await this.poll();
         recordMetric({ timestamp: "", event: "poll_completed", outcome: `${issuesFound} review issues found` });
         this.onPoll?.();
       } catch (err) {
         logError(`Review poll failed: ${err}`);
+      } finally {
+        this.polling = false;
       }
 
       await sleep(this.config.pollIntervalSeconds * 1000);
@@ -51,6 +59,18 @@ export class ReviewWatcher {
   stop(): void {
     this.stopped = true;
     this.spawner?.stop();
+  }
+
+  async triggerPoll(): Promise<number> {
+    if (this.polling) {
+      return 0;
+    }
+    this.polling = true;
+    try {
+      return await this.poll();
+    } finally {
+      this.polling = false;
+    }
   }
 
   async dryRunPoll(): Promise<{ total: number; wouldPickUp: number; skipped: number }> {

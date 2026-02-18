@@ -15,12 +15,16 @@ export function startHealthServer(
   port: number,
   getStatus: () => HealthStatus,
   metricsPath?: string,
+  triggers?: {
+    triggerPoll?: () => Promise<number>;
+    triggerReviewPoll?: () => Promise<number>;
+  },
 ): { stop: () => void } {
   const startTime = Date.now();
 
   const server = Bun.serve({
     port,
-    fetch(req) {
+    async fetch(req) {
       const url = new URL(req.url);
 
       if (url.pathname === "/healthz") {
@@ -49,6 +53,28 @@ export function startHealthServer(
         return new Response(html, {
           headers: { "Content-Type": "text/html; charset=utf-8" },
         });
+      }
+
+      if (url.pathname === "/poll") {
+        if (req.method !== "POST") {
+          return new Response("Method Not Allowed", { status: 405 });
+        }
+        if (!triggers?.triggerPoll) {
+          return Response.json({ error: "Poll trigger not available" }, { status: 503 });
+        }
+        const issuesFound = await triggers.triggerPoll();
+        return Response.json({ triggered: true, issuesFound });
+      }
+
+      if (url.pathname === "/review-poll") {
+        if (req.method !== "POST") {
+          return new Response("Method Not Allowed", { status: 405 });
+        }
+        if (!triggers?.triggerReviewPoll) {
+          return Response.json({ error: "Review poll trigger not available" }, { status: 503 });
+        }
+        const issuesFound = await triggers.triggerReviewPoll();
+        return Response.json({ triggered: true, issuesFound });
       }
 
       return new Response("Not Found", { status: 404 });

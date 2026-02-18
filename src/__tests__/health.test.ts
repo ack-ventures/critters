@@ -176,6 +176,71 @@ describe("unknown routes", () => {
   });
 });
 
+describe("POST /poll", () => {
+  test("triggers poll and returns issue count", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    server = startHealthServer(port, defaultStatus, undefined, {
+      triggerPoll: async () => 5,
+      triggerReviewPoll: async () => 0,
+    });
+
+    const res = await fetch(`http://localhost:${port}/poll`, { method: "POST" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ triggered: true, issuesFound: 5 });
+  });
+
+  test("returns 405 for GET", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    server = startHealthServer(port, defaultStatus, undefined, {
+      triggerPoll: async () => 0,
+      triggerReviewPoll: async () => 0,
+    });
+
+    const res = await fetch(`http://localhost:${port}/poll`);
+    expect(res.status).toBe(405);
+  });
+
+  test("returns 503 when triggers not configured", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    server = startHealthServer(port, defaultStatus);
+
+    const res = await fetch(`http://localhost:${port}/poll`, { method: "POST" });
+    expect(res.status).toBe(503);
+  });
+});
+
+describe("POST /review-poll", () => {
+  test("triggers review poll and returns issue count", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    server = startHealthServer(port, defaultStatus, undefined, {
+      triggerPoll: async () => 0,
+      triggerReviewPoll: async () => 3,
+    });
+
+    const res = await fetch(`http://localhost:${port}/review-poll`, { method: "POST" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ triggered: true, issuesFound: 3 });
+  });
+
+  test("returns 405 for GET", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    server = startHealthServer(port, defaultStatus, undefined, {
+      triggerPoll: async () => 0,
+      triggerReviewPoll: async () => 0,
+    });
+
+    const res = await fetch(`http://localhost:${port}/review-poll`);
+    expect(res.status).toBe(405);
+  });
+});
+
 describe("stop()", () => {
   test("shuts down the server", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
