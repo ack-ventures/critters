@@ -196,8 +196,16 @@ export async function findReviewIssues(reviewLabel: string): Promise<CritterTask
 }
 
 export async function getIssueByIdentifier(identifier: string) {
+  // identifier is e.g. "ACK-101" — parse into team key + issue number
+  const match = identifier.match(/^([A-Za-z]+-?)(\d+)$/);
+  if (!match) return null;
+  const teamKey = match[1].replace(/-$/, "");
+  const issueNumber = parseInt(match[2], 10);
   const result = await client.issues({
-    filter: { identifier: { eq: identifier } },
+    filter: {
+      number: { eq: issueNumber },
+      team: { key: { eq: teamKey } },
+    },
     first: 1,
   });
   return result.nodes[0] ?? null;

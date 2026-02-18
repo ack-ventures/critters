@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 // Track calls to Linear SDK methods
 const mockUpdateIssue = mock(() => Promise.resolve({}));
 const mockCreateComment = mock(() => Promise.resolve({}));
-const mockIssues = mock(() => Promise.resolve({ nodes: [] }));
+const mockIssues = mock(() => Promise.resolve({ nodes: [] as any[] }));
 
 mock.module("@linear/sdk", () => ({
   LinearClient: function () {
