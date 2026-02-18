@@ -49,10 +49,10 @@ describe("renderDashboard", () => {
 
   test("shows summary cards with correct values", () => {
     const now = new Date().toISOString();
-    recordMetric({ timestamp: now, event: "task_completed", identifier: "TST-1", costUsd: 1.5, duration: 10 });
-    recordMetric({ timestamp: now, event: "task_completed", identifier: "TST-2", costUsd: 2.0, duration: 20 });
-    recordMetric({ timestamp: now, event: "task_completed", identifier: "TST-3", costUsd: 0.5, duration: 5 });
-    recordMetric({ timestamp: now, event: "task_failed", identifier: "TST-4", costUsd: 1.0, duration: 15 });
+    recordMetric({ timestamp: now, event: "task_completed", identifier: "TST-1", costUsd: 1.5, duration: 600000 });
+    recordMetric({ timestamp: now, event: "task_completed", identifier: "TST-2", costUsd: 2.0, duration: 1200000 });
+    recordMetric({ timestamp: now, event: "task_completed", identifier: "TST-3", costUsd: 0.5, duration: 300000 });
+    recordMetric({ timestamp: now, event: "task_failed", identifier: "TST-4", costUsd: 1.0, duration: 900000 });
 
     const html = renderDashboard("", defaultStatus());
     // Total tasks = 4
@@ -141,5 +141,55 @@ describe("renderDashboard", () => {
     const html = renderDashboard("", defaultStatus());
     expect(html).toContain('href="https://github.com/org/repo/pull/42"');
     expect(html).toContain("PR</a>");
+  });
+
+  test("duration formatting converts from milliseconds", () => {
+    const now = new Date().toISOString();
+    recordMetric({ timestamp: now, event: "task_completed", identifier: "DUR-1", duration: 480000 });
+
+    const html = renderDashboard("", defaultStatus());
+    expect(html).toContain("8m");
+    expect(html).not.toContain("480000");
+  });
+
+  test("duration formatting for sub-minute values", () => {
+    const now = new Date().toISOString();
+    recordMetric({ timestamp: now, event: "task_completed", identifier: "DUR-2", duration: 45000 });
+
+    const html = renderDashboard("", defaultStatus());
+    expect(html).toContain("45s");
+  });
+
+  test("review events appear in dashboard summary and activity table", () => {
+    const now = new Date().toISOString();
+    recordMetric({ timestamp: now, event: "task_completed", identifier: "T-1", costUsd: 1.0 });
+    recordMetric({ timestamp: now, event: "task_failed", identifier: "T-2", costUsd: 0.5 });
+    recordMetric({ timestamp: now, event: "review_completed", identifier: "R-1", costUsd: 0.3 });
+    recordMetric({ timestamp: now, event: "review_failed", identifier: "R-2", costUsd: 0.2 });
+
+    const html = renderDashboard("", defaultStatus());
+    // Total tasks = 4 (includes reviews)
+    expect(html).toContain(">4<");
+    // Total cost includes review costs: 1.0 + 0.5 + 0.3 + 0.2 = $2.00
+    expect(html).toContain("$2.00");
+    // Review status text
+    expect(html).toContain("Review Completed");
+    expect(html).toContain("Review Failed");
+  });
+
+  test("review events appear in daily charts", () => {
+    const now = new Date().toISOString();
+    recordMetric({ timestamp: now, event: "review_completed", identifier: "R-3", costUsd: 0.5 });
+
+    const html = renderDashboard("", defaultStatus());
+    // The chart should have a non-zero success bar (100% since it's the only event)
+    expect(html).toContain('class="bar success" style="height:100%"');
+  });
+
+  test("bar stack has height 100%", () => {
+    const html = renderDashboard("", defaultStatus());
+    expect(html).toContain("height: 100%;");
+    // Specifically check .bar-stack has height: 100%
+    expect(html).toContain(".bar-stack { display: flex; flex-direction: column-reverse; width: 100%; align-items: center; height: 100%; }");
   });
 });

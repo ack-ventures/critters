@@ -1,5 +1,6 @@
 import { type HealthStatus } from "./health.js";
 import { getRecentMetrics, type MetricEvent } from "./metrics.js";
+import { formatDuration } from "./utils.js";
 import { VERSION } from "./version.js";
 
 function escapeHtml(str: string): string {
@@ -11,10 +12,9 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#039;");
 }
 
-function formatDuration(minutes: number | undefined): string {
-  if (minutes == null || Number.isNaN(minutes)) return "\u2014";
-  if (minutes < 1) return `${Math.round(minutes * 60)}s`;
-  return `${Math.round(minutes)}m`;
+function fmtDuration(ms: number | undefined): string {
+  if (ms == null || Number.isNaN(ms)) return "\u2014";
+  return formatDuration(ms);
 }
 
 function formatCost(cost: number | undefined): string {
@@ -63,11 +63,12 @@ function computeDailyStats(metrics: MetricEvent[], days: number): DayStat[] {
   }
 
   for (const m of metrics) {
-    if (m.event !== "task_completed" && m.event !== "task_failed") continue;
+    if (m.event !== "task_completed" && m.event !== "task_failed" &&
+        m.event !== "review_completed" && m.event !== "review_failed") continue;
     const key = getDateKey(m.timestamp);
     const stat = dateMap.get(key);
     if (!stat) continue;
-    if (m.event === "task_completed") stat.completed++;
+    if (m.event === "task_completed" || m.event === "review_completed") stat.completed++;
     else stat.failed++;
     stat.cost += m.costUsd ?? 0;
   }
@@ -78,12 +79,13 @@ function computeDailyStats(metrics: MetricEvent[], days: number): DayStat[] {
 export function renderDashboard(metricsPath: string, status: HealthStatus): string {
   const allMetrics = getRecentMetrics(10000);
   const taskMetrics = allMetrics.filter(
-    (m) => m.event === "task_completed" || m.event === "task_failed",
+    (m) => m.event === "task_completed" || m.event === "task_failed" ||
+           m.event === "review_completed" || m.event === "review_failed",
   );
 
   // Summary stats
   const totalTasks = taskMetrics.length;
-  const succeeded = taskMetrics.filter((m) => m.event === "task_completed").length;
+  const succeeded = taskMetrics.filter((m) => m.event === "task_completed" || m.event === "review_completed").length;
   const failed = totalTasks - succeeded;
   const successRate = totalTasks > 0 ? Math.round((succeeded / totalTasks) * 100) : null;
   const totalCost = taskMetrics.reduce((sum, m) => sum + (m.costUsd ?? 0), 0);
@@ -143,7 +145,7 @@ export function renderDashboard(metricsPath: string, status: HealthStatus): stri
     .chart-card h3 { font-size: 0.9rem; margin-bottom: 12px; color: var(--text-dim); }
     .bar-chart { display: flex; align-items: flex-end; gap: 4px; height: 120px; }
     .bar-group { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; }
-    .bar-stack { display: flex; flex-direction: column-reverse; width: 100%; align-items: center; }
+    .bar-stack { display: flex; flex-direction: column-reverse; width: 100%; align-items: center; height: 100%; }
     .bar {
       width: 80%;
       min-width: 6px;
@@ -204,7 +206,7 @@ export function renderDashboard(metricsPath: string, status: HealthStatus): stri
     </div>
     <div class="card">
       <div class="label">Avg Duration</div>
-      <div class="value">${avgDuration != null ? formatDuration(avgDuration) : "N/A"}</div>
+      <div class="value">${avgDuration != null ? fmtDuration(avgDuration) : "N/A"}</div>
     </div>
   </div>
 
@@ -304,10 +306,13 @@ ${dailyStats
 ${recentActivity.length === 0 ? '          <tr><td colspan="6" style="text-align:center;color:var(--text-dim);">No activity yet</td></tr>' : recentActivity
   .map((m) => {
     const id = escapeHtml(m.identifier ?? m.issueId ?? "\u2014");
-    const isOk = m.event === "task_completed";
+    const isReview = m.event === "review_completed" || m.event === "review_failed";
+    const isOk = m.event === "task_completed" || m.event === "review_completed";
     const statusClass = isOk ? "status-ok" : "status-fail";
-    const statusText = isOk ? "Completed" : "Failed";
-    const dur = formatDuration(m.duration);
+    const statusText = isReview
+      ? (isOk ? "Review Completed" : "Review Failed")
+      : (isOk ? "Completed" : "Failed");
+    const dur = fmtDuration(m.duration);
     const cost = formatCost(m.costUsd);
     const pr = m.prUrl
       ? `<a href="${escapeHtml(m.prUrl)}" target="_blank" rel="noopener">PR</a>`
