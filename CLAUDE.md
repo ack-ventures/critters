@@ -172,6 +172,7 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 | `src/retry.ts` | Retry logic with exponential backoff |
 | `src/cli-retry.ts` | `critters retry` CLI command |
 | `src/logs.ts` | `critters logs` CLI command |
+| `src/cli-kickoff.ts` | `critters kickoff` CLI command |
 | `src/init-repo.ts` | `critters init-repo` CLI command |
 | `src/repo-config.ts` | Per-repo `.critters.yaml` loader |
 | `src/types.ts` | Shared TypeScript type definitions |
