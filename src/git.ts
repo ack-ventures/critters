@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { logTask, logTaskError, logTaskWarn } from "./logger.js";
 import { withRetry } from "./retry.js";
 import { runCommand } from "./utils.js";
@@ -117,12 +117,19 @@ export function cleanupWorkDir(dir: string): void {
   }
 }
 
-export function cleanupStaleWorkDirs(baseDir: string, activeWorkDirs?: Set<string>): void {
+export function cleanupStaleWorkDirs(baseDir: string, activeWorkDirs?: Set<string>, maxAgeMinutes = 60): void {
   if (!existsSync(baseDir)) return;
   const entries = readdirSync(baseDir, { encoding: "utf-8" });
+  const maxAgeMs = maxAgeMinutes * 60_000;
   for (const entry of entries) {
     const fullPath = `${baseDir}/${entry}`;
     if (activeWorkDirs?.has(fullPath)) continue;
+    try {
+      const stats = statSync(fullPath);
+      if (Date.now() - stats.mtimeMs < maxAgeMs) continue;
+    } catch {
+      continue;
+    }
     cleanupWorkDir(fullPath);
   }
 }
