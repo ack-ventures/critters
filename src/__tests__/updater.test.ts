@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -34,6 +35,29 @@ function makeRelease(version: string) {
       },
     ],
   };
+}
+
+function makeReleaseWithChecksum(version: string, checksumContent: string, checksumUrl?: string) {
+  return {
+    tag_name: `v${version}`,
+    assets: [
+      {
+        name: `critters-${process.platform}-${process.arch}`,
+        browser_download_url: "https://objects.githubusercontent.com/download/critters",
+      },
+      {
+        name: "checksums-sha256.txt",
+        browser_download_url: checksumUrl ?? "https://objects.githubusercontent.com/download/checksums-sha256.txt",
+      },
+    ],
+    _checksumContent: checksumContent,
+  };
+}
+
+function makeChecksumFile(content: string): string {
+  const hash = createHash("sha256").update(content).digest("hex");
+  const binaryName = `critters-${process.platform}-${process.arch}`;
+  return `${hash}  ${binaryName}\n`;
 }
 
 function mockFetchSuccess(releaseVersion: string) {
@@ -298,5 +322,104 @@ describe("src/updater.ts", () => {
         "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
       expect(verifyChecksum(data, expected)).toBe(true);
     });
+  });
+});
+
+describe("checkForUpdate checksum verification", () => {
+  test("valid checksum — update proceeds normally", async () => {
+    const checksumContent = makeChecksumFile(UPDATED_CONTENT);
+    const release = makeReleaseWithChecksum("2.0.0", checksumContent);
+
+    globalThis.fetch = mock((url: string) => {
+      if (url.includes("api.github.com")) {
+        return Promise.resolve(new Response(JSON.stringify(release), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }));
+      }
+      if (url.includes("checksums-sha256.txt")) {
+        return Promise.resolve(new Response(release._checksumContent, { status: 200 }));
+      }
+      return Promise.resolve(new Response(UPDATED_CONTENT, { status: 200 }));
+    }) as unknown as typeof fetch;
+
+    await checkForUpdate("1.0.0");
+
+    expect(readFileSync(fakeBinaryPath, "utf-8")).toBe(UPDATED_CONTENT);
+    expect(logCalls.some((l) => l.includes("Checksum verified (SHA-256)"))).toBe(true);
+    expect(logErrorCalls.length).toBe(0);
+  });
+
+  test("checksum mismatch — update aborts, binary unchanged", async () => {
+    const binaryName = `critters-${process.platform}-${process.arch}`;
+    const badChecksumContent = `badhash  ${binaryName}\n`;
+    const release = makeReleaseWithChecksum("2.0.0", badChecksumContent);
+
+    globalThis.fetch = mock((url: string) => {
+      if (url.includes("api.github.com")) {
+        return Promise.resolve(new Response(JSON.stringify(release), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }));
+      }
+      if (url.includes("checksums-sha256.txt")) {
+        return Promise.resolve(new Response(release._checksumContent, { status: 200 }));
+      }
+      return Promise.resolve(new Response(UPDATED_CONTENT, { status: 200 }));
+    }) as unknown as typeof fetch;
+
+    await checkForUpdate("1.0.0");
+
+    expect(readFileSync(fakeBinaryPath, "utf-8")).toBe(ORIGINAL_CONTENT);
+    expect(logErrorCalls.some((l) => l.includes("checksum mismatch"))).toBe(true);
+  });
+
+  test("checksum file download fails (HTTP error) — update aborts", async () => {
+    const release = makeReleaseWithChecksum("2.0.0", "irrelevant");
+
+    globalThis.fetch = mock((url: string) => {
+      if (url.includes("api.github.com")) {
+        return Promise.resolve(new Response(JSON.stringify(release), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }));
+      }
+      if (url.includes("checksums-sha256.txt")) {
+        return Promise.resolve(new Response("Internal Server Error", { status: 500 }));
+      }
+      return Promise.resolve(new Response(UPDATED_CONTENT, { status: 200 }));
+    }) as unknown as typeof fetch;
+
+    await checkForUpdate("1.0.0");
+
+    expect(readFileSync(fakeBinaryPath, "utf-8")).toBe(ORIGINAL_CONTENT);
+    expect(logErrorCalls.some((l) => l.includes("failed to download checksum file"))).toBe(true);
+  });
+
+  test("checksum file missing from release — warning logged, update proceeds", async () => {
+    mockFetchSuccess("2.0.0");
+    await checkForUpdate("1.0.0");
+
+    expect(readFileSync(fakeBinaryPath, "utf-8")).toBe(UPDATED_CONTENT);
+    expect(logCalls.some((l) => l.includes("checksums-sha256.txt not found in release, skipping verification"))).toBe(true);
+  });
+
+  test("checksum URL points to disallowed domain — update aborts", async () => {
+    const release = makeReleaseWithChecksum("2.0.0", "irrelevant", "https://evil.com/checksums-sha256.txt");
+
+    globalThis.fetch = mock((url: string) => {
+      if (url.includes("api.github.com")) {
+        return Promise.resolve(new Response(JSON.stringify(release), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }));
+      }
+      return Promise.resolve(new Response(UPDATED_CONTENT, { status: 200 }));
+    }) as unknown as typeof fetch;
+
+    await checkForUpdate("1.0.0");
+
+    expect(readFileSync(fakeBinaryPath, "utf-8")).toBe(ORIGINAL_CONTENT);
+    expect(logErrorCalls.some((l) => l.includes("checksum URL points to unexpected domain"))).toBe(true);
   });
 });
