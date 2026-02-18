@@ -126,6 +126,7 @@ sleep 5
 
   // Label the pane so it's identifiable in the tmux UI
   await runCommand("tmux", ["select-pane", "-t", paneId, "-T", windowName]);
+  await runCommand("tmux", ["select-pane", "-t", paneId, "-P", `border-style=fg=${color.fg}`]).catch(() => {});
 
   // Poll for completion
   let timedOut = false;

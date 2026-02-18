@@ -17,7 +17,7 @@ import { ReviewWatcher } from "./review-watcher.js";
 import { Spawner } from "./spawner.js";
 import { runStatus } from "./status.js";
 import { checkForUpdate } from "./updater.js";
-import { runCommand } from "./utils.js";
+import { formatDuration, runCommand } from "./utils.js";
 import { VERSION } from "./version.js";
 import { Watcher } from "./watcher.js";
 
@@ -178,6 +178,11 @@ async function main() {
   }
 
   log(`Critters v${VERSION} starting...`);
+  const startTime = Date.now();
+
+  if (!noTmux) {
+    console.log(`\x1b[1;36m━━━ Critters v${VERSION} ━━━\x1b[0m`);
+  }
 
   if (!skipUpdate && VERSION !== "dev") {
     await checkForUpdate(VERSION);
@@ -192,9 +197,13 @@ async function main() {
 
 
   if (!noTmux) {
-    // Enable pane titles in the tmux session
+    // Set main pane title
+    await runCommand("tmux", ["select-pane", "-t", config.tmuxSession, "-T", `Critters v${VERSION}`]).catch(() => {});
+    // Configure pane border styling
     await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-status", "top"]).catch(() => {});
-    await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-format", "#{pane_title}"]).catch(() => {});
+    await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-format", " #{pane_title} "]).catch(() => {});
+    await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-style", "fg=colour240"]).catch(() => {});
+    await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-active-border-style", "fg=colour39"]).catch(() => {});
   }
   log(`Config loaded: concurrency=${config.concurrency}, timeout=${config.timeoutMinutes}min, poll=${config.pollIntervalSeconds}s, noTmux=${noTmux}`);
   initMetrics();
@@ -244,11 +253,24 @@ async function main() {
     });
   }
 
+  // Periodic main pane title update with uptime + active count
+  let titleInterval: ReturnType<typeof setInterval> | null = null;
+  if (!noTmux) {
+    titleInterval = setInterval(() => {
+      const uptime = formatDuration(Date.now() - startTime);
+      const active = spawner.getActiveCount() + reviewSpawner.getActiveCount();
+      const title = `Critters v${VERSION} | up ${uptime} | ${active} active`;
+      runCommand("tmux", ["select-pane", "-t", config.tmuxSession, "-T", title]).catch(() => {});
+    }, 60_000);
+    titleInterval.unref();
+  }
+
   log(`Review config: concurrency=${config.reviewConcurrency}, timeout=${config.reviewTimeoutMinutes}min, model=${config.reviewModel}`);
 
   // Signal handlers
   const shutdown = () => {
     log("Shutting down...");
+    if (titleInterval) clearInterval(titleInterval);
     healthServer?.stop();
     watcher.stop();
     reviewWatcher.stop();
