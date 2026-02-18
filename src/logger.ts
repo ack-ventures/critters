@@ -61,6 +61,60 @@ function timestamp(): string {
   return new Date().toISOString();
 }
 
+function colorizeForConsole(level: string, message: string, args: unknown[]): string {
+  const ts = timestamp();
+  const suffix = args.length > 0 ? ` ${args.map(String).join(" ")}` : "";
+  const fullMessage = `${message}${suffix}`;
+
+  const DIM = "\x1b[90m";
+  const BOLD_CYAN = "\x1b[1;36m";
+  const BOLD = "\x1b[1m";
+  const BLUE = "\x1b[34m";
+  const YELLOW = "\x1b[33m";
+  const RED = "\x1b[31m";
+  const RESET = "\x1b[0m";
+
+  // Colorize timestamp: dim gray
+  let result = `${DIM}[${ts}]${RESET} `;
+
+  // Colorize level prefix
+  if (level.includes("ERROR")) {
+    result += `${RED}ERROR:${RESET} `;
+  } else if (level.includes("WARN")) {
+    result += `${YELLOW}WARN:${RESET} `;
+  }
+
+  // Extract task identifier from level (e.g., "[ACK-130] " or "[ACK-130] WARN: ")
+  const identifierMatch = level.match(/^\[([A-Z]+-\d+)\]/);
+  if (identifierMatch) {
+    result = `${DIM}[${ts}]${RESET} ${BOLD_CYAN}[${identifierMatch[1]}]${RESET} `;
+    // Re-add WARN/ERROR prefix after identifier if present
+    if (level.includes("ERROR")) {
+      result += `${RED}ERROR:${RESET} `;
+    } else if (level.includes("WARN")) {
+      result += `${YELLOW}WARN:${RESET} `;
+    }
+  }
+
+  // Colorize the message body
+  let coloredMessage = fullMessage;
+
+  // Highlight URLs and absolute file paths (blue, require at least two segments)
+  coloredMessage = coloredMessage.replace(
+    /(https?:\/\/\S+|\/[\w.-]+\/[\w./-]+)/g,
+    `${BLUE}$1${RESET}`
+  );
+
+  // Highlight lifecycle phrases (bold)
+  const lifecyclePhrases = ["Starting Phase", "Plan approved", "PR created", "completed", "merged", "failed"];
+  for (const phrase of lifecyclePhrases) {
+    coloredMessage = coloredMessage.replaceAll(phrase, `${BOLD}${phrase}${RESET}`);
+  }
+
+  result += coloredMessage;
+  return result;
+}
+
 function writeLog(level: string, message: string, args: unknown[]): void {
   const suffix = args.length > 0 ? ` ${args.map(String).join(" ")}` : "";
   const formatted = `[${timestamp()}] ${level}${message}${suffix}`;
@@ -75,11 +129,11 @@ function writeLog(level: string, message: string, args: unknown[]): void {
       }
     }
   } else if (level.includes("ERROR")) {
-    console.error(formatted);
+    console.error(colorizeForConsole(level, message, args));
   } else if (level.includes("WARN")) {
-    console.warn(formatted);
+    console.warn(colorizeForConsole(level, message, args));
   } else {
-    console.log(formatted);
+    console.log(colorizeForConsole(level, message, args));
   }
 }
 
