@@ -188,3 +188,113 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 
 - `LINEAR_API_KEY` (required) — in `.env` file
 - `SLACK_WEBHOOK_URL` (optional) — for completion notifications
+
+## Build & Binary
+
+- Build: `bun build --compile src/index.ts --outfile dist/critters`
+- Also available via: `bun run build`
+- Release CI builds for `darwin-arm64` and `linux-x64`
+- Bun compiled binaries use virtual paths in `process.argv` (e.g. `/$bunfs/`); use `process.execPath` for the real binary path
+- `--no-tmux` flag runs the daemon without tmux, logging to file instead (rotated at `maxLogSizeMb`)
+- Auto-update only works when running as a compiled binary (detected by checking `process.execPath` basename isn't `bun`)
+
+## CLI Commands
+
+Usage: `critters [command] [flags]`
+
+| Command | Description |
+|---|---|
+| *(none)* | Start the daemon |
+| `status` | Show daemon status (active/queued critters, uptime, today's stats) |
+| `logs <ID>` | View critter logs (`--phase planning\|execution\|review`, `--follow\|-f`) |
+| `retry <ID>` | Reset a failed critter to Todo for re-pickup (`--force` to override non-failed states) |
+| `kickoff` | Trigger an immediate poll cycle via the health server |
+| `init` | Interactive setup — creates `~/.critters/` with config, env, and prompt template files |
+| `init-repo` | Scaffold `.critters.yaml` in the current repo |
+| `update` | Check for and apply binary updates |
+| `version` | Print version |
+| `help` | Show help |
+
+### Daemon Flags
+
+| Flag | Description |
+|---|---|
+| `--dry-run` | Poll once, show what would happen, exit |
+| `--no-tmux` | Run without tmux (log to file) |
+| `--skip-update` | Skip auto-update check on startup |
+| `--config PATH` | Use a custom config file |
+
+## Release / Versioning
+
+- Version constant lives in `src/version.ts` (set to `"dev"` in source; CI embeds the real version at build time)
+- `package.json` `version` field must match the git tag (verified by release CI)
+- Use `/release` to create a release — it bumps the version in `package.json`, opens a PR, and after merge you tag to trigger the release build
+- Release CI (`.github/workflows/release.yml`): triggered by `v*` tags, builds binaries for `darwin-arm64` and `linux-x64`, creates a GitHub Release with SHA-256 checksums
+- PR CI (`.github/workflows/ci.yml`): runs `bun install --frozen-lockfile`, `bun run lint`, `bun run typecheck`, `bun test`
+- **Gotcha**: CI checks may fail or not appear on PRs with merge conflicts — resolve conflicts before expecting checks to pass
+
+## Per-repo Configuration (`.critters.yaml`)
+
+Repos can include a `.critters.yaml` at the root to customize critter behavior. The file is loaded after cloning (see `src/repo-config.ts`).
+
+| Field | Type | Description |
+|---|---|---|
+| `extraAllowedTools` | `string[]` | Additional tools merged with daemon defaults |
+| `planningPrompt` | `string` | Custom prompt appended to the planning phase |
+| `executionPrompt` | `string` | Custom prompt appended to the execution phase |
+| `reviewPrompt` | `string` | Custom prompt appended to the review phase |
+
+All fields are optional. Run `critters init-repo` to scaffold the file.
+
+Daemon-level prompt customization is also available via `~/.critters/planning-prompt.md`, `execution-prompt.md`, and `review-prompt.md` (created by `critters init`).
+
+## Hooks
+
+Shell commands run on lifecycle events. Configure in `critters.config.yaml` under `hooks`:
+
+```yaml
+hooks:
+  onTaskStarted: "curl -s https://example.com/notify"
+  onPrCreated: "echo $CRITTER_PR_URL"
+```
+
+| Hook | Triggered when |
+|---|---|
+| `onTaskStarted` | Critter begins working on an issue |
+| `onPrCreated` | PR is successfully created |
+| `onTaskFailed` | Task fails (any phase) |
+| `onReviewStarted` | Review critter picks up a PR |
+| `onMerged` | Review critter merges a PR |
+| `onNeedsChanges` | Review critter requests changes |
+
+Each hook receives environment variables: `CRITTER_ISSUE_ID`, `CRITTER_IDENTIFIER`, `CRITTER_TITLE`, `CRITTER_REPO_URL`, `CRITTER_BRANCH`. PR-related hooks (`onPrCreated`, `onReviewStarted`, `onMerged`, `onNeedsChanges`) also get `CRITTER_PR_URL`. Hooks time out after 30 seconds. Failures are logged as warnings but don't fail the task.
+
+## Slack Notifications
+
+Set `SLACK_WEBHOOK_URL` in `.env` to receive Slack messages. Notifications are sent for:
+
+- Task picked up (cloning started)
+- Planning complete
+- PR created (success)
+- Task failed
+- Timeout warning (at 80% of `timeoutMinutes`)
+- Review started
+- Review merged
+- Review needs changes
+- Review failed
+
+Messages use Slack incoming webhook format (`{ text: "..." }`). Failed sends are retried up to 2 times with exponential backoff. Notification failures are logged but don't fail the task.
+
+## Dashboard & Health Server
+
+An HTTP server starts on `healthPort` (default 3847, set to 0 to disable).
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/` or `/dashboard` | GET | HTML dashboard with summary stats, charts (14-day tasks/cost), and recent activity table. Auto-refreshes every 30s. |
+| `/healthz` | GET | JSON health check: uptime, version, active/queued counts, last poll time, metrics summary |
+| `/metrics` | GET | JSON array of recent metric events (last 100) |
+| `/poll` | POST | Trigger an immediate critter poll cycle |
+| `/review-poll` | POST | Trigger an immediate review poll cycle |
+
+Metrics are stored in `~/.critters/metrics.jsonl` (JSONL format). Events: `task_started`, `task_completed`, `task_failed`, `review_started`, `review_completed`, `review_failed`, `poll_completed`.
