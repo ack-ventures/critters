@@ -1,7 +1,7 @@
 import { type HealthStatus } from "./health.js";
 import { getRecentMetrics, type MetricEvent } from "./metrics.js";
+import { getDisplayVersion } from "./updater.js";
 import { formatDuration } from "./utils.js";
-import { VERSION } from "./version.js";
 
 function escapeHtml(str: string): string {
   return str
@@ -264,7 +264,7 @@ export function renderDashboard(metricsPath: string, status: HealthStatus): stri
 <body>
   <div class="header">
     <h1>Critters Dashboard</h1>
-    <span class="version">v${escapeHtml(VERSION)}</span>
+    <span class="version">${escapeHtml(getDisplayVersion())}</span>
   </div>
 
   <div class="summary">

@@ -1,6 +1,7 @@
 import { renderDashboard } from "./dashboard.js";
 import { log } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
+import { getDisplayVersion } from "./updater.js";
 import { VERSION } from "./version.js";
 
 export interface HealthStatus {
@@ -33,6 +34,7 @@ export function startHealthServer(
           status: "ok",
           uptime: Math.floor((Date.now() - startTime) / 1000),
           version: VERSION,
+          displayVersion: getDisplayVersion(),
           activeCritters: status.activeCritters,
           queuedCritters: status.queuedCritters,
           activeReviews: status.activeReviews,
