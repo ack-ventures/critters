@@ -16,7 +16,7 @@ import { ReviewSpawner } from "./review-spawner.js";
 import { ReviewWatcher } from "./review-watcher.js";
 import { Spawner } from "./spawner.js";
 import { runStatus } from "./status.js";
-import { checkForUpdate } from "./updater.js";
+import { checkForUpdate, fetchLatestVersion, getDisplayVersion } from "./updater.js";
 import { formatDuration, runCommand } from "./utils.js";
 import { VERSION } from "./version.js";
 import { Watcher } from "./watcher.js";
@@ -26,12 +26,14 @@ import { Watcher } from "./watcher.js";
 const subcommand = Bun.argv[2];
 
 if (subcommand === "version") {
-  console.log(`Critters v${VERSION}`);
+  await fetchLatestVersion();
+  console.log(`Critters ${getDisplayVersion()}`);
   process.exit(0);
 }
 
 if (subcommand === "help") {
-  console.log(`Critters v${VERSION}
+  await fetchLatestVersion();
+  console.log(`Critters ${getDisplayVersion()}
 
 Usage: critters [command] [flags]
 
@@ -160,8 +162,13 @@ async function main() {
   const config = loadConfig(configPath);
   config.noTmux = noTmux || dryRun;
 
+  // Fetch latest version for dev builds (non-blocking, cached for session)
+  if (VERSION === "dev") {
+    await fetchLatestVersion();
+  }
+
   if (dryRun) {
-    log(`Critters v${VERSION} — dry run`);
+    log(`Critters ${getDisplayVersion()} — dry run`);
     initLinear(config);
     await loadTeamStatuses();
 
@@ -177,11 +184,11 @@ async function main() {
     process.exit(0);
   }
 
-  log(`Critters v${VERSION} starting...`);
+  log(`Critters ${getDisplayVersion()} starting...`);
   const startTime = Date.now();
 
   if (!noTmux) {
-    console.log(`\x1b[1;36m━━━ Critters v${VERSION} ━━━\x1b[0m`);
+    console.log(`\x1b[1;36m━━━ Critters ${getDisplayVersion()} ━━━\x1b[0m`);
   }
 
   if (!skipUpdate && VERSION !== "dev") {
@@ -204,7 +211,7 @@ async function main() {
     mainPaneId = mainPaneResult.stdout.trim();
 
     // Set main pane title (using captured pane ID)
-    await runCommand("tmux", ["select-pane", "-t", mainPaneId, "-T", `Critters v${VERSION}`]).catch(() => {});
+    await runCommand("tmux", ["select-pane", "-t", mainPaneId, "-T", `Critters ${getDisplayVersion()}`]).catch(() => {});
     // Configure pane border styling (session-level settings, not pane-level)
     await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-status", "top"]).catch(() => {});
     await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-format", " #{pane_title} "]).catch(() => {});
@@ -265,7 +272,7 @@ async function main() {
     titleInterval = setInterval(() => {
       const uptime = formatDuration(Date.now() - startTime);
       const active = spawner.getActiveCount() + reviewSpawner.getActiveCount();
-      const title = `Critters v${VERSION} | up ${uptime} | ${active} active`;
+      const title = `Critters ${getDisplayVersion()} | up ${uptime} | ${active} active`;
       runCommand("tmux", ["select-pane", "-t", mainPaneId!, "-T", title]).catch(() => {});
     }, 10_000);
     titleInterval.unref();

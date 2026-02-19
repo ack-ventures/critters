@@ -65,6 +65,7 @@ export async function runStatus(): Promise<void> {
   let health: {
     uptime: number;
     version: string;
+    displayVersion?: string;
     activeCritters: number;
     queuedCritters: number;
     activeReviews: number;
@@ -95,7 +96,7 @@ export async function runStatus(): Promise<void> {
   const uptimeStr = formatDuration(health.uptime * 1000);
   const lastPoll = formatLastPoll(health.lastPollAt);
 
-  console.log(`Critters v${health.version ?? VERSION} — running for ${uptimeStr}
+  console.log(`Critters ${health.displayVersion ?? `v${health.version ?? VERSION}`} — running for ${uptimeStr}
 
 Active critters: ${health.activeCritters}/${config.concurrency}
 Active reviews:  ${health.activeReviews}/${config.reviewConcurrency}

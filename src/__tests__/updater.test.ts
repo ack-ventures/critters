@@ -15,7 +15,7 @@ mock.module("../logger.js", () => ({
 }));
 
 // Re-import after mocking
-const { checkForUpdate } = await import("../updater.js");
+const { checkForUpdate, fetchLatestVersion, getDisplayVersion, _resetCachedLatestVersion } = await import("../updater.js");
 
 let tempDir: string;
 let fakeBinaryPath: string;
@@ -421,5 +421,117 @@ describe("checkForUpdate checksum verification", () => {
 
     expect(readFileSync(fakeBinaryPath, "utf-8")).toBe(ORIGINAL_CONTENT);
     expect(logErrorCalls.some((l) => l.includes("checksum URL points to unexpected domain"))).toBe(true);
+  });
+});
+
+describe("fetchLatestVersion", () => {
+  beforeEach(() => {
+    _resetCachedLatestVersion();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    _resetCachedLatestVersion();
+  });
+
+  test("returns version from GitHub release", async () => {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(new Response(JSON.stringify({ tag_name: "v1.2.3" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })),
+    ) as unknown as typeof fetch;
+
+    const result = await fetchLatestVersion();
+    expect(result).toBe("1.2.3");
+  });
+
+  test("strips v prefix from tag_name", async () => {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(new Response(JSON.stringify({ tag_name: "v0.4.4" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })),
+    ) as unknown as typeof fetch;
+
+    const result = await fetchLatestVersion();
+    expect(result).toBe("0.4.4");
+  });
+
+  test("caches result and only fetches once", async () => {
+    const fetchMock = mock(() =>
+      Promise.resolve(new Response(JSON.stringify({ tag_name: "v1.0.0" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const first = await fetchLatestVersion();
+    const second = await fetchLatestVersion();
+
+    expect(first).toBe("1.0.0");
+    expect(second).toBe("1.0.0");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("returns null on network error", async () => {
+    globalThis.fetch = mock(() =>
+      Promise.reject(new Error("Network error")),
+    ) as unknown as typeof fetch;
+
+    const result = await fetchLatestVersion();
+    expect(result).toBeNull();
+  });
+
+  test("returns null on non-200 response", async () => {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(new Response("Internal Server Error", { status: 500 })),
+    ) as unknown as typeof fetch;
+
+    const result = await fetchLatestVersion();
+    expect(result).toBeNull();
+  });
+
+  test("returns null when tag_name is not a string", async () => {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(new Response(JSON.stringify({ tag_name: 123 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })),
+    ) as unknown as typeof fetch;
+
+    const result = await fetchLatestVersion();
+    expect(result).toBeNull();
+  });
+});
+
+describe("getDisplayVersion", () => {
+  beforeEach(() => {
+    _resetCachedLatestVersion();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    _resetCachedLatestVersion();
+  });
+
+  test("returns 'vdev' when VERSION is dev and no cache", () => {
+    // VERSION is "dev" in the test environment
+    const result = getDisplayVersion();
+    expect(result).toBe("vdev");
+  });
+
+  test("returns 'vdev (latest: v1.2.3)' when VERSION is dev and cache populated", async () => {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(new Response(JSON.stringify({ tag_name: "v1.2.3" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })),
+    ) as unknown as typeof fetch;
+
+    await fetchLatestVersion();
+    const result = getDisplayVersion();
+    expect(result).toBe("vdev (latest: v1.2.3)");
   });
 });

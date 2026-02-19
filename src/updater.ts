@@ -2,9 +2,49 @@ import { createHash } from "node:crypto";
 import { chmodSync, copyFileSync, existsSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { log, logError } from "./logger.js";
+import { VERSION } from "./version.js";
 
 // Canonical release source — update this if the repo ever moves.
 const RELEASES_URL = "https://api.github.com/repos/ack-ventures/critters/releases/latest";
+
+let cachedLatestVersion: string | null = null;
+
+export async function fetchLatestVersion(): Promise<string | null> {
+  if (cachedLatestVersion !== null) return cachedLatestVersion;
+
+  try {
+    const response = await fetch(RELEASES_URL, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": "critters-updater",
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const { tag_name } = data as { tag_name: unknown };
+
+    if (typeof tag_name !== "string") return null;
+
+    cachedLatestVersion = tag_name.replace(/^v/, "");
+    return cachedLatestVersion;
+  } catch {
+    return null;
+  }
+}
+
+export function getDisplayVersion(): string {
+  if (VERSION !== "dev") return `v${VERSION}`;
+  if (cachedLatestVersion !== null) return `vdev (latest: v${cachedLatestVersion})`;
+  return "vdev";
+}
+
+// Exported for testing only
+export function _resetCachedLatestVersion(): void {
+  cachedLatestVersion = null;
+}
 
 export function compareSemver(a: string, b: string): number {
   const pa = a.split(".").map(Number);

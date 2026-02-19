@@ -63,6 +63,7 @@ describe("GET /healthz", () => {
     expect(body.queuedReviews).toBe(0);
     expect(body.lastPollAt).toBeNull();
     expect(body.metrics).toEqual({ totalTasks: 0, succeeded: 0, failed: 0 });
+    expect(typeof body.displayVersion).toBe("string");
   });
 
   test("reflects getStatus callback values", async () => {
