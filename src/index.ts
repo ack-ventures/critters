@@ -291,6 +291,7 @@ async function main() {
       activeReviews: spawner.getActiveCount("review"),
       queuedReviews: spawner.getQueueSize("review"),
       lastPollAt,
+      activeCritterDetails: spawner.getActiveDetails(),
     }), metricsPath, {
       triggerPoll: () => watcher.triggerPoll(),
       triggerReviewPoll: () => watcher.triggerPoll(), // unified watcher handles both

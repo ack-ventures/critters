@@ -2,7 +2,7 @@ import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { STREAM_FILTER } from "./jq-filter.js";
 import { logTask, logTaskError, logTaskWarn } from "./logger.js";
 import type { SpawnResult } from "./types.js";
-import { formatDuration, runCommand, shellEscape, sleep } from "./utils.js";
+import { formatDuration, runCommand, shellEscape, shortRepoName, sleep } from "./utils.js";
 
 // Rotating colors for critter panes — each critter gets a distinct look
 const PANE_COLORS = [
@@ -24,8 +24,10 @@ function truncateTitle(title: string, maxLen = 40): string {
   return `${title.slice(0, maxLen - 1)}…`;
 }
 
-function buildPaneLabel(identifier: string, title: string, phase: string): string {
-  return `${identifier}: ${truncateTitle(title)} / ${phase}`;
+function buildPaneLabel(identifier: string, title: string, phase: string, repoShort?: string): string {
+  const base = `${identifier}: ${truncateTitle(title)} / ${phase}`;
+  if (repoShort) return `${base} | ${repoShort}`;
+  return base;
 }
 
 export async function spawnClaude(
@@ -38,9 +40,11 @@ export async function spawnClaude(
   phase: string,
   tmuxSession: string,
   model: string,
+  repoUrl: string,
   signal?: AbortSignal,
 ): Promise<SpawnResult> {
-  const windowName = buildPaneLabel(identifier, title, phase);
+  const repoShort = shortRepoName(repoUrl);
+  const windowName = buildPaneLabel(identifier, title, phase, repoShort);
   const promptFile = `${workDir}/.critter-prompt-${phase}`;
   const exitCodeFile = `${workDir}/.critter-exit-code-${phase}`;
   const scriptFile = `${workDir}/.critter-run-${phase}.sh`;
@@ -132,7 +136,7 @@ sleep 5
   const startTime = Date.now();
   const titleInterval = setInterval(() => {
     const elapsed = formatDuration(Date.now() - startTime);
-    const updatedTitle = `${buildPaneLabel(identifier, title, phase)} | ${elapsed}`;
+    const updatedTitle = `${buildPaneLabel(identifier, title, phase, repoShort)} | ${elapsed}`;
     runCommand("tmux", ["select-pane", "-t", paneId, "-T", updatedTitle]).catch(() => {});
   }, 10_000);
   titleInterval.unref();
@@ -248,8 +252,10 @@ export async function spawnClaudeSubprocess(
   title: string,
   phase: string,
   model: string,
+  repoUrl: string,
   signal?: AbortSignal,
 ): Promise<SpawnResult> {
+  const repoShort = shortRepoName(repoUrl);
   const promptFile = `${workDir}/.critter-prompt-${phase}`;
   const jsonLogFile = `${workDir}/.critter-output-${phase}.json`;
   const errLog = `${workDir}/.critter-err-${phase}.log`;
@@ -257,7 +263,7 @@ export async function spawnClaudeSubprocess(
   // Write prompt to file (avoids ARG_MAX limits for large prompts)
   writeFileSync(promptFile, prompt);
 
-  logTask(identifier, `Spawning Claude subprocess: ${buildPaneLabel(identifier, title, phase)}`);
+  logTask(identifier, `Spawning Claude subprocess: ${buildPaneLabel(identifier, title, phase, repoShort)}`);
 
   const currentPath = process.env.PATH || "/usr/local/bin:/usr/bin:/bin";
   const bashCmd = [

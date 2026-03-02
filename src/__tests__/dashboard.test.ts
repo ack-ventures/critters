@@ -15,6 +15,7 @@ function defaultStatus(): HealthStatus {
     activeReviews: 0,
     queuedReviews: 0,
     lastPollAt: null,
+    activeCritterDetails: [],
   };
 }
 
@@ -82,6 +83,7 @@ describe("renderDashboard", () => {
       activeReviews: 3,
       queuedReviews: 0,
       lastPollAt: null,
+      activeCritterDetails: [],
     };
     const html = renderDashboard("", status);
     // Check active critters count appears
@@ -191,5 +193,23 @@ describe("renderDashboard", () => {
     expect(html).toContain("height: 100%;");
     // Specifically check .bar-stack has height: 100%
     expect(html).toContain(".bar-stack { display: flex; flex-direction: column-reverse; width: 100%; align-items: center; height: 100%; }");
+  });
+
+  test("renders active critters detail table when critters are running", () => {
+    const status = defaultStatus();
+    status.activeCritters = 1;
+    status.activeCritterDetails = [{
+      identifier: "ACK-100",
+      title: "Test task",
+      phase: "plan",
+      repo: "org/repo",
+      branch: "critter/ACK-100-test-task",
+      startedAt: Date.now() - 120000,
+    }];
+    const html = renderDashboard("", status);
+    expect(html).toContain("ACK-100");
+    expect(html).toContain("Planning");
+    expect(html).toContain("org/repo");
+    expect(html).toContain("critter/ACK-100-test-task");
   });
 });

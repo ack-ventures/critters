@@ -1,7 +1,9 @@
 import { renderDashboard } from "./dashboard.js";
 import { log } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
+import type { ActiveCritterDetail } from "./types.js";
 import { getDisplayVersion } from "./updater.js";
+import { formatDuration } from "./utils.js";
 import { VERSION } from "./version.js";
 
 export interface HealthStatus {
@@ -10,6 +12,7 @@ export interface HealthStatus {
   activeReviews: number;
   queuedReviews: number;
   lastPollAt: string | null;
+  activeCritterDetails: ActiveCritterDetail[];
 }
 
 let cachedSummary: { totalTasks: number; succeeded: number; failed: number } | null = null;
@@ -39,9 +42,10 @@ export function startHealthServer(
 
       if (url.pathname === "/healthz") {
         const status = getStatus();
+        const now = Date.now();
         return Response.json({
           status: "ok",
-          uptime: Math.floor((Date.now() - startTime) / 1000),
+          uptime: Math.floor((now - startTime) / 1000),
           version: VERSION,
           displayVersion: getDisplayVersion(),
           activeCritters: status.activeCritters,
@@ -50,6 +54,14 @@ export function startHealthServer(
           queuedReviews: status.queuedReviews,
           lastPollAt: status.lastPollAt,
           metrics: computeMetricsSummary(),
+          activeCritterDetails: status.activeCritterDetails.map((d) => ({
+            identifier: d.identifier,
+            title: d.title,
+            phase: d.phase,
+            repo: d.repo,
+            branch: d.branch,
+            elapsed: formatDuration(now - d.startedAt),
+          })),
         });
       }
 

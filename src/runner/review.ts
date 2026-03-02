@@ -138,6 +138,7 @@ export class ReviewPhaseRunner implements PhaseRunner {
           task.title,
           "review",
           ctx.phase.model,
+          task.repoUrl,
           signal,
         )
       : await spawnClaude(
@@ -150,6 +151,7 @@ export class ReviewPhaseRunner implements PhaseRunner {
           "review",
           config.tmuxSession,
           ctx.phase.model,
+          task.repoUrl,
           signal,
         );
 

@@ -35,6 +35,7 @@ export class PlanningPhaseRunner implements PhaseRunner {
           task.title,
           "plan",
           ctx.phase.model,
+          task.repoUrl,
           signal,
         )
       : await spawnClaude(
@@ -47,6 +48,7 @@ export class PlanningPhaseRunner implements PhaseRunner {
           "plan",
           config.tmuxSession,
           ctx.phase.model,
+          task.repoUrl,
           signal,
         );
 

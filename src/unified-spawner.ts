@@ -28,8 +28,8 @@ import {
   sendSlackNotification,
 } from "./slack.js";
 import type { IssueTracker, TrackerTask } from "./tracker/types.js";
-import type { Config, SpawnResult } from "./types.js";
-import { branchName, extractOwnerRepo, formatDuration, formatPhaseStats, runCommand, tailLines } from "./utils.js";
+import type { ActiveCritterDetail, Config, SpawnResult } from "./types.js";
+import { branchName, extractOwnerRepo, formatDuration, formatPhaseStats, runCommand, shortRepoName, tailLines } from "./utils.js";
 
 interface QueuedTask {
   task: TrackerTask;
@@ -55,6 +55,7 @@ export class UnifiedSpawner {
   private stopped = false;
   private cleanupInterval: Timer | null = null;
   private activeWorkDirs = new Set<string>();
+  private activeCritterMap = new Map<string, ActiveCritterDetail>();
 
   constructor(config: Config, tracker: IssueTracker) {
     this.config = config;
@@ -99,6 +100,10 @@ export class UnifiedSpawner {
     return result;
   }
 
+  getActiveDetails(): ActiveCritterDetail[] {
+    return Array.from(this.activeCritterMap.values());
+  }
+
   async dispatch(task: TrackerTask, critterType: CritterTypeConfig): Promise<TaskResult> {
     return new Promise((resolve) => {
       if (!this.queues.has(critterType.name)) {
@@ -138,6 +143,15 @@ export class UnifiedSpawner {
       if (!item) break;
       this.running.set(typeName, runningNow + 1);
       logTask(item.task.identifier, `Task started [${typeName}] (queue: ${queue.length}, running: ${(this.running.get(typeName) ?? 0)})`);
+      logTask(item.task.identifier, `Repo: ${shortRepoName(item.task.repoUrl)} | Branch: ${branchName(item.task.identifier, item.task.title)}`);
+      this.activeCritterMap.set(item.task.id, {
+        identifier: item.task.identifier,
+        title: item.task.title,
+        phase: item.critterType.phases[0]?.name ?? typeName,
+        repo: shortRepoName(item.task.repoUrl),
+        branch: item.task.prBranch ?? branchName(item.task.identifier, item.task.title),
+        startedAt: Date.now(),
+      });
 
       const metricEvent = typeName === "review" ? "review_started" : "task_started";
       recordMetric({
@@ -288,7 +302,9 @@ export class UnifiedSpawner {
         if (critterType.name === "create") {
           await this.tracker.comment(task.id, `${phase.name === "planning" ? "Planning" : "Plan approved, executing"}...`);
         }
-        logTask(task.identifier, `Starting phase: ${phase.name}`);
+        logTask(task.identifier, `Starting phase: ${phase.name} | ${shortRepoName(task.repoUrl)} | ${branch || task.prBranch || ""}`);
+        const detail = this.activeCritterMap.get(task.id);
+        if (detail) detail.phase = phase.name;
 
         const phaseStart = Date.now();
         const runner = getPhaseRunner(phase);
@@ -511,6 +527,7 @@ export class UnifiedSpawner {
       if (warningTimeout) clearTimeout(warningTimeout);
       this.activeProcesses.delete(abortController);
       this.activeWorkDirs.delete(workDir);
+      this.activeCritterMap.delete(task.id);
       cleanupWorkDir(workDir);
       logTask(task.identifier, "Cleaned up work directory");
     }

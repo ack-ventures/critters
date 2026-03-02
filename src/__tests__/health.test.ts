@@ -15,6 +15,7 @@ function defaultStatus(): HealthStatus {
     activeReviews: 0,
     queuedReviews: 0,
     lastPollAt: null,
+    activeCritterDetails: [],
   };
 }
 
@@ -76,6 +77,7 @@ describe("GET /healthz", () => {
       activeReviews: 1,
       queuedReviews: 0,
       lastPollAt: "2026-01-15T10:00:00.000Z",
+      activeCritterDetails: [],
     }));
 
     const res = await fetch(`http://localhost:${port}/healthz`);

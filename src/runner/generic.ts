@@ -107,6 +107,7 @@ export class GenericPhaseRunner implements PhaseRunner {
           task.title,
           phase.name,
           phase.model,
+          task.repoUrl,
           signal,
         )
       : await spawnClaude(
@@ -119,6 +120,7 @@ export class GenericPhaseRunner implements PhaseRunner {
           phase.name,
           config.tmuxSession,
           phase.model,
+          task.repoUrl,
           signal,
         );
 

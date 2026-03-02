@@ -80,6 +80,15 @@ export interface CritterResult {
   error?: string;
 }
 
+export interface ActiveCritterDetail {
+  identifier: string;
+  title: string;
+  phase: string;        // "plan" | "exec" | "review"
+  repo: string;         // short repo name (org/repo)
+  branch: string;
+  startedAt: number;    // Date.now() timestamp
+}
+
 export interface ReviewTask extends CritterTask {
   prUrl: string;
   prNumber: number;
