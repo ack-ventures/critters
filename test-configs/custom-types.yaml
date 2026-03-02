@@ -105,7 +105,7 @@ critterTypes:
     phases:
       - name: check
         prompt: ~/.critters/prompts/doc-check.md
-        model: haiku
+        model: sonnet
         maxTurns: 15
         tools: [Read, Glob, Grep, "Bash(ls:*)"]
     outcomes:
