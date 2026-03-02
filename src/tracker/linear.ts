@@ -168,6 +168,9 @@ export class LinearTracker implements IssueTracker {
     for (const h of uploadFile.headers) {
       headers[h.key] = h.value;
     }
+    if (!headers["content-type"] && !headers["Content-Type"]) {
+      headers["content-type"] = contentType;
+    }
 
     const resp = await fetch(uploadFile.uploadUrl, {
       method: "PUT",

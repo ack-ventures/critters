@@ -2,7 +2,7 @@ import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { STREAM_FILTER } from "./jq-filter.js";
 import { logTask, logTaskError, logTaskWarn } from "./logger.js";
 import type { SpawnResult } from "./types.js";
-import { formatDuration, runCommand, sleep } from "./utils.js";
+import { formatDuration, runCommand, shellEscape, sleep } from "./utils.js";
 
 // Rotating colors for critter panes — each critter gets a distinct look
 const PANE_COLORS = [
@@ -303,8 +303,4 @@ export async function spawnClaudeSubprocess(
   }
 
   return { exitCode, stdout: "", stderr, timedOut, numTurns, inputTokens, outputTokens, cacheReadTokens, costUsd };
-}
-
-function shellEscape(s: string): string {
-  return `'${s.replace(/'/g, "'\\''")}'`;
 }

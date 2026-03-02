@@ -88,6 +88,21 @@ describe("runHook", () => {
     expect(content).toBe("ABC-456|Test Title");
   });
 
+  test("logs stdout when non-empty", async () => {
+    const originalLog = console.log;
+    const logs: string[] = [];
+    console.log = (...args: unknown[]) => {
+      logs.push(args.map(String).join(" "));
+    };
+    try {
+      runHook("test", "echo hello-world", {}, "TST-3");
+      await sleep(500);
+      expect(logs.some((l) => l.includes("Hook test output: hello-world"))).toBe(true);
+    } finally {
+      console.log = originalLog;
+    }
+  });
+
   test("kills process after timeout", async () => {
     const outFile = join(tempDir, "timeout.txt");
     // sleep 60 should be killed by the 30s timeout

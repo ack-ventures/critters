@@ -1,0 +1,21 @@
+# Critters per-repo configuration
+# This file is read by the critters daemon after cloning this repo.
+# All fields are optional — omit or leave empty to use daemon defaults.
+
+# Extra tools the critter is allowed to use (merged with daemon defaults)
+# extraAllowedTools:
+#   - "Bash(python:*)"
+#   - "Bash(pip:*)"
+
+# Custom prompt appended to the planning phase
+# planningPrompt: |
+#   Follow the patterns in src/utils/ for new utilities.
+#   Always add tests in __tests__/.
+
+# Custom prompt appended to the execution phase
+# executionPrompt: |
+#   Run `npm test` before committing.
+
+# Custom prompt appended to the review phase
+# reviewPrompt: |
+#   Pay extra attention to SQL injection risks.

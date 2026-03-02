@@ -216,7 +216,7 @@ export class UnifiedSpawner {
         const lsRemote = await runCommand("git", ["ls-remote", "--heads", "origin", branch], { cwd: workDir });
         if (lsRemote.code === 0 && lsRemote.stdout.trim().length > 0) {
           logTask(task.identifier, `Branch ${branch} exists remotely, checking out for resume`);
-          const fetchResult = await runCommand("git", ["fetch", "origin", branch], { cwd: workDir });
+          const fetchResult = await runCommand("git", ["fetch", "origin", `${branch}:refs/remotes/origin/${branch}`], { cwd: workDir });
           if (fetchResult.code !== 0) {
             throw new Error(`Failed to fetch existing branch: ${fetchResult.stderr}`);
           }

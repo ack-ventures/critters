@@ -54,7 +54,14 @@ export function getRecentMetrics(n: number): MetricEvent[] {
   try {
     const content = readFileSync(metricsFile, "utf-8");
     const lines = content.split("\n").filter(Boolean);
-    return lines.slice(-n).map((line) => JSON.parse(line) as MetricEvent);
+    return lines.slice(-n).flatMap((line) => {
+      try {
+        return [JSON.parse(line) as MetricEvent];
+      } catch {
+        logError(`Skipping corrupted metric line: ${line.slice(0, 100)}`);
+        return [];
+      }
+    });
   } catch {
     return [];
   }
