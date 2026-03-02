@@ -160,7 +160,7 @@ export class Spawner {
       if (lsRemote.code === 0 && lsRemote.stdout.trim().length > 0) {
         // Branch exists remotely — check it out for resume
         logTask(task.identifier, `Branch ${branch} exists remotely, checking out for resume`);
-        const fetchResult = await runCommand("git", ["fetch", "origin", branch], { cwd: workDir });
+        const fetchResult = await runCommand("git", ["fetch", "origin", `${branch}:refs/remotes/origin/${branch}`], { cwd: workDir });
         if (fetchResult.code !== 0) {
           throw new Error(`Failed to fetch existing branch: ${fetchResult.stderr}`);
         }
