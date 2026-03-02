@@ -14,7 +14,7 @@ export function runHook(
     log(`Running hook ${hookName}: ${command}`);
   }
 
-  exec(command, { env: { ...process.env, ...env }, timeout: 30_000 }, (error, _stdout, stderr) => {
+  exec(command, { env: { ...process.env, ...env }, timeout: 30_000 }, (error, stdout, stderr) => {
     if (error) {
       const msg = `Hook ${hookName} failed: ${error.message}`;
       if (identifier) {
@@ -28,6 +28,15 @@ export function runHook(
         logTaskWarn(identifier, msg);
       } else {
         log(`WARN: ${msg}`);
+      }
+    }
+
+    if (stdout && stdout.trim()) {
+      const msg = `Hook ${hookName} output: ${stdout.trim()}`;
+      if (identifier) {
+        logTask(identifier, msg);
+      } else {
+        log(msg);
       }
     }
   });
