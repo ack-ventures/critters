@@ -25,7 +25,7 @@ import { Watcher } from "./watcher.js";
 
 const subcommand = Bun.argv[2];
 
-if (subcommand === "version") {
+if (subcommand === "version" || subcommand === "--version") {
   await fetchLatestVersion();
   console.log(`Critters ${getDisplayVersion()}`);
   process.exit(0);
