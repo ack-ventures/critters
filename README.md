@@ -131,6 +131,39 @@ For a critter to pick up a Linear issue, it needs:
 
 Optionally, assign the issue to the relevant Linear project and include implementation guidance in the description -- the critter reads it as its task spec.
 
+## Custom critter types
+
+Beyond the built-in create and review flows, you can define custom critter types in `critters.config.yaml`. Each type gets its own trigger label, phase pipeline, model, tools, and outcome statuses.
+
+```yaml
+critterTypes:
+  code-audit:
+    trigger: { label: "Code Audit", status: "Todo", statusType: "unstarted" }
+    repo: { clone: true }
+    phases:
+      - name: audit
+        prompt: ~/.critters/prompts/code-audit.md
+        model: sonnet
+        maxTurns: 20
+        tools: [Read, Glob, Grep, "Bash(git:*)", "Bash(ls:*)"]
+    outcomes:
+      success: { status: "Done", comment: true }
+      failure: { status: "Critter Failed", comment: true }
+    concurrency: 3
+    timeoutMinutes: 10
+```
+
+Custom types automatically:
+- Prompt Claude to write a `.critter-report.md` file
+- Upload the report as a `.md` attachment on the issue
+- Post the report as an inline comment
+
+Prompt files support `{{identifier}}`, `{{title}}`, `{{description}}`, and other variables. See [CLAUDE.md](CLAUDE.md) for the full reference.
+
+**Model guidance:** Use sonnet or opus for custom types. Haiku often ignores tool-use instructions and produces shallow output.
+
+If `critterTypes` is omitted from config, the daemon synthesizes the default `create` and `review` types from the flat config fields — fully backward compatible.
+
 ## Tips from usage
 
 - **Create a `/critter` slash command in Claude Code** to speed up ticket creation. Instead of manually formatting Linear issues, describe what you want and let Claude create the ticket with the right label, status, and `repo:` line. You can batch-create several at once.
