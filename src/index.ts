@@ -250,15 +250,21 @@ async function main() {
       }
     }
 
+    // Standard statuses like "Done", "In Progress", "In Review", "Todo" already exist in Linear.
+    // We only need to create custom ones that don't exist yet.
+    const standardStatuses = new Set(["Done", "In Progress", "In Review", "Todo", "Backlog", "Canceled", "Cancelled"]);
+
     for (const teamId of teamIds) {
       for (const statusName of statusesToEnsure) {
+        if (standardStatuses.has(statusName)) continue;
+        // Already exists in this team's cache — skip
+        if (teamCache[teamId]?.[statusName]) continue;
+
         const color = statusName.includes("Failed") ? "#EF4444"
           : statusName === "Human Review" ? "#F59E0B"
-          : undefined;
-        const type = statusName.includes("Failed") || statusName === "Human Review" ? "started" : undefined;
-        if (color && type) {
-          await tracker.ensureStatus(teamId, statusName, type, color);
-        }
+          : "#8B5CF6";
+        const type = statusName.includes("Failed") || statusName === "Human Review" ? "started" : "started";
+        await tracker.ensureStatus(teamId, statusName, type, color);
       }
     }
   }
