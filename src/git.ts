@@ -61,7 +61,14 @@ export async function hasCommitsOnBranch(workDir: string, branch: string, identi
 }
 
 export async function getDefaultBranch(workDir: string, identifier: string): Promise<string> {
-  const { stdout } = await runCommand("git", ["rev-parse", "--abbrev-ref", "origin/HEAD"], { cwd: workDir });
+  const { code, stdout } = await runCommand("git", ["rev-parse", "--abbrev-ref", "origin/HEAD"], { cwd: workDir });
+  if (code !== 0) {
+    logTaskWarn(
+      identifier,
+      "Could not detect default branch (origin/HEAD not set). Falling back to 'main'. Run 'git remote set-head origin --auto' in the repo to fix this.",
+    );
+    return "main";
+  }
   const branch = stdout.trim().replace("origin/", "");
   if (!branch) {
     logTaskWarn(identifier, "Could not detect default branch, falling back to 'main'");

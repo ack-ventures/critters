@@ -107,13 +107,11 @@ describe("getDefaultBranch", () => {
 		expect(branch).toBe("main");
 	});
 
-	test("returns HEAD when origin/HEAD is not set", async () => {
+	test("falls back to main when origin/HEAD is not set", async () => {
 		const dir = await cloneAndSetup();
 		execSync("git remote set-head origin -d", { cwd: dir, stdio: "ignore" });
 		const branch = await getDefaultBranch(dir, "test");
-		// git rev-parse --abbrev-ref origin/HEAD still outputs "origin/HEAD" to stdout
-		// even when the ref is deleted (exits non-zero), so the function returns "HEAD"
-		expect(branch).toBe("HEAD");
+		expect(branch).toBe("main");
 	});
 });
 
