@@ -144,11 +144,44 @@ critterTypes:
 - **sonnet**: Good for read-only analysis tasks — audits, triage, doc checks. Reliably follows the report-writing instruction. Good cost/quality tradeoff
 - **haiku**: Not recommended for critter types. It often ignores tool-use instructions (e.g., won't write `.critter-report.md`) and produces shallow analysis. Stick with sonnet as the minimum for custom types
 
+### Critter type config reference
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `trigger.label` | yes | — | Linear label that triggers this type |
+| `trigger.status` | yes | — | Linear status name to match (e.g., "Todo", "In Review") |
+| `trigger.statusType` | no | — | Linear status type to match (e.g., "unstarted"). More reliable than matching by name |
+| `repo.clone` | no | true | Whether to shallow clone the repo |
+| `repo.branch` | no | — | Whether to create a feature branch (needed for PR-creating types) |
+| `phases` | yes | — | Array of phases to run sequentially (at least one) |
+| `phases[].name` | yes | — | Phase name (used in logs, tmux pane titles, output filenames) |
+| `phases[].prompt` | yes | — | `builtin:planning`, `builtin:execution`, `builtin:review`, or a file path (`~` expanded) |
+| `phases[].model` | yes | — | Claude model: `opus`, `sonnet`, or `haiku` |
+| `phases[].maxTurns` | yes | — | Max Claude API round-trips for this phase |
+| `phases[].tools` | no | `default` | `readonly`, `default`, `review`, or explicit array of tool names |
+| `outcomes.success` | no | — | Status to set on success. `comment: true` is now implicit for custom types |
+| `outcomes.failure` | no | — | Status to set on failure |
+| `outcomes.merged` | no | — | Status to set when a PR is merged (review type) |
+| `outcomes.needsChanges` | no | — | Status to set when changes are requested (review type) |
+| `concurrency` | no | 2 | Max parallel instances of this type |
+| `timeoutMinutes` | no | 30 | Total timeout for all phases |
+| `enrichment` | no | — | `extractPrUrl` to extract PR URL from issue comments (for review types) |
+
 ### Phases
 
 Each type defines one or more phases. Built-in prompts (`builtin:planning`, `builtin:execution`, `builtin:review`) use dedicated runners with battle-tested logic. Custom prompts use the generic runner.
 
 Tool presets: `readonly` (planning tools), `default` (execution tools from config), `review` (review tools), or an explicit array of tool names.
+
+### Testing custom types
+
+Use `--dry-run` to verify the daemon picks up the right issues for each type without actually running them:
+
+```
+bun run src/index.ts --config test-configs/custom-types.yaml --dry-run
+```
+
+A sample config with multiple custom types lives at `test-configs/custom-types.yaml`. Prompt templates for testing are at `~/.critters/prompts/`.
 
 ## Config (`critters.config.yaml`)
 
