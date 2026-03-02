@@ -346,31 +346,30 @@ export class UnifiedSpawner {
       const successOutcome = critterType.outcomes.success;
       if (successOutcome) {
         await this.tracker.updateStatus(task.id, successOutcome.status, task.groupId);
-        if (successOutcome.comment) {
-          // Get the last phase's response text
-          const lastPhaseData = phaseDataList.length > 0 ? phaseDataList[phaseDataList.length - 1] : null;
-          const responseText = lastPhaseData?.responseText as string | undefined;
-          if (responseText) {
-            // Upload as a .md attachment so the full output is preserved
-            const filename = `${task.identifier}-${critterType.name}.md`;
-            const mdContent = `# ${task.identifier}: ${task.title}\n\n**Type**: ${critterType.name}\n**Duration**: ${totalDuration}\n\n---\n\n${responseText}`;
-            const url = await this.tracker.uploadAttachment(
-              task.id, filename, Buffer.from(mdContent), "text/markdown", task.identifier,
-            );
+      }
 
-            // Also post the response as a comment for inline visibility
-            const MAX_COMMENT_LENGTH = 10000;
-            let comment = responseText.length > MAX_COMMENT_LENGTH
-              ? `${responseText.slice(0, MAX_COMMENT_LENGTH)}\n\n*(truncated)*`
-              : responseText;
-            if (url) {
-              comment += `\n\n[Full report](${url})`;
-            }
-            await this.tracker.comment(task.id, comment);
-          } else {
-            await this.tracker.comment(task.id, `Critter [${critterType.name}] completed in ${totalDuration}`);
-          }
+      // Upload report from the last phase (generic runner writes .critter-report.md)
+      const lastPhaseData = phaseDataList.length > 0 ? phaseDataList[phaseDataList.length - 1] : null;
+      const responseText = lastPhaseData?.responseText as string | undefined;
+      if (responseText) {
+        // Upload as a .md attachment
+        const filename = `${task.identifier}-${critterType.name}.md`;
+        const mdContent = `# ${task.identifier}: ${task.title}\n\n**Type**: ${critterType.name}  \n**Duration**: ${totalDuration}\n\n---\n\n${responseText}`;
+        const url = await this.tracker.uploadAttachment(
+          task.id, filename, Buffer.from(mdContent), "text/markdown", task.identifier,
+        );
+
+        // Post as inline comment too
+        const MAX_COMMENT_LENGTH = 10000;
+        let comment = responseText.length > MAX_COMMENT_LENGTH
+          ? `${responseText.slice(0, MAX_COMMENT_LENGTH)}\n\n*(truncated)*`
+          : responseText;
+        if (url) {
+          comment += `\n\n[Full report](${url})`;
         }
+        await this.tracker.comment(task.id, comment);
+      } else {
+        await this.tracker.comment(task.id, `Critter [${critterType.name}] completed in ${totalDuration}`);
       }
 
       const totalCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);

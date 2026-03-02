@@ -5,66 +5,42 @@ import { buildPromptVars, resolvePrompt, resolveTools } from "../prompt-template
 import { tailLines } from "../utils.js";
 import type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
 
-/**
- * Extract the final response text from a stream-json output file.
- * Looks for the `result` event first, then falls back to the last
- * `assistant` message.
- */
-export function extractResponseText(jsonLogFile: string): string | null {
-  if (!existsSync(jsonLogFile)) return null;
+const REPORT_FILE = ".critter-report.md";
 
-  try {
-    const content = readFileSync(jsonLogFile, "utf-8");
-    const lines = content.trim().split("\n").filter(Boolean);
+const REPORT_INSTRUCTION = `
 
-    // Search from the end — the result event is last
-    for (let i = lines.length - 1; i >= 0; i--) {
-      try {
-        const obj = JSON.parse(lines[i]);
-
-        if (obj.type === "result" && typeof obj.result === "string") {
-          return obj.result;
-        }
-
-        if (obj.type === "assistant") {
-          if (typeof obj.message?.content === "string") {
-            return obj.message.content;
-          }
-          if (Array.isArray(obj.message?.content)) {
-            const text = obj.message.content
-              .filter((b: { type: string }) => b.type === "text")
-              .map((b: { text: string }) => b.text)
-              .join("\n");
-            if (text) return text;
-          }
-        }
-      } catch {
-        continue;
-      }
-    }
-  } catch {
-    // File read or parse error
-  }
-
-  return null;
-}
+## Report Output
+You MUST write your final report/output to the file \`.critter-report.md\` in the repo root using the Write tool.
+This file will be automatically posted to the issue when you're done.
+Do not skip this step — if you don't write the file, your work won't be visible.`;
 
 /**
  * Generic phase runner for user-defined custom critter types.
- * Loads prompt from file, resolves tools, spawns Claude, returns result.
- * Extracts Claude's final response text for posting as a comment.
+ *
+ * Automatically:
+ * - Appends a standard instruction telling Claude to write `.critter-report.md`
+ * - Ensures `Write` is in the allowed tools list
+ * - Reads the report file after completion and returns it as `responseText`
  */
 export class GenericPhaseRunner implements PhaseRunner {
   async run(ctx: PhaseContext): Promise<PhaseResult> {
     const { task, config, workDir, branch, phase, repoConfig, signal } = ctx;
 
     const vars = buildPromptVars(task, workDir, branch);
-    const prompt = resolvePrompt(phase.prompt, vars);
+    let prompt = resolvePrompt(phase.prompt, vars);
     if (prompt === null) {
       throw new Error(`Prompt "${phase.prompt}" resolved to null — builtin prompts should use dedicated runners`);
     }
 
+    // Append report instruction so Claude knows to write the file
+    prompt += REPORT_INSTRUCTION;
+
+    // Ensure Write is available so Claude can create the report file
     const allowedTools = resolveTools(phase.tools, config, task, repoConfig);
+    if (!allowedTools.includes("Write")) {
+      allowedTools.push("Write");
+    }
+
     logTask(task.identifier, `Phase ${phase.name} allowed tools: ${allowedTools.join(", ")}`);
 
     const spawn = config.noTmux
@@ -101,11 +77,14 @@ export class GenericPhaseRunner implements PhaseRunner {
       throw new Error(`Phase ${phase.name} failed (exit ${spawn.exitCode}):\n${errTail}`);
     }
 
-    // Extract Claude's final response from the stream-json log
-    const jsonLogFile = `${workDir}/.critter-output-${phase.name}.json`;
-    const responseText = extractResponseText(jsonLogFile);
-    if (!responseText) {
-      logTaskWarn(task.identifier, `Could not extract response text from ${phase.name} output`);
+    // Read the report file that Claude was instructed to write
+    const reportPath = `${workDir}/${REPORT_FILE}`;
+    let responseText: string | null = null;
+    if (existsSync(reportPath)) {
+      responseText = readFileSync(reportPath, "utf-8");
+      logTask(task.identifier, `Report file found: ${REPORT_FILE} (${responseText.length} chars)`);
+    } else {
+      logTaskWarn(task.identifier, `No ${REPORT_FILE} found — Claude may not have written the report`);
     }
 
     return { spawn, data: { responseText } };
