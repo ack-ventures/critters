@@ -283,6 +283,7 @@ export class UnifiedSpawner {
 
       // Run phases sequentially
       const phaseResults: SpawnResult[] = [];
+      const phaseDataList: Record<string, unknown>[] = [];
       for (const phase of critterType.phases) {
         if (critterType.name === "create") {
           await this.tracker.comment(task.id, `${phase.name === "planning" ? "Planning" : "Plan approved, executing"}...`);
@@ -306,6 +307,7 @@ export class UnifiedSpawner {
 
         const phaseResult = await runner.run(ctx);
         phaseResults.push(phaseResult.spawn);
+        phaseDataList.push(phaseResult.data);
 
         const phaseDuration = Date.now() - phaseStart;
         const phaseStats = `${phase.name} completed in ${formatDuration(phaseDuration)}${formatPhaseStats(phaseResult.spawn)}`;
@@ -345,7 +347,29 @@ export class UnifiedSpawner {
       if (successOutcome) {
         await this.tracker.updateStatus(task.id, successOutcome.status, task.groupId);
         if (successOutcome.comment) {
-          await this.tracker.comment(task.id, `Critter [${critterType.name}] completed in ${totalDuration}`);
+          // Get the last phase's response text
+          const lastPhaseData = phaseDataList.length > 0 ? phaseDataList[phaseDataList.length - 1] : null;
+          const responseText = lastPhaseData?.responseText as string | undefined;
+          if (responseText) {
+            // Upload as a .md attachment so the full output is preserved
+            const filename = `${task.identifier}-${critterType.name}.md`;
+            const mdContent = `# ${task.identifier}: ${task.title}\n\n**Type**: ${critterType.name}\n**Duration**: ${totalDuration}\n\n---\n\n${responseText}`;
+            const url = await this.tracker.uploadAttachment(
+              task.id, filename, Buffer.from(mdContent), "text/markdown", task.identifier,
+            );
+
+            // Also post the response as a comment for inline visibility
+            const MAX_COMMENT_LENGTH = 10000;
+            let comment = responseText.length > MAX_COMMENT_LENGTH
+              ? `${responseText.slice(0, MAX_COMMENT_LENGTH)}\n\n*(truncated)*`
+              : responseText;
+            if (url) {
+              comment += `\n\n[Full report](${url})`;
+            }
+            await this.tracker.comment(task.id, comment);
+          } else {
+            await this.tracker.comment(task.id, `Critter [${critterType.name}] completed in ${totalDuration}`);
+          }
         }
       }
 
