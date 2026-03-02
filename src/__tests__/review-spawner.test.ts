@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
-import { parseReviewOutcome } from "../review-spawner.js";
+import { parseReviewOutcome } from "../runner/review.js";
 import { createTempDir } from "./helpers.js";
 
 let tempDir: string;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { extractPrFromComments } from "../review-watcher.js";
+import { extractPrFromComments } from "../unified-watcher.js";
 
 describe("extractPrFromComments", () => {
   test("extracts URL from 'PR created: <url>'", () => {

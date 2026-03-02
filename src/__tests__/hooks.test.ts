@@ -43,6 +43,8 @@ function makeConfig(hooks?: Config["hooks"]): Config {
     healthPort: 0,
     linearApiKey: "test-key",
     hooks,
+    provider: "linear",
+    critterTypes: [],
   };
 }
 

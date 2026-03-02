@@ -8,18 +8,17 @@ import { loadConfig } from "./config.js";
 import { startHealthServer } from "./health.js";
 import { runInit } from "./init.js";
 import { runInitRepo } from "./init-repo.js";
-import { ensureCritterFailedStatus, ensureHumanReviewStatus, ensureLabel, initLinear, loadTeamStatuses } from "./linear.js";
+import { initLinear } from "./linear.js";
 import { initFileLogging, log, logError } from "./logger.js";
 import { initMetrics } from "./metrics.js";
 import { checkPrerequisites } from "./prerequisites.js";
-import { ReviewSpawner } from "./review-spawner.js";
-import { ReviewWatcher } from "./review-watcher.js";
-import { Spawner } from "./spawner.js";
 import { runStatus } from "./status.js";
+import { createTracker } from "./tracker/index.js";
+import { UnifiedSpawner } from "./unified-spawner.js";
+import { UnifiedWatcher } from "./unified-watcher.js";
 import { checkForUpdate, fetchLatestVersion, getDisplayVersion } from "./updater.js";
 import { formatDuration, runCommand } from "./utils.js";
 import { VERSION } from "./version.js";
-import { Watcher } from "./watcher.js";
 
 // ── Subcommand routing ──────────────────────────────────────────────────────
 
@@ -167,20 +166,24 @@ async function main() {
     await fetchLatestVersion();
   }
 
+  // Create issue tracker
+  const tracker = createTracker({
+    type: config.provider,
+    apiKey: config.linearApiKey,
+  });
+
+  // Also init the legacy Linear module for backward compat (used by retry, etc.)
+  initLinear(config);
+
   if (dryRun) {
     log(`Critters ${getDisplayVersion()} — dry run`);
-    initLinear(config);
-    await loadTeamStatuses();
+    await tracker.init();
 
-    const watcher = new Watcher(config, null);
-    const reviewWatcher = new ReviewWatcher(config, null);
-
-    const critterSummary = await watcher.dryRunPoll();
-    const reviewSummary = await reviewWatcher.dryRunPoll();
+    const watcher = new UnifiedWatcher(config, tracker, null);
+    const summary = await watcher.dryRunPoll();
 
     log("");
-    log(`Dry run complete: ${critterSummary.total} critter issues found, ${critterSummary.wouldPickUp} would be picked up, ${critterSummary.blocked} blocked, ${critterSummary.skipped} skipped (no repo)`);
-    log(`Review: ${reviewSummary.total} review issues found, ${reviewSummary.wouldPickUp} would be picked up, ${reviewSummary.skipped} skipped`);
+    log(`Dry run complete: ${summary.total} issues found, ${summary.wouldPickUp} would be picked up, ${summary.blocked} blocked, ${summary.skipped} skipped (no repo)`);
     process.exit(0);
   }
 
@@ -218,51 +221,74 @@ async function main() {
     await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-style", "fg=colour240"]).catch(() => {});
     await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-active-border-style", "fg=colour39"]).catch(() => {});
   }
-  log(`Config loaded: concurrency=${config.concurrency}, timeout=${config.timeoutMinutes}min, poll=${config.pollIntervalSeconds}s, noTmux=${noTmux}`);
+
+  // Log critter types
+  const typesSummary = config.critterTypes.map((ct) => `${ct.name}(${ct.concurrency})`).join(", ");
+  log(`Config loaded: types=[${typesSummary}], poll=${config.pollIntervalSeconds}s, noTmux=${noTmux}`);
   initMetrics();
 
-  // Init Linear client
-  initLinear(config);
-  log("Connected to Linear");
+  // Init tracker
+  await tracker.init();
 
-  // Auto-create labels
-  await ensureLabel(config.triggerLabel);
-  await ensureLabel(config.reviewTriggerLabel);
+  // Ensure labels for all configured types
+  for (const ct of config.critterTypes) {
+    await tracker.ensureLabel(ct.trigger.label);
+  }
 
-  // Load team statuses + ensure required workflow states exist
-  let teamStatuses = await loadTeamStatuses();
-  teamStatuses = await ensureCritterFailedStatus(teamStatuses);
-  teamStatuses = await ensureHumanReviewStatus(teamStatuses);
+  // Ensure required workflow statuses across all teams.
+  // The tracker loaded team statuses during init(). We use the LinearTracker's
+  // cache to find all team IDs and ensure the needed statuses.
+  const { LinearTracker } = await import("./tracker/linear.js");
+  if (tracker instanceof LinearTracker) {
+    const teamCache = tracker.getTeamStatusCache();
+    const teamIds = Object.keys(teamCache);
 
-  // Create spawner + cleanup stale work dirs
-  const spawner = new Spawner(config, teamStatuses);
+    // Collect all outcome statuses that need creation
+    const statusesToEnsure = new Set<string>();
+    for (const ct of config.critterTypes) {
+      for (const outcome of Object.values(ct.outcomes)) {
+        if (outcome.status) statusesToEnsure.add(outcome.status);
+      }
+    }
+
+    for (const teamId of teamIds) {
+      for (const statusName of statusesToEnsure) {
+        const color = statusName.includes("Failed") ? "#EF4444"
+          : statusName === "Human Review" ? "#F59E0B"
+          : undefined;
+        const type = statusName.includes("Failed") || statusName === "Human Review" ? "started" : undefined;
+        if (color && type) {
+          await tracker.ensureStatus(teamId, statusName, type, color);
+        }
+      }
+    }
+  }
+
+  // Create unified spawner + cleanup stale work dirs
+  const spawner = new UnifiedSpawner(config, tracker);
   spawner.cleanupStale();
   spawner.startPeriodicCleanup();
   log("Cleaned up stale work directories");
 
-  // Create review spawner
-  const reviewSpawner = new ReviewSpawner(config, teamStatuses);
-
   let lastPollAt: string | null = null;
   const updatePollTime = () => { lastPollAt = new Date().toISOString(); };
 
-  // Create watchers
-  const watcher = new Watcher(config, spawner, updatePollTime);
-  const reviewWatcher = new ReviewWatcher(config, reviewSpawner, updatePollTime);
+  // Create unified watcher
+  const watcher = new UnifiedWatcher(config, tracker, spawner, updatePollTime);
 
-  // Start health server (after watchers so trigger callbacks can reference them)
+  // Start health server
   let healthServer: { stop: () => void } | null = null;
   if (config.healthPort !== 0) {
     const metricsPath = join(homedir(), ".critters", "metrics.jsonl");
     healthServer = startHealthServer(config.healthPort, () => ({
-      activeCritters: spawner.getActiveCount(),
-      queuedCritters: spawner.getQueueSize(),
-      activeReviews: reviewSpawner.getActiveCount(),
-      queuedReviews: reviewSpawner.getQueueSize(),
+      activeCritters: spawner.getActiveCount("create"),
+      queuedCritters: spawner.getQueueSize("create"),
+      activeReviews: spawner.getActiveCount("review"),
+      queuedReviews: spawner.getQueueSize("review"),
       lastPollAt,
     }), metricsPath, {
       triggerPoll: () => watcher.triggerPoll(),
-      triggerReviewPoll: () => reviewWatcher.triggerPoll(),
+      triggerReviewPoll: () => watcher.triggerPoll(), // unified watcher handles both
     });
   }
 
@@ -271,14 +297,17 @@ async function main() {
   if (!noTmux) {
     titleInterval = setInterval(() => {
       const uptime = formatDuration(Date.now() - startTime);
-      const active = spawner.getActiveCount() + reviewSpawner.getActiveCount();
+      const active = spawner.getActiveCount();
       const title = `Critters ${getDisplayVersion()} | up ${uptime} | ${active} active`;
       runCommand("tmux", ["select-pane", "-t", mainPaneId!, "-T", title]).catch(() => {});
     }, 10_000);
     titleInterval.unref();
   }
 
-  log(`Review config: concurrency=${config.reviewConcurrency}, timeout=${config.reviewTimeoutMinutes}min, model=${config.reviewModel}`);
+  // Log type configs
+  for (const ct of config.critterTypes) {
+    log(`Type "${ct.name}": concurrency=${ct.concurrency}, timeout=${ct.timeoutMinutes}min, phases=${ct.phases.map((p) => p.name).join("→")}`);
+  }
 
   // Signal handlers
   const shutdown = () => {
@@ -286,7 +315,6 @@ async function main() {
     if (titleInterval) clearInterval(titleInterval);
     healthServer?.stop();
     watcher.stop();
-    reviewWatcher.stop();
     // Give running tasks a moment to clean up
     setTimeout(() => {
       log("Exiting");
@@ -297,8 +325,8 @@ async function main() {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  // Start watching (both run concurrently)
-  await Promise.all([watcher.start(), reviewWatcher.start()]);
+  // Start watching
+  await watcher.start();
 }
 
 main().catch((err) => {

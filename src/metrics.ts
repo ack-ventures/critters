@@ -26,6 +26,7 @@ export type MetricEvent = {
   prUrl?: string;
   outcome?: string;
   error?: string;
+  critterType?: string;
 };
 
 let metricsFile: string | null = null;

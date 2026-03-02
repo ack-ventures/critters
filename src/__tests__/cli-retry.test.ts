@@ -6,6 +6,7 @@ const mockCreateComment = mock(() => Promise.resolve({}));
 const mockIssues = mock(() => Promise.resolve({ nodes: [] as any[] }));
 
 mock.module("@linear/sdk", () => ({
+  // biome-ignore lint/complexity/useArrowFunction: must be a regular function for `new` to work
   LinearClient: function () {
     return {
       issues: mockIssues,

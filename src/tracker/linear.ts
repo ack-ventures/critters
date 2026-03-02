@@ -1,0 +1,251 @@
+import { LinearClient } from "@linear/sdk";
+import type { TriggerConfig } from "../critter-type.js";
+import { log, logError, logTaskError } from "../logger.js";
+import { withRetry } from "../retry.js";
+import type { IssueTracker, TrackerTask } from "./types.js";
+
+const MAX_PAGINATED_ISSUES = 200;
+
+async function fetchAllNodes<T>(connection: {
+  nodes: T[];
+  pageInfo: { hasNextPage: boolean };
+  fetchNext(): Promise<unknown>;
+}): Promise<T[]> {
+  while (connection.pageInfo.hasNextPage && connection.nodes.length < MAX_PAGINATED_ISSUES) {
+    await connection.fetchNext();
+  }
+  if (connection.nodes.length >= MAX_PAGINATED_ISSUES) {
+    log(`Warning: hit pagination cap of ${MAX_PAGINATED_ISSUES} issues — some issues may be skipped`);
+  }
+  return connection.nodes;
+}
+
+export class LinearTracker implements IssueTracker {
+  readonly provider = "linear";
+  private client: LinearClient;
+  private teamStatusCache: Record<string, Record<string, string>> = {};
+
+  constructor(apiKey: string) {
+    this.client = new LinearClient({ apiKey });
+  }
+
+  getClient(): LinearClient {
+    return this.client;
+  }
+
+  async init(): Promise<void> {
+    await this.loadTeamStatuses();
+    log("Connected to Linear");
+  }
+
+  private async loadTeamStatuses(): Promise<void> {
+    const teams = await this.client.teams();
+    for (const team of teams.nodes) {
+      const states = await team.states();
+      const map: Record<string, string> = {};
+      for (const state of states.nodes) {
+        map[state.name] = state.id;
+      }
+      this.teamStatusCache[team.id] = map;
+      log(`Loaded ${states.nodes.length} statuses for team ${team.name} (${team.key})`);
+    }
+  }
+
+  async findIssues(trigger: TriggerConfig): Promise<TrackerTask[]> {
+    return withRetry(
+      async () => {
+        // Build filter based on trigger config
+        const stateFilter = trigger.statusType
+          ? { type: { eq: trigger.statusType } }
+          : { name: { eq: trigger.status } };
+
+        const issueConnection = await this.client.issues({
+          filter: {
+            labels: { some: { name: { eq: trigger.label } } },
+            state: stateFilter,
+          },
+        });
+        const allIssues = await fetchAllNodes(issueConnection);
+
+        const tasks: TrackerTask[] = [];
+        for (const issue of allIssues) {
+          const team = await issue.team;
+          const project = await issue.project;
+          if (!team) continue;
+
+          // Fetch blockers via inverse relations
+          const relations = await issue.inverseRelations();
+          const blockedBy: { identifier: string; status: string }[] = [];
+
+          for (const relation of relations.nodes) {
+            if (relation.type === "blocks") {
+              const blocker = await relation.issue;
+              if (!blocker) continue;
+              const blockerState = await blocker.state;
+              if (!blockerState) continue;
+              if (blockerState.type !== "completed" && blockerState.type !== "canceled") {
+                blockedBy.push({
+                  identifier: blocker.identifier,
+                  status: blockerState.name,
+                });
+              }
+            }
+          }
+
+          // Gather labels
+          const issueLabels = await issue.labels();
+          const labelNames = issueLabels.nodes.map((l) => l.name);
+
+          tasks.push({
+            id: issue.id,
+            identifier: issue.identifier,
+            title: issue.title,
+            description: issue.description ?? "",
+            repoUrl: "",
+            group: team.name,
+            groupId: team.id,
+            projectId: project?.id,
+            labels: labelNames,
+            ...(blockedBy.length > 0 ? { blockedBy } : {}),
+          });
+        }
+
+        return tasks;
+      },
+      {
+        maxRetries: 3,
+        baseDelayMs: 2000,
+        onRetry: (_error, attempt, delayMs) => {
+          log(`findIssues failed, retrying in ${Math.round(delayMs)}ms... (attempt ${attempt + 1}/3)`);
+        },
+      },
+    );
+  }
+
+  async updateStatus(taskId: string, statusName: string, groupId: string): Promise<void> {
+    const statusId = this.teamStatusCache[groupId]?.[statusName];
+    if (!statusId) {
+      logError(`Status "${statusName}" not found for group ${groupId}`);
+      return;
+    }
+    await this.client.updateIssue(taskId, { stateId: statusId });
+  }
+
+  async comment(taskId: string, body: string): Promise<void> {
+    await this.client.createComment({ issueId: taskId, body });
+  }
+
+  async getComments(taskId: string): Promise<string[]> {
+    const issue = await this.client.issue(taskId);
+    const comments = await issue.comments();
+    return comments.nodes.map((c) => c.body);
+  }
+
+  async uploadAttachment(
+    taskId: string,
+    filename: string,
+    content: Buffer,
+    contentType: string,
+    identifier?: string,
+  ): Promise<string | null> {
+    const logErr = identifier
+      ? (msg: string) => logTaskError(identifier, msg)
+      : (msg: string) => logError(msg);
+
+    const payload = await this.client.fileUpload(contentType, filename, content.length).catch((err: unknown) => {
+      logErr(`fileUpload() failed for ${filename}: ${err}`);
+      return null;
+    });
+    if (!payload) return null;
+
+    const uploadFile = payload.uploadFile;
+    if (!uploadFile) {
+      logErr(`File upload failed: no uploadFile in payload for ${filename}`);
+      return null;
+    }
+
+    const headers: Record<string, string> = {};
+    for (const h of uploadFile.headers) {
+      headers[h.key] = h.value;
+    }
+
+    const resp = await fetch(uploadFile.uploadUrl, {
+      method: "PUT",
+      headers,
+      body: new Uint8Array(content),
+    }).catch((err: unknown) => {
+      logErr(`PUT upload failed for ${filename}: ${err}`);
+      return null;
+    });
+    if (!resp) return null;
+
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      logErr(`PUT upload failed for ${filename}: HTTP ${resp.status} ${resp.statusText}${body ? ` — ${body}` : ""}`);
+      return null;
+    }
+
+    const attachment = await this.client.createAttachment({
+      issueId: taskId,
+      url: uploadFile.assetUrl,
+      title: filename,
+    }).catch((err: unknown) => {
+      logErr(`createAttachment() failed for ${filename}: ${err}`);
+      return null;
+    });
+    if (!attachment) return null;
+
+    return uploadFile.assetUrl;
+  }
+
+  async ensureStatus(groupId: string, name: string, type = "started", color = "#EF4444"): Promise<void> {
+    if (this.teamStatusCache[groupId]?.[name]) return;
+
+    // Find the team to get its name for logging
+    const teams = await this.client.teams();
+    const team = teams.nodes.find((t) => t.id === groupId);
+    const teamName = team?.name ?? groupId;
+
+    log(`Creating "${name}" status for team ${teamName}...`);
+    const result = await this.client.createWorkflowState({
+      teamId: groupId,
+      name,
+      type,
+      color,
+    });
+    const state = await result.workflowState;
+    if (state) {
+      if (!this.teamStatusCache[groupId]) this.teamStatusCache[groupId] = {};
+      this.teamStatusCache[groupId][name] = state.id;
+      log(`Created "${name}" status for team ${teamName}`);
+    }
+  }
+
+  async ensureLabel(labelName: string): Promise<void> {
+    const labels = await this.client.issueLabels({
+      filter: { name: { eq: labelName } },
+    });
+
+    if (labels.nodes.length > 0) {
+      log(`Label "${labelName}" already exists`);
+      return;
+    }
+
+    log(`Creating label "${labelName}"...`);
+    const result = await this.client.createIssueLabel({
+      name: labelName,
+      color: "#8B5CF6",
+    });
+    const label = await result.issueLabel;
+    if (!label) throw new Error(`Failed to create label "${labelName}"`);
+    log(`Created label "${labelName}" (${label.id})`);
+  }
+
+  /**
+   * Get the internal team status cache. Used by callers that need raw status IDs
+   * (e.g. for backward-compat paths).
+   */
+  getTeamStatusCache(): Record<string, Record<string, string>> {
+    return this.teamStatusCache;
+  }
+}

@@ -7,6 +7,7 @@ const mockClient = {
 };
 
 mock.module("@linear/sdk", () => ({
+  // biome-ignore lint/complexity/useArrowFunction: must be a regular function for `new` to work
   LinearClient: function () {
     return mockClient;
   },

@@ -1,3 +1,5 @@
+import type { CritterTypeConfig } from "./critter-type.js";
+
 export interface CritterTask {
   issueId: string;
   identifier: string;
@@ -46,6 +48,8 @@ export interface Config {
     onMerged?: string;
     onNeedsChanges?: string;
   };
+  provider: "linear" | "jira";
+  critterTypes: CritterTypeConfig[];
 }
 
 export interface TeamStatusMap {

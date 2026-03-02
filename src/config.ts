@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { parse as parseYaml } from "yaml";
+import { type CritterTypeConfig, parseCritterType, synthesizeDefaultTypes, validateCritterType } from "./critter-type.js";
 import type { Config, RepoConfig } from "./types.js";
 
 function validateWorkDir(workDir: string): void {
@@ -108,6 +109,8 @@ export function loadConfig(configPath?: string): Config {
   mkdirSync(workDir, { recursive: true });
   const resolvedWorkDir = realpathSync(workDir);
 
+  const provider = ((yaml.provider as string) ?? "linear") as "linear" | "jira";
+
   const config: Config = {
     pollIntervalSeconds: (yaml.pollIntervalSeconds as number) ?? 30,
     concurrency: (yaml.concurrency as number) ?? 2,
@@ -133,7 +136,12 @@ export function loadConfig(configPath?: string): Config {
     linearApiKey,
     slackWebhookUrl,
     hooks,
+    provider,
+    critterTypes: [], // populated below
   };
+
+  // Parse critterTypes from YAML, or synthesize from flat config
+  config.critterTypes = parseCritterTypes(yaml, config);
 
   validateConfig(config);
   return config;
@@ -158,6 +166,28 @@ export function loadWorkDir(configPath?: string): string {
     return realpathSync(workDir);
   }
   return workDir;
+}
+
+function parseCritterTypes(yaml: Record<string, unknown>, config: Config): CritterTypeConfig[] {
+  const rawTypes = yaml.critterTypes as Record<string, Record<string, unknown>> | undefined;
+
+  if (!rawTypes || typeof rawTypes !== "object") {
+    // No critterTypes in YAML — synthesize from flat config fields
+    return synthesizeDefaultTypes(config);
+  }
+
+  const types: CritterTypeConfig[] = [];
+  for (const [name, raw] of Object.entries(rawTypes)) {
+    const ct = parseCritterType(name, raw);
+    validateCritterType(ct);
+    types.push(ct);
+  }
+
+  if (types.length === 0) {
+    throw new Error("critterTypes is defined but empty — must have at least one type");
+  }
+
+  return types;
 }
 
 const GIT_URL_RE = /^(git@[\w.-]+:[\w./-]+\.git|https?:\/\/[\w.-]+\/[\w./-]+\.git)$/;

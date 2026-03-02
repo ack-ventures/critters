@@ -397,6 +397,8 @@ describe("src/prompt.ts", () => {
       maxLogSizeMb: 10,
       healthPort: 3847,
       linearApiKey: "test",
+      provider: "linear",
+      critterTypes: [],
     };
 
     test("from description (highest priority)", () => {
