@@ -66,3 +66,7 @@ export function formatPhaseStats(result: { numTurns?: number; inputTokens?: numb
   const cost = result.costUsd != null ? `, $${result.costUsd.toFixed(2)}` : "";
   return ` (${result.numTurns} turns${tokens}${cost})`;
 }
+
+export function shellEscape(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}

@@ -17,7 +17,7 @@ import { ReviewWatcher } from "./review-watcher.js";
 import { Spawner } from "./spawner.js";
 import { runStatus } from "./status.js";
 import { checkForUpdate, fetchLatestVersion, getDisplayVersion } from "./updater.js";
-import { formatDuration, runCommand } from "./utils.js";
+import { formatDuration, runCommand, shellEscape } from "./utils.js";
 import { VERSION } from "./version.js";
 import { Watcher } from "./watcher.js";
 
@@ -119,11 +119,10 @@ async function main() {
 
   // Auto-launch inside tmux if not already there
   if (!noTmux && !dryRun && !process.env.TMUX) {
-    const esc = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
     const args = process.argv.slice(1).filter((a) => !a.startsWith("/$bunfs/"));
     // Pass caller's PATH through so the re-launched binary inside tmux can
     // find tools like git, gh, claude even if the tmux server has a minimal PATH.
-    const cmd = `env PATH=${esc(process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin")} ${[process.execPath, ...args].map(esc).join(" ")}`;
+    const cmd = `env PATH=${shellEscape(process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin")} ${[process.execPath, ...args].map(shellEscape).join(" ")}`;
     const session = "critters";
 
     const result = spawnSync("tmux", ["new-session", "-A", "-s", session, cmd], { stdio: "inherit" });
