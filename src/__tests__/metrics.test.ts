@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getRecentMetrics, initMetrics, recordMetric } from "../metrics.js";
 import { createTempDir } from "./helpers.js";
@@ -117,5 +117,20 @@ describe("getRecentMetrics", () => {
     expect(recent).toHaveLength(2);
     expect(recent[0].issueId).toBe("Y-1");
     expect(recent[1].issueId).toBe("Y-2");
+  });
+
+  test("skips corrupted lines and returns valid entries", () => {
+    const file = join(tempDir, "metrics.jsonl");
+    initMetrics(file);
+
+    recordMetric({ timestamp: "", event: "task_started", issueId: "Z-1" });
+    // Append a corrupted line directly to the file
+    appendFileSync(file, "this is not valid json\n");
+    recordMetric({ timestamp: "", event: "task_completed", issueId: "Z-2" });
+
+    const recent = getRecentMetrics(10);
+    expect(recent).toHaveLength(2);
+    expect(recent[0].issueId).toBe("Z-1");
+    expect(recent[1].issueId).toBe("Z-2");
   });
 });
