@@ -1,4 +1,4 @@
-import { type HealthStatus } from "./health.js";
+import type { HealthStatus } from "./health.js";
 import { getRecentMetrics, type MetricEvent } from "./metrics.js";
 import { getDisplayVersion } from "./updater.js";
 import { formatDuration } from "./utils.js";
@@ -87,7 +87,7 @@ function computeDailyStats(metrics: MetricEvent[], days: number): DayStat[] {
 
 function niceMax(value: number, isCost: boolean): number {
   if (value <= 0) return 1;
-  const magnitude = Math.pow(10, Math.floor(Math.log10(value)));
+  const magnitude = 10 ** Math.floor(Math.log10(value));
   const steps = isCost
     ? [1, 2, 2.5, 3, 4, 5, 6, 7, 7.5, 8, 10]
     : [1, 2, 2.5, 5, 10];
@@ -388,6 +388,7 @@ ${dailyStats
         <thead>
           <tr>
             <th>Issue</th>
+            <th>Type</th>
             <th>Status</th>
             <th>Duration</th>
             <th>Cost</th>
@@ -396,9 +397,10 @@ ${dailyStats
           </tr>
         </thead>
         <tbody>
-${recentActivity.length === 0 ? '          <tr><td colspan="6" style="text-align:center;color:var(--text-dim);">No activity yet</td></tr>' : recentActivity
+${recentActivity.length === 0 ? '          <tr><td colspan="7" style="text-align:center;color:var(--text-dim);">No activity yet</td></tr>' : recentActivity
   .map((m) => {
     const id = escapeHtml(m.identifier ?? m.issueId ?? "\u2014");
+    const typeName = escapeHtml(m.critterType ?? (m.event.startsWith("review_") ? "review" : "create"));
     const isReview = m.event === "review_completed" || m.event === "review_failed";
     const isOk = m.event === "task_completed" || m.event === "review_completed";
     const statusClass = isOk ? "status-ok" : "status-fail";
@@ -413,6 +415,7 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="6" style="text-align
     const when = formatDate(m.timestamp);
     return `          <tr>
             <td>${id}</td>
+            <td>${typeName}</td>
             <td class="${statusClass}">${statusText}</td>
             <td>${dur}</td>
             <td>${cost}</td>

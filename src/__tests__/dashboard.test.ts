@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { renderDashboard } from "../dashboard.js";
-import { type HealthStatus } from "../health.js";
+import type { HealthStatus } from "../health.js";
 import { initMetrics, recordMetric } from "../metrics.js";
 import { createTempDir } from "./helpers.js";
 

@@ -1,0 +1,286 @@
+import { describe, expect, test } from "bun:test";
+import {
+  type CritterTypeConfig,
+  parseCritterType,
+  synthesizeDefaultTypes,
+  validateCritterType,
+} from "../critter-type.js";
+import type { Config } from "../types.js";
+
+function baseConfig(overrides?: Partial<Config>): Config {
+  return {
+    pollIntervalSeconds: 120,
+    concurrency: 2,
+    timeoutMinutes: 30,
+    workDir: "/tmp/critters-work",
+    triggerLabel: "Critter",
+    maxPlanningTurns: 50,
+    maxExecutionTurns: 75,
+    defaultAllowedTools: ["Read"],
+    repos: {},
+    teamRepos: {},
+    tmuxSession: "critters",
+    noTmux: false,
+    planningModel: "opus",
+    executionModel: "opus",
+    reviewTriggerLabel: "Critter Review",
+    reviewModel: "opus",
+    reviewConcurrency: 2,
+    reviewTimeoutMinutes: 15,
+    maxReviewTurns: 30,
+    maxLogSizeMb: 10,
+    healthPort: 3847,
+    linearApiKey: "test-key",
+    provider: "linear",
+    critterTypes: [],
+    ...overrides,
+  };
+}
+
+describe("synthesizeDefaultTypes", () => {
+  test("produces create and review types", () => {
+    const config = baseConfig();
+    const types = synthesizeDefaultTypes(config);
+
+    expect(types).toHaveLength(2);
+    expect(types[0].name).toBe("create");
+    expect(types[1].name).toBe("review");
+  });
+
+  test("create type uses flat config values", () => {
+    const config = baseConfig({
+      triggerLabel: "MyLabel",
+      concurrency: 5,
+      timeoutMinutes: 45,
+      planningModel: "sonnet",
+      executionModel: "haiku",
+      maxPlanningTurns: 30,
+      maxExecutionTurns: 100,
+    });
+    const types = synthesizeDefaultTypes(config);
+    const create = types[0];
+
+    expect(create.trigger.label).toBe("MyLabel");
+    expect(create.trigger.status).toBe("Todo");
+    expect(create.trigger.statusType).toBe("unstarted");
+    expect(create.concurrency).toBe(5);
+    expect(create.timeoutMinutes).toBe(45);
+    expect(create.repo).toEqual({ clone: true, branch: true });
+    expect(create.phases).toHaveLength(2);
+    expect(create.phases[0].model).toBe("sonnet");
+    expect(create.phases[0].maxTurns).toBe(30);
+    expect(create.phases[1].model).toBe("haiku");
+    expect(create.phases[1].maxTurns).toBe(100);
+    expect(create.outcomes.success.status).toBe("In Review");
+    expect(create.outcomes.failure.status).toBe("Critter Failed");
+  });
+
+  test("review type uses flat config values", () => {
+    const config = baseConfig({
+      reviewTriggerLabel: "Review Me",
+      reviewConcurrency: 4,
+      reviewTimeoutMinutes: 20,
+      reviewModel: "sonnet",
+      maxReviewTurns: 50,
+    });
+    const types = synthesizeDefaultTypes(config);
+    const review = types[1];
+
+    expect(review.trigger.label).toBe("Review Me");
+    expect(review.trigger.status).toBe("In Review");
+    expect(review.concurrency).toBe(4);
+    expect(review.timeoutMinutes).toBe(20);
+    expect(review.phases).toHaveLength(1);
+    expect(review.phases[0].model).toBe("sonnet");
+    expect(review.phases[0].maxTurns).toBe(50);
+    expect(review.enrichment).toBe("extractPrUrl");
+    expect(review.outcomes.merged.status).toBe("Done");
+    expect(review.outcomes.needsChanges.status).toBe("Human Review");
+    expect(review.outcomes.failure.status).toBe("Critter Failed");
+  });
+
+  test("create type phases use builtin prompts", () => {
+    const types = synthesizeDefaultTypes(baseConfig());
+    expect(types[0].phases[0].prompt).toBe("builtin:planning");
+    expect(types[0].phases[0].tools).toBe("readonly");
+    expect(types[0].phases[1].prompt).toBe("builtin:execution");
+    expect(types[0].phases[1].tools).toBe("default");
+  });
+
+  test("review type phase uses builtin prompt", () => {
+    const types = synthesizeDefaultTypes(baseConfig());
+    expect(types[1].phases[0].prompt).toBe("builtin:review");
+    expect(types[1].phases[0].tools).toBe("review");
+  });
+});
+
+describe("parseCritterType", () => {
+  test("parses a valid custom type", () => {
+    const raw = {
+      trigger: { label: "Audit", status: "Todo" },
+      repo: { clone: true },
+      phases: [
+        { name: "audit", prompt: "~/.critters/prompts/audit.md", model: "sonnet", maxTurns: 20, tools: ["Read", "Glob"] },
+      ],
+      outcomes: {
+        success: { status: "Done", comment: true },
+        failure: { status: "Failed" },
+      },
+      concurrency: 3,
+      timeoutMinutes: 10,
+    };
+
+    const ct = parseCritterType("code-audit", raw);
+    expect(ct.name).toBe("code-audit");
+    expect(ct.trigger.label).toBe("Audit");
+    expect(ct.trigger.status).toBe("Todo");
+    expect(ct.repo.clone).toBe(true);
+    expect(ct.repo.branch).toBeUndefined();
+    expect(ct.phases).toHaveLength(1);
+    expect(ct.phases[0].name).toBe("audit");
+    expect(ct.phases[0].tools).toEqual(["Read", "Glob"]);
+    expect(ct.outcomes.success).toEqual({ status: "Done", comment: true });
+    expect(ct.outcomes.failure).toEqual({ status: "Failed", comment: undefined });
+    expect(ct.concurrency).toBe(3);
+    expect(ct.timeoutMinutes).toBe(10);
+  });
+
+  test("defaults repo to { clone: true } when not specified", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5 }],
+      outcomes: { success: { status: "Done" } },
+    };
+    const ct = parseCritterType("test", raw);
+    expect(ct.repo.clone).toBe(true);
+  });
+
+  test("defaults concurrency and timeout", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5 }],
+      outcomes: { success: { status: "Done" } },
+    };
+    const ct = parseCritterType("test", raw);
+    expect(ct.concurrency).toBe(2);
+    expect(ct.timeoutMinutes).toBe(30);
+  });
+
+  test("defaults tools to 'default' when not specified", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5 }],
+      outcomes: { success: { status: "Done" } },
+    };
+    const ct = parseCritterType("test", raw);
+    expect(ct.phases[0].tools).toBe("default");
+  });
+
+  test("throws when trigger is missing", () => {
+    const raw = {
+      phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5 }],
+      outcomes: { success: { status: "Done" } },
+    };
+    expect(() => parseCritterType("test", raw as any)).toThrow("missing trigger");
+  });
+
+  test("throws when phases is empty", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [],
+      outcomes: { success: { status: "Done" } },
+    };
+    expect(() => parseCritterType("test", raw)).toThrow("at least one phase");
+  });
+
+  test("throws when outcomes is missing", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5 }],
+    };
+    expect(() => parseCritterType("test", raw as any)).toThrow("missing outcomes");
+  });
+
+  test("parses multi-phase type", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [
+        { name: "analyze", prompt: "a.md", model: "sonnet", maxTurns: 10, tools: "readonly" },
+        { name: "fix", prompt: "b.md", model: "opus", maxTurns: 30, tools: "default" },
+      ],
+      outcomes: { success: { status: "Done" }, failure: { status: "Failed" } },
+    };
+    const ct = parseCritterType("multi", raw);
+    expect(ct.phases).toHaveLength(2);
+    expect(ct.phases[0].name).toBe("analyze");
+    expect(ct.phases[0].tools).toBe("readonly");
+    expect(ct.phases[1].name).toBe("fix");
+    expect(ct.phases[1].tools).toBe("default");
+  });
+
+  test("preserves enrichment field", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5 }],
+      outcomes: { success: { status: "Done" } },
+      enrichment: "extractPrUrl",
+    };
+    const ct = parseCritterType("test", raw);
+    expect(ct.enrichment).toBe("extractPrUrl");
+  });
+});
+
+describe("validateCritterType", () => {
+  function validType(overrides?: Partial<CritterTypeConfig>): CritterTypeConfig {
+    return {
+      name: "test",
+      trigger: { label: "X", status: "Y" },
+      repo: { clone: true },
+      phases: [{ name: "p", prompt: "f.md", model: "opus", maxTurns: 10, tools: "default" }],
+      outcomes: { success: { status: "Done" } },
+      concurrency: 2,
+      timeoutMinutes: 30,
+      ...overrides,
+    };
+  }
+
+  test("accepts a valid type", () => {
+    expect(() => validateCritterType(validType())).not.toThrow();
+  });
+
+  test("rejects empty name", () => {
+    expect(() => validateCritterType(validType({ name: "" }))).toThrow("must have a name");
+  });
+
+  test("rejects missing trigger label", () => {
+    expect(() => validateCritterType(validType({ trigger: { label: "", status: "Y" } }))).toThrow("trigger must have label and status");
+  });
+
+  test("rejects missing trigger status", () => {
+    expect(() => validateCritterType(validType({ trigger: { label: "X", status: "" } }))).toThrow("trigger must have label and status");
+  });
+
+  test("rejects zero phases", () => {
+    expect(() => validateCritterType(validType({ phases: [] }))).toThrow("at least one phase");
+  });
+
+  test("rejects concurrency < 1", () => {
+    expect(() => validateCritterType(validType({ concurrency: 0 }))).toThrow("concurrency must be >= 1");
+  });
+
+  test("rejects timeoutMinutes <= 0", () => {
+    expect(() => validateCritterType(validType({ timeoutMinutes: 0 }))).toThrow("timeoutMinutes must be > 0");
+  });
+
+  test("rejects phase with maxTurns <= 0", () => {
+    expect(() => validateCritterType(validType({
+      phases: [{ name: "p", prompt: "f.md", model: "opus", maxTurns: 0, tools: "default" }],
+    }))).toThrow("invalid phase config");
+  });
+
+  test("rejects phase with empty name", () => {
+    expect(() => validateCritterType(validType({
+      phases: [{ name: "", prompt: "f.md", model: "opus", maxTurns: 10, tools: "default" }],
+    }))).toThrow("invalid phase config");
+  });
+});

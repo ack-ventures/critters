@@ -1,0 +1,115 @@
+# Test config with custom critter types
+# Usage: bun run src/index.ts --config test-configs/custom-types.yaml --dry-run
+#
+# This config defines the built-in create/review types explicitly,
+# plus three custom read-only types for testing the generic runner.
+
+pollIntervalSeconds: 120
+workDir: /tmp/critters-work
+tmuxSession: critters
+healthPort: 3847
+
+defaultAllowedTools:
+  - "Read"
+  - "Write"
+  - "Edit"
+  - "Glob"
+  - "Grep"
+  - "Bash(git:*)"
+  - "Bash(gh:*)"
+  - "Bash(bun:*)"
+  - "Bash(npm:*)"
+  - "Bash(npx:*)"
+  - "Bash(node:*)"
+  - "Bash(tsc:*)"
+  - "Bash(ls:*)"
+  - "Bash(mkdir:*)"
+  - "Bash(cat:*)"
+
+critterTypes:
+  # Built-in create type (explicit — should behave identically to synthesized)
+  create:
+    trigger: { label: "Critter", status: "Todo", statusType: "unstarted" }
+    repo: { clone: true, branch: true }
+    phases:
+      - name: planning
+        prompt: builtin:planning
+        model: opus
+        maxTurns: 50
+        tools: readonly
+      - name: execution
+        prompt: builtin:execution
+        model: opus
+        maxTurns: 75
+        tools: default
+    outcomes:
+      success: { status: "In Review" }
+      failure: { status: "Critter Failed" }
+    concurrency: 2
+    timeoutMinutes: 30
+
+  # Built-in review type (explicit)
+  review:
+    trigger: { label: "Critter Review", status: "In Review" }
+    repo: { clone: true }
+    phases:
+      - name: review
+        prompt: builtin:review
+        model: opus
+        maxTurns: 30
+        tools: review
+    outcomes:
+      merged: { status: "Done" }
+      needsChanges: { status: "Human Review" }
+      failure: { status: "Critter Failed" }
+    concurrency: 2
+    timeoutMinutes: 15
+    enrichment: extractPrUrl
+
+  # Custom: code audit (read-only, posts comment)
+  code-audit:
+    trigger: { label: "Code Audit", status: "Todo", statusType: "unstarted" }
+    repo: { clone: true }
+    phases:
+      - name: audit
+        prompt: ~/.critters/prompts/code-audit.md
+        model: sonnet
+        maxTurns: 20
+        tools: [Read, Glob, Grep, "Bash(git:*)", "Bash(ls:*)"]
+    outcomes:
+      success: { status: "Done", comment: true }
+      failure: { status: "Critter Failed", comment: true }
+    concurrency: 3
+    timeoutMinutes: 10
+
+  # Custom: debug triage (read-only, posts comment)
+  debug-triage:
+    trigger: { label: "Triage", status: "Todo", statusType: "unstarted" }
+    repo: { clone: true }
+    phases:
+      - name: triage
+        prompt: ~/.critters/prompts/debug-triage.md
+        model: sonnet
+        maxTurns: 25
+        tools: [Read, Glob, Grep, "Bash(git:*)", "Bash(ls:*)", "Bash(cat:*)"]
+    outcomes:
+      success: { status: "Triaged", comment: true }
+      failure: { status: "Triage Failed", comment: true }
+    concurrency: 3
+    timeoutMinutes: 10
+
+  # Custom: doc check (read-only, posts comment)
+  doc-check:
+    trigger: { label: "Doc Check", status: "Todo", statusType: "unstarted" }
+    repo: { clone: true }
+    phases:
+      - name: check
+        prompt: ~/.critters/prompts/doc-check.md
+        model: sonnet
+        maxTurns: 15
+        tools: [Read, Glob, Grep, "Bash(ls:*)"]
+    outcomes:
+      success: { status: "Done", comment: true }
+      failure: { status: "Critter Failed", comment: true }
+    concurrency: 5
+    timeoutMinutes: 5

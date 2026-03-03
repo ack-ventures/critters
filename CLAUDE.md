@@ -105,6 +105,84 @@ The review watcher picks up matching issues and dispatches a review critter that
 
 Status flow: "In Review" → "Done" (merged) | "Human Review" (needs changes) | "Critter Failed" (error)
 
+## Custom Critter Types
+
+The `critterTypes` config section lets you define custom agent types beyond the built-in `create` and `review`. Each type has its own trigger, phase pipeline, tools, concurrency, and outcomes.
+
+If `critterTypes` is omitted, the daemon synthesizes the default `create` and `review` types from the flat config fields (full backward compatibility).
+
+### Example: read-only audit type
+
+```yaml
+critterTypes:
+  code-audit:
+    trigger: { label: "Code Audit", status: "Todo", statusType: "unstarted" }
+    repo: { clone: true }
+    phases:
+      - name: audit
+        prompt: ~/.critters/prompts/code-audit.md
+        model: sonnet
+        maxTurns: 20
+        tools: [Read, Glob, Grep, "Bash(git:*)", "Bash(ls:*)"]
+    outcomes:
+      success: { status: "Done", comment: true }
+      failure: { status: "Critter Failed", comment: true }
+    concurrency: 3
+    timeoutMinutes: 10
+```
+
+### Custom type behavior
+
+- **Prompt files** support `{{var}}` substitution: `{{identifier}}`, `{{title}}`, `{{description}}`, `{{branch}}`, `{{repoUrl}}`, `{{workDir}}`, `{{group}}`, `{{groupId}}`
+- The generic runner automatically appends an instruction for Claude to write `.critter-report.md` and adds `Write` to the allowed tools
+- On completion, the report is uploaded as a `.md` attachment and posted as an inline comment on the issue
+- If Claude doesn't write the file (can happen with weaker models), the runner falls back to extracting text from the stream-json output
+
+### Model guidance
+
+- **opus**: Best for complex tasks — planning, execution, code review. Use for anything that modifies code or needs multi-step reasoning
+- **sonnet**: Good for read-only analysis tasks — audits, triage, doc checks. Reliably follows the report-writing instruction. Good cost/quality tradeoff
+- **haiku**: Not recommended for critter types. It often ignores tool-use instructions (e.g., won't write `.critter-report.md`) and produces shallow analysis. Stick with sonnet as the minimum for custom types
+
+### Critter type config reference
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `trigger.label` | yes | — | Linear label that triggers this type |
+| `trigger.status` | yes | — | Linear status name to match (e.g., "Todo", "In Review") |
+| `trigger.statusType` | no | — | Linear status type to match (e.g., "unstarted"). More reliable than matching by name |
+| `repo.clone` | no | true | Whether to shallow clone the repo |
+| `repo.branch` | no | — | Whether to create a feature branch (needed for PR-creating types) |
+| `phases` | yes | — | Array of phases to run sequentially (at least one) |
+| `phases[].name` | yes | — | Phase name (used in logs, tmux pane titles, output filenames) |
+| `phases[].prompt` | yes | — | `builtin:planning`, `builtin:execution`, `builtin:review`, or a file path (`~` expanded) |
+| `phases[].model` | yes | — | Claude model: `opus`, `sonnet`, or `haiku` |
+| `phases[].maxTurns` | yes | — | Max Claude API round-trips for this phase |
+| `phases[].tools` | no | `default` | `readonly`, `default`, `review`, or explicit array of tool names |
+| `outcomes.success` | no | — | Status to set on success. `comment: true` is now implicit for custom types |
+| `outcomes.failure` | no | — | Status to set on failure |
+| `outcomes.merged` | no | — | Status to set when a PR is merged (review type) |
+| `outcomes.needsChanges` | no | — | Status to set when changes are requested (review type) |
+| `concurrency` | no | 2 | Max parallel instances of this type |
+| `timeoutMinutes` | no | 30 | Total timeout for all phases |
+| `enrichment` | no | — | `extractPrUrl` to extract PR URL from issue comments (for review types) |
+
+### Phases
+
+Each type defines one or more phases. Built-in prompts (`builtin:planning`, `builtin:execution`, `builtin:review`) use dedicated runners with battle-tested logic. Custom prompts use the generic runner.
+
+Tool presets: `readonly` (planning tools), `default` (execution tools from config), `review` (review tools), or an explicit array of tool names.
+
+### Testing custom types
+
+Use `--dry-run` to verify the daemon picks up the right issues for each type without actually running them:
+
+```
+bun run src/index.ts --config test-configs/custom-types.yaml --dry-run
+```
+
+A sample config with multiple custom types lives at `test-configs/custom-types.yaml`. Prompt templates for testing are at `~/.critters/prompts/`.
+
 ## Config (`critters.config.yaml`)
 
 | Field | Default | Description |
@@ -151,18 +229,26 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 | File | Purpose |
 |---|---|
 | `src/index.ts` | Entry point, wiring, signal handlers |
-| `src/watcher.ts` | Poll loop, dedup, dispatch |
-| `src/spawner.ts` | Queue, lifecycle, PR detection |
+| `src/unified-watcher.ts` | Single poll loop for all critter types, per-type dedup |
+| `src/unified-spawner.ts` | Per-type queues, common lifecycle, phase pipeline execution |
+| `src/critter-type.ts` | CritterTypeConfig definitions, synthesizeDefaultTypes(), parsing |
+| `src/tracker/types.ts` | IssueTracker interface, TrackerTask, ProviderConfig |
+| `src/tracker/linear.ts` | LinearTracker class (wraps Linear SDK) |
+| `src/tracker/index.ts` | createTracker() factory |
+| `src/runner/types.ts` | PhaseRunner interface, PhaseContext, PhaseResult |
+| `src/runner/planning.ts` | PlanningPhaseRunner (plan + reviewer subagent loop) |
+| `src/runner/execution.ts` | ExecutionPhaseRunner (implement, commit, push, PR) |
+| `src/runner/review.ts` | ReviewPhaseRunner (review diff, approve/merge) |
+| `src/runner/generic.ts` | GenericPhaseRunner (custom types, writes .critter-report.md) |
+| `src/runner/index.ts` | Runner registry (builtin → dedicated runner, else → generic) |
+| `src/prompt-template.ts` | resolvePrompt(), resolveTools(), variable substitution |
 | `src/claude.ts` | tmux pane spawning, stream-json piping |
 | `src/prompt.ts` | Build planning/execution prompts, parse repo URL |
-| `src/linear.ts` | Linear SDK wrapper (issues, statuses, comments) |
-| `src/git.ts` | Clone, branch, commit, cleanup |
-| `src/stream-filter.jq` | jq filter for pretty-printing stream-json |
-| `src/config.ts` | Load YAML + env |
-| `src/logger.ts` | Timestamped console logging |
+| `src/linear.ts` | Linear SDK wrapper (legacy, used by CLI commands) |
 | `src/review-prompt.ts` | Build review prompt, review allowed tools |
-| `src/review-spawner.ts` | Review queue, lifecycle, outcome parsing |
-| `src/review-watcher.ts` | Review poll loop, PR URL extraction |
+| `src/git.ts` | Clone, branch, commit, cleanup |
+| `src/config.ts` | Load YAML + env, parse critterTypes |
+| `src/logger.ts` | Timestamped console logging |
 | `src/slack.ts` | Webhook notifications |
 | `src/dashboard.ts` | Web dashboard HTML rendering |
 | `src/health.ts` | HTTP health/dashboard/metrics server |
