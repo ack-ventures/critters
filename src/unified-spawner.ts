@@ -29,7 +29,7 @@ import {
 } from "./slack.js";
 import type { IssueTracker, TrackerTask } from "./tracker/types.js";
 import type { Config, SpawnResult } from "./types.js";
-import { branchName, formatDuration, formatPhaseStats, runCommand, tailLines } from "./utils.js";
+import { branchName, extractOwnerRepo, formatDuration, formatPhaseStats, runCommand, tailLines } from "./utils.js";
 
 interface QueuedTask {
   task: TrackerTask;
@@ -406,7 +406,7 @@ export class UnifiedSpawner {
       // Salvage partial progress (for create type)
       let salvageInfo = "";
       if (critterType.name === "create" && critterType.repo.branch && branch) {
-        const salvage = await salvagePartialProgress(workDir, branch, task.identifier, task.title);
+        const salvage = await salvagePartialProgress(workDir, branch, task.identifier, task.title, task.repoUrl);
         if (salvage.prUrl) {
           salvageInfo = `\n\nPartial progress was saved as a draft PR: ${salvage.prUrl}`;
           logTask(task.identifier, `Salvaged partial progress — draft PR: ${salvage.prUrl}`);
@@ -709,8 +709,11 @@ export async function salvagePartialProgress(
   branch: string,
   identifier: string,
   title: string,
+  repoUrl?: string,
 ): Promise<{ prUrl?: string; branchPushed?: boolean }> {
   try {
+    const ownerRepo = repoUrl ? extractOwnerRepo(repoUrl) : null;
+    const repoArgs = ownerRepo ? ["--repo", ownerRepo] : [];
     try {
       if (await hasUncommittedChanges(workDir)) {
         await autoCommit(workDir, identifier, `[${identifier}] Auto-commit in-progress work`);
@@ -726,7 +729,7 @@ export async function salvagePartialProgress(
     // Check if a PR already exists
     const listResult = await runCommand(
       "gh",
-      ["pr", "list", "--head", branch, "--json", "url", "--limit", "1"],
+      ["pr", "list", "--head", branch, "--json", "url", "--limit", "1", ...repoArgs],
       { cwd: workDir },
     );
     if (listResult.code === 0) {
@@ -755,6 +758,7 @@ export async function salvagePartialProgress(
         "--head", branch,
         "--title", `[${identifier}] ${title} (partial)`,
         "--body", "Critter failed mid-execution. See Linear issue for details.",
+        ...repoArgs,
       ],
       { cwd: workDir },
     );

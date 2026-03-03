@@ -9,6 +9,7 @@ import type { Config, CritterTask } from "../types.js";
 import { compareSemver } from "../updater.js";
 import {
   branchName,
+  extractOwnerRepo,
   formatDuration,
   formatPhaseStats,
   formatTokenCount,
@@ -211,6 +212,36 @@ describe("src/utils.ts", () => {
       expect(
         formatPhaseStats({ numTurns: 2, inputTokens: 500, outputTokens: 200 }),
       ).toBe(" (2 turns, 500 in / 200 out)");
+    });
+  });
+
+  describe("extractOwnerRepo", () => {
+    test("SSH URL", () => {
+      expect(extractOwnerRepo("git@github.com:org/repo.git")).toBe("org/repo");
+    });
+
+    test("HTTPS URL", () => {
+      expect(extractOwnerRepo("https://github.com/org/repo.git")).toBe("org/repo");
+    });
+
+    test("SSH without .git suffix", () => {
+      expect(extractOwnerRepo("git@github.com:org/repo")).toBe("org/repo");
+    });
+
+    test("HTTPS without .git suffix", () => {
+      expect(extractOwnerRepo("https://github.com/org/repo")).toBe("org/repo");
+    });
+
+    test("Bitbucket SSH", () => {
+      expect(extractOwnerRepo("git@bitbucket.org:team/project.git")).toBe("team/project");
+    });
+
+    test("invalid URL", () => {
+      expect(extractOwnerRepo("not-a-url")).toBeNull();
+    });
+
+    test("empty string", () => {
+      expect(extractOwnerRepo("")).toBeNull();
     });
   });
 

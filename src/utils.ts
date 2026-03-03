@@ -70,3 +70,23 @@ export function formatPhaseStats(result: { numTurns?: number; inputTokens?: numb
 export function shellEscape(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
 }
+
+/**
+ * Extract "owner/repo" from a git remote URL.
+ * Supports:
+ *   git@github.com:owner/repo.git
+ *   https://github.com/owner/repo.git
+ *   git@bitbucket.org:owner/repo.git
+ * Returns null if the URL doesn't match.
+ */
+export function extractOwnerRepo(repoUrl: string): string | null {
+  // SSH: git@host:owner/repo.git
+  const sshMatch = repoUrl.match(/^git@[^:]+:(.+?)(?:\.git)?$/);
+  if (sshMatch) return sshMatch[1];
+
+  // HTTPS: https://host/owner/repo.git
+  const httpsMatch = repoUrl.match(/^https?:\/\/[^/]+\/(.+?)(?:\.git)?$/);
+  if (httpsMatch) return httpsMatch[1];
+
+  return null;
+}
