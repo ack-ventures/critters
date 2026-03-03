@@ -70,6 +70,7 @@ export async function runStatus(): Promise<void> {
     queuedCritters: number;
     activeReviews: number;
     queuedReviews: number;
+    perType?: Record<string, { active: number; queued: number }>;
     lastPollAt: string | null;
   };
 
@@ -96,11 +97,21 @@ export async function runStatus(): Promise<void> {
   const uptimeStr = formatDuration(health.uptime * 1000);
   const lastPoll = formatLastPoll(health.lastPollAt);
 
+  let activeLines: string;
+  if (health.perType && Object.keys(health.perType).length > 0) {
+    activeLines = Object.entries(health.perType)
+      .map(([typeName, counts]) => {
+        const queueSuffix = counts.queued > 0 ? ` (${counts.queued} queued)` : "";
+        return `  ${typeName}: ${counts.active} active${queueSuffix}`;
+      })
+      .join("\n");
+  } else {
+    activeLines = `  critters: ${health.activeCritters} active (${health.queuedCritters} queued)\n  reviews:  ${health.activeReviews} active (${health.queuedReviews} queued)`;
+  }
+
   console.log(`Critters ${health.displayVersion ?? `v${health.version ?? VERSION}`} — running for ${uptimeStr}
 
-Active critters: ${health.activeCritters}/${config.concurrency}
-Active reviews:  ${health.activeReviews}/${config.reviewConcurrency}
-Queued: ${health.queuedCritters} critters, ${health.queuedReviews} reviews
+${activeLines}
 
 Last poll: ${lastPoll}
 ${metricsLine}`);

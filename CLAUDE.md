@@ -51,29 +51,24 @@ TypeScript daemon that watches Linear for issues labeled "Critter", spawns Claud
 ## Architecture
 
 ```
-Linear (issues with "Critter" label in "Todo")
+Linear (issues matching any critter type trigger)
     │  ← polls every 120s
     ▼
-  Watcher (src/watcher.ts)
-    │  → dedup by issue ID, resolve repo URL
+  UnifiedWatcher (src/unified-watcher.ts)
+    │  → per-type dedup, resolves repo URL
+    │  → type-specific enrichment (e.g., extractPrUrl for review)
     ▼
-  Spawner (src/spawner.ts) — max 2 concurrent
+  UnifiedSpawner (src/unified-spawner.ts) — per-type queues
     │  1. shallow clone → /tmp/critters-work/<ID>-<timestamp>
-    │  2. create branch critter/<ID>-<slug>
-    │  3. Phase 1: planning Claude (explores, writes plan, reviewer loop)
-    │  4. Phase 2: execution Claude (implements plan, commits, pushes, creates PR)
-    │  5. detect PR via `gh pr list`, update Linear → "In Review"
+    │  2. create branch (if type.repo.branch)
+    │  3. run phase pipeline sequentially
+    │  4. handle outcomes (status update, report upload, comment)
     ▼
-  ReviewWatcher (src/review-watcher.ts) — polls "Critter Review" label in "In Review"
-    │  → extracts PR URL from comments, dedup by issue ID
-    ▼
-  ReviewSpawner (src/review-spawner.ts) — max 2 concurrent
-    │  1. shallow clone, checkout PR branch
-    │  2. single Claude phase: review diff, approve/request changes
-    │  3. If approved + CI green → merge PR → "Done"
-    │  4. If needs changes or CI fails → "Human Review"
-    ▼
-  Human reviews (if needed)
+  Phase Runners (src/runner/)
+    ├─ PlanningPhaseRunner  (builtin:planning — plan + reviewer loop)
+    ├─ ExecutionPhaseRunner (builtin:execution — implement, commit, push, PR)
+    ├─ ReviewPhaseRunner    (builtin:review — review diff, approve/merge)
+    └─ GenericPhaseRunner   (custom prompts → .critter-report.md)
 ```
 
 Each phase runs `claude -p` with `--output-format stream-json` in a tmux pane. Output is piped through `jq` using `src/stream-filter.jq` for readable display.
@@ -89,7 +84,7 @@ Optional but recommended:
 - **Project**: assign to the relevant Linear project
 - Put implementation guidance in the description — the critter reads it as its task spec
 
-The watcher picks up matching issues every 120 seconds. Once picked up, status moves to "In Progress" → "In Review" (on PR) or "Critter Failed" (on error).
+The unified watcher picks up matching issues every 120 seconds. Once picked up, status moves to "In Progress" → "In Review" (on PR) or "Critter Failed" (on error).
 
 ## Creating review tickets
 
@@ -98,7 +93,7 @@ To trigger an automated review of a critter's PR:
 - **Status**: "In Review"
 - The issue must have a comment containing `PR created: <url>` (created automatically by the create critter)
 
-The review watcher picks up matching issues and dispatches a review critter that:
+The unified watcher picks up matching issues and dispatches a review critter that:
 1. Checks out the PR branch and reviews the diff
 2. If the code looks good: approves, waits for CI, and merges (squash)
 3. If the code needs changes: requests changes on the PR and moves the issue to "Human Review"

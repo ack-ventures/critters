@@ -290,7 +290,21 @@ export function renderDashboard(metricsPath: string, status: HealthStatus): stri
   <div class="active-section">
     <h2>Active Critters</h2>
     <div class="active-grid">
+${Object.keys(status.perType).length > 0
+  ? Object.entries(status.perType)
+      .map(([typeName, counts]) => {
+        const label = escapeHtml(typeName);
+        return `      <div class="active-card">
+        <div class="count">${counts.active}</div>
+        <div class="label">Active ${label}</div>
+      </div>
       <div class="active-card">
+        <div class="count">${counts.queued}</div>
+        <div class="label">Queued ${label}</div>
+      </div>`;
+      })
+      .join("\n")
+  : `      <div class="active-card">
         <div class="count">${status.activeCritters}</div>
         <div class="label">Active Tasks</div>
       </div>
@@ -305,7 +319,7 @@ export function renderDashboard(metricsPath: string, status: HealthStatus): stri
       <div class="active-card">
         <div class="count">${status.queuedReviews}</div>
         <div class="label">Queued Reviews</div>
-      </div>
+      </div>`}
     </div>
   </div>
 

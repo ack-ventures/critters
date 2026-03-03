@@ -9,6 +9,7 @@ export interface HealthStatus {
   queuedCritters: number;
   activeReviews: number;
   queuedReviews: number;
+  perType: Record<string, { active: number; queued: number }>;
   lastPollAt: string | null;
 }
 
@@ -39,6 +40,7 @@ export function startHealthServer(
           queuedCritters: status.queuedCritters,
           activeReviews: status.activeReviews,
           queuedReviews: status.queuedReviews,
+          perType: status.perType,
           lastPollAt: status.lastPollAt,
           metrics: computeMetricsSummary(),
         });

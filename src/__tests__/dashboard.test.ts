@@ -14,6 +14,7 @@ function defaultStatus(): HealthStatus {
     queuedCritters: 0,
     activeReviews: 0,
     queuedReviews: 0,
+    perType: {},
     lastPollAt: null,
   };
 }
@@ -75,19 +76,35 @@ describe("renderDashboard", () => {
     expect(html).toContain("Failed");
   });
 
-  test("shows active critters section", () => {
+  test("shows active critters section with per-type cards", () => {
     const status: HealthStatus = {
       activeCritters: 2,
       queuedCritters: 1,
       activeReviews: 3,
       queuedReviews: 0,
+      perType: { create: { active: 2, queued: 1 }, review: { active: 3, queued: 0 } },
       lastPollAt: null,
     };
     const html = renderDashboard("", status);
-    // Check active critters count appears
     expect(html).toContain(">2<");
     expect(html).toContain(">1<");
     expect(html).toContain(">3<");
+    expect(html).toContain("Active create");
+    expect(html).toContain("Queued create");
+    expect(html).toContain("Active review");
+    expect(html).toContain("Queued review");
+  });
+
+  test("falls back to flat fields when perType is empty", () => {
+    const status: HealthStatus = {
+      activeCritters: 1,
+      queuedCritters: 2,
+      activeReviews: 0,
+      queuedReviews: 0,
+      perType: {},
+      lastPollAt: null,
+    };
+    const html = renderDashboard("", status);
     expect(html).toContain("Active Tasks");
     expect(html).toContain("Queued Tasks");
   });
