@@ -307,6 +307,33 @@ export function renderDashboard(metricsPath: string, status: HealthStatus): stri
         <div class="label">Queued Reviews</div>
       </div>
     </div>
+${status.activeCritterDetails.length > 0 ? `
+    <div class="table-wrap" style="margin-top: 12px;">
+      <table>
+        <thead>
+          <tr>
+            <th>Identifier</th>
+            <th>Phase</th>
+            <th>Repo</th>
+            <th>Branch</th>
+            <th>Elapsed</th>
+          </tr>
+        </thead>
+        <tbody>
+${status.activeCritterDetails.map((d) => {
+  const elapsed = fmtDuration(Date.now() - d.startedAt);
+  const phaseLabel = d.phase === "plan" ? "Planning" : d.phase === "exec" ? "Execution" : "Review";
+  return `          <tr>
+            <td>${escapeHtml(d.identifier)}</td>
+            <td>${phaseLabel}</td>
+            <td>${escapeHtml(d.repo)}</td>
+            <td><code>${escapeHtml(d.branch)}</code></td>
+            <td>${elapsed}</td>
+          </tr>`;
+}).join("\n")}
+        </tbody>
+      </table>
+    </div>` : ""}
   </div>
 
   <div class="charts">

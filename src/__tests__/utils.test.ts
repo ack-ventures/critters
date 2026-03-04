@@ -13,6 +13,7 @@ import {
   formatDuration,
   formatPhaseStats,
   formatTokenCount,
+  shortRepoName,
   slugify,
   tailLines,
 } from "../utils.js";
@@ -274,6 +275,24 @@ describe("src/utils.ts", () => {
     test("trailing newline", () => {
       // "a\nb\n" splits to ["a","b",""], last 2 → ["b",""] → "b\n"
       expect(tailLines("a\nb\n", 2)).toBe("b\n");
+    });
+  });
+
+  describe("shortRepoName", () => {
+    test("extracts org/repo from SSH URL", () => {
+      expect(shortRepoName("git@github.com:org/repo.git")).toBe("org/repo");
+    });
+    test("extracts org/repo from SSH URL without .git", () => {
+      expect(shortRepoName("git@github.com:org/repo")).toBe("org/repo");
+    });
+    test("extracts org/repo from HTTPS URL", () => {
+      expect(shortRepoName("https://github.com/org/repo.git")).toBe("org/repo");
+    });
+    test("extracts org/repo from HTTPS URL without .git", () => {
+      expect(shortRepoName("https://github.com/org/repo")).toBe("org/repo");
+    });
+    test("returns input as-is for unrecognized format", () => {
+      expect(shortRepoName("something")).toBe("something");
     });
   });
 });

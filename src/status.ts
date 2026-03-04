@@ -71,6 +71,14 @@ export async function runStatus(): Promise<void> {
     activeReviews: number;
     queuedReviews: number;
     lastPollAt: string | null;
+    activeCritterDetails?: Array<{
+      identifier: string;
+      title: string;
+      phase: string;
+      repo: string;
+      branch: string;
+      elapsed: string;
+    }>;
   };
 
   try {
@@ -104,4 +112,12 @@ Queued: ${health.queuedCritters} critters, ${health.queuedReviews} reviews
 
 Last poll: ${lastPoll}
 ${metricsLine}`);
+
+  if (health.activeCritterDetails && health.activeCritterDetails.length > 0) {
+    console.log("");
+    for (const d of health.activeCritterDetails) {
+      const phaseLabel = d.phase === "plan" ? "planning" : d.phase === "exec" ? "execution" : "review";
+      console.log(`  [${d.identifier}] ${phaseLabel} | ${d.repo} | ${d.branch} | ${d.elapsed}`);
+    }
+  }
 }

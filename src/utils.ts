@@ -67,6 +67,23 @@ export function formatPhaseStats(result: { numTurns?: number; inputTokens?: numb
   return ` (${result.numTurns} turns${tokens}${cost})`;
 }
 
+export function shortRepoName(repoUrl: string): string {
+  // Strip trailing .git if present
+  const cleaned = repoUrl.replace(/\.git$/, "");
+  // SSH: git@github.com:org/repo → extract after ':'
+  const colonIdx = cleaned.indexOf(":");
+  if (colonIdx !== -1 && !cleaned.includes("://")) {
+    const afterColon = cleaned.slice(colonIdx + 1);
+    return afterColon;
+  }
+  // HTTPS: https://github.com/org/repo → extract last two path segments
+  const parts = cleaned.split("/");
+  if (parts.length >= 2) {
+    return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
+  }
+  return repoUrl; // fallback: return as-is
+}
+
 export function shellEscape(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
 }
