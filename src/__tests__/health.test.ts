@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { type HealthStatus, startHealthServer } from "../health.js";
+import { type HealthStatus, resetMetricsSummaryCache, startHealthServer } from "../health.js";
 import { initMetrics, recordMetric } from "../metrics.js";
 import { createTempDir } from "./helpers.js";
 
@@ -22,6 +22,7 @@ beforeEach(() => {
   const tmp = createTempDir();
   tempDir = tmp.path;
   cleanup = tmp.cleanup;
+  resetMetricsSummaryCache();
 });
 
 afterEach(() => {
@@ -85,6 +86,31 @@ describe("GET /healthz", () => {
     expect(body.activeReviews).toBe(1);
     expect(body.queuedReviews).toBe(0);
     expect(body.lastPollAt).toBe("2026-01-15T10:00:00.000Z");
+  });
+
+  test("caches metrics summary across rapid requests", async () => {
+    const metricsFile = join(tempDir, "metrics.jsonl");
+    initMetrics(metricsFile);
+    recordMetric({ timestamp: "", event: "task_completed", issueId: "C-1" });
+
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    server = startHealthServer(port, defaultStatus);
+
+    // First request computes fresh
+    const res1 = await fetch(`http://localhost:${port}/healthz`);
+    const body1 = await res1.json();
+    expect(body1.metrics.totalTasks).toBe(1);
+    expect(body1.metrics.succeeded).toBe(1);
+
+    // Add another metric — but cache should still return old value
+    recordMetric({ timestamp: "", event: "task_failed", issueId: "C-2" });
+
+    const res2 = await fetch(`http://localhost:${port}/healthz`);
+    const body2 = await res2.json();
+    // Should still be cached (1 task, not 2)
+    expect(body2.metrics.totalTasks).toBe(1);
+    expect(body2.metrics.succeeded).toBe(1);
+    expect(body2.metrics.failed).toBe(0);
   });
 
   test("includes metrics summary from metrics file", async () => {
