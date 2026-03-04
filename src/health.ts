@@ -12,6 +12,15 @@ export interface HealthStatus {
   lastPollAt: string | null;
 }
 
+let cachedSummary: { totalTasks: number; succeeded: number; failed: number } | null = null;
+let cachedAt = 0;
+const CACHE_TTL_MS = 30_000;
+
+export function resetMetricsSummaryCache(): void {
+  cachedSummary = null;
+  cachedAt = 0;
+}
+
 export function startHealthServer(
   port: number,
   getStatus: () => HealthStatus,
@@ -91,6 +100,11 @@ export function startHealthServer(
 }
 
 function computeMetricsSummary(): { totalTasks: number; succeeded: number; failed: number } {
+  const now = Date.now();
+  if (cachedSummary && now - cachedAt < CACHE_TTL_MS) {
+    return cachedSummary;
+  }
+
   const all = getRecentMetrics(10000);
   let totalTasks = 0;
   let succeeded = 0;
@@ -104,5 +118,8 @@ function computeMetricsSummary(): { totalTasks: number; succeeded: number; faile
       failed++;
     }
   }
-  return { totalTasks, succeeded, failed };
+
+  cachedSummary = { totalTasks, succeeded, failed };
+  cachedAt = now;
+  return cachedSummary;
 }
