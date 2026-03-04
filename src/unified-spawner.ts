@@ -305,7 +305,7 @@ export class UnifiedSpawner {
           resuming,
         };
 
-        if (phase.name === "execution") {
+        if (phase.name === "execution" && critterType.name === "create") {
           triggerHook(this.config, "onExecutionStarted", {
             CRITTER_ISSUE_ID: task.id,
             CRITTER_IDENTIFIER: task.identifier,
