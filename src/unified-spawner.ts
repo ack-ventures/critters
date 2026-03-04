@@ -588,12 +588,17 @@ export class UnifiedSpawner {
       if (mergedOutcome) {
         await this.tracker.updateStatus(task.id, mergedOutcome.status, task.groupId);
       }
-      await this.tracker.comment(task.id, `PR merged by review critter (${totalDuration})`);
-      await sendSlackNotification(
-        this.config.slackWebhookUrl,
-        formatReviewMerged(task.identifier, task.title, task.prUrl ?? "", totalDuration),
-      );
-      logTask(task.identifier, `Review complete — PR merged`);
+      if (data.alreadyMerged) {
+        await this.tracker.comment(task.id, "PR was already merged");
+        logTask(task.identifier, "Review complete — PR was already merged");
+      } else {
+        await this.tracker.comment(task.id, `PR merged by review critter (${totalDuration})`);
+        await sendSlackNotification(
+          this.config.slackWebhookUrl,
+          formatReviewMerged(task.identifier, task.title, task.prUrl ?? "", totalDuration),
+        );
+        logTask(task.identifier, `Review complete — PR merged`);
+      }
       recordMetric({
         timestamp: "",
         event: "review_completed",
@@ -601,8 +606,8 @@ export class UnifiedSpawner {
         identifier: task.identifier,
         repoUrl: task.repoUrl,
         prUrl: task.prUrl,
-        duration: Date.now() - taskStart,
-        outcome: "merged",
+        ...(data.alreadyMerged ? {} : { duration: Date.now() - taskStart }),
+        outcome: data.alreadyMerged ? "already_merged" : "merged",
         numTurns: spawn.numTurns,
         inputTokens: spawn.inputTokens,
         outputTokens: spawn.outputTokens,
