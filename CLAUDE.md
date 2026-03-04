@@ -352,6 +352,8 @@ hooks:
 | `onReviewStarted` | Review critter picks up a PR |
 | `onMerged` | Review critter merges a PR |
 | `onNeedsChanges` | Review critter requests changes |
+| `onPlanningCompleted` | Planning phase finishes (create type) |
+| `onExecutionStarted` | Execution phase begins (create type) |
 
 Each hook receives environment variables: `CRITTER_ISSUE_ID`, `CRITTER_IDENTIFIER`, `CRITTER_TITLE`, `CRITTER_REPO_URL`, `CRITTER_BRANCH`. PR-related hooks (`onPrCreated`, `onReviewStarted`, `onMerged`, `onNeedsChanges`) also get `CRITTER_PR_URL`. Hooks time out after 30 seconds. Failures are logged as warnings but don't fail the task.
 

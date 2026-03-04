@@ -305,6 +305,16 @@ export class UnifiedSpawner {
           resuming,
         };
 
+        if (phase.name === "execution" && critterType.name === "create") {
+          triggerHook(this.config, "onExecutionStarted", {
+            CRITTER_ISSUE_ID: task.id,
+            CRITTER_IDENTIFIER: task.identifier,
+            CRITTER_TITLE: task.title,
+            CRITTER_REPO_URL: task.repoUrl,
+            CRITTER_BRANCH: branch,
+          }, task.identifier);
+        }
+
         const phaseResult = await runner.run(ctx);
         phaseResults.push(phaseResult.spawn);
         phaseDataList.push(phaseResult.data);
@@ -314,12 +324,19 @@ export class UnifiedSpawner {
         logTask(task.identifier, phaseStats);
         await this.tracker.comment(task.id, phaseStats);
 
-        // Slack notification for planning completion
+        // Slack notification and hook for planning completion
         if (phase.name === "planning" && critterType.name === "create") {
           await sendSlackNotification(
             this.config.slackWebhookUrl,
             formatPlanningComplete(task.identifier, task.title, phaseResult.spawn.numTurns, phaseResult.spawn.costUsd),
           );
+          triggerHook(this.config, "onPlanningCompleted", {
+            CRITTER_ISSUE_ID: task.id,
+            CRITTER_IDENTIFIER: task.identifier,
+            CRITTER_TITLE: task.title,
+            CRITTER_REPO_URL: task.repoUrl,
+            CRITTER_BRANCH: branch,
+          }, task.identifier);
         }
 
         // Handle review phase outcomes inline

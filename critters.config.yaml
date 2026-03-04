@@ -54,3 +54,5 @@ teamRepos:
 #   onPrCreated: "curl -X POST https://example.com/notify"
 #   onMerged: "./scripts/post-merge.sh"
 #   onTaskFailed: ""
+#   onPlanningCompleted: ""
+#   onExecutionStarted: ""

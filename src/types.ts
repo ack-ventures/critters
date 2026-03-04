@@ -47,6 +47,8 @@ export interface Config {
     onReviewStarted?: string;
     onMerged?: string;
     onNeedsChanges?: string;
+    onPlanningCompleted?: string;
+    onExecutionStarted?: string;
   };
   provider: "linear" | "jira";
   critterTypes: CritterTypeConfig[];
