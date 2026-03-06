@@ -22,16 +22,14 @@ const PROMPT_FILES = [
   },
 ];
 
-const DEFAULT_CONFIG = `pollIntervalSeconds: 120
-concurrency: 2
-timeoutMinutes: 30
+const DEFAULT_CONFIG = `provider: linear
+# provider: jira
+# provider: [linear, jira]
+
+pollIntervalSeconds: 120
 workDir: /tmp/critters-work
-triggerLabel: "Critter"
-maxPlanningTurns: 50
-maxExecutionTurns: 75
 tmuxSession: critters
-planningModel: opus
-executionModel: opus
+healthPort: 3847
 
 defaultAllowedTools:
   - "Read"
@@ -51,7 +49,7 @@ defaultAllowedTools:
   - "Bash(cat:*)"
 
 repos:
-  # Linear project ID → repo config
+  # Linear project ID or Jira project key → repo config
   # "project-uuid-1":
   #   url: "git@github.com:your-org/your-repo.git"
   #   extraAllowedTools: ["Bash(poetry:*)"]
@@ -60,12 +58,51 @@ teamRepos:
   # Fallback: Linear team ID → repo URL
   # "team-uuid-1": "git@github.com:your-org/default-repo.git"
 
-# Review critter settings
-reviewTriggerLabel: "Critter Review"
-reviewModel: opus
-reviewConcurrency: 2
-reviewTimeoutMinutes: 15
-maxReviewTurns: 30
+# Jira status mapping (required when using provider: jira)
+# jiraStatusMap:
+#   "Todo": "To Do"
+#   "In Progress": "In Progress"
+#   "In Review": "In Review"
+#   "Done": "Done"
+#   "Critter Failed": "Failed"
+
+critterTypes:
+  create:
+    trigger: { label: "Critter", status: "Todo", statusType: "unstarted" }
+    repo: { clone: true, branch: true }
+    phases:
+      - name: planning
+        prompt: builtin:planning
+        model: opus
+        maxTurns: 50
+        tools: readonly
+      - name: execution
+        prompt: builtin:execution
+        model: opus
+        maxTurns: 75
+        tools: default
+    outcomes:
+      success: { status: "In Review" }
+      failure: { status: "Critter Failed" }
+    concurrency: 2
+    timeoutMinutes: 30
+
+  review:
+    trigger: { label: "Critter Review", status: "In Review" }
+    repo: { clone: true }
+    phases:
+      - name: review
+        prompt: builtin:review
+        model: opus
+        maxTurns: 30
+        tools: review
+    outcomes:
+      merged: { status: "Done" }
+      needsChanges: { status: "Human Review" }
+      failure: { status: "Critter Failed" }
+    concurrency: 2
+    timeoutMinutes: 15
+    enrichment: extractPrUrl
 `;
 
 export function mergeConfig(
