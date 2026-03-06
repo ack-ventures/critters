@@ -91,6 +91,7 @@ export interface ActiveCritterDetail {
   repo: string;         // short repo name (org/repo)
   branch: string;
   startedAt: number;    // Date.now() timestamp
+  prUrl?: string;
 }
 
 export interface ReviewTask extends CritterTask {

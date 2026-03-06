@@ -160,6 +160,7 @@ export class UnifiedSpawner {
         repo: shortRepoName(item.task.repoUrl),
         branch: item.task.prBranch ?? branchName(item.task.identifier, item.task.title),
         startedAt: Date.now(),
+        prUrl: item.task.prUrl,
       });
 
       const metricEvent = typeName === "review" ? "review_started" : "task_started";
@@ -374,6 +375,8 @@ export class UnifiedSpawner {
         if (phase.prompt === "builtin:execution") {
           const prUrl = phaseResult.data.prUrl as string | null;
           if (prUrl) {
+            const detail = this.activeCritterMap.get(task.id);
+            if (detail) detail.prUrl = prUrl;
             return this.handleCreateSuccess(task, critterType, prUrl, branch, phaseResults, taskStart, tracker);
           }
           // Commits exist but no PR
