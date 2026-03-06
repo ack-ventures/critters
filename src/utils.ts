@@ -26,8 +26,8 @@ export function slugify(text: string): string {
     .slice(0, 50);
 }
 
-export function branchName(identifier: string, title: string): string {
-  return `critter/${identifier}-${slugify(title)}`;
+export function branchName(identifier: string, title: string, prefix: string = "critter"): string {
+  return `${prefix}/${identifier}-${slugify(title)}`;
 }
 
 export function sleep(ms: number): Promise<void> {
