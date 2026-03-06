@@ -1,0 +1,53 @@
+pollIntervalSeconds: 120
+workDir: /tmp/critters-work
+
+defaultAllowedTools:
+  - "Read"
+  - "Write"
+  - "Edit"
+  - "Glob"
+  - "Grep"
+  - "Bash(git:*)"
+  - "Bash(gh:*)"
+  - "Bash(ls:*)"
+  - "Bash(bun:*)"
+
+critterTypes:
+  create:
+    provider: [linear]
+    trigger: { label: "Critter", status: "Todo", statusType: "unstarted" }
+    repo: { clone: true, branch: true }
+    phases:
+      - name: planning
+        prompt: builtin:planning
+        model: opus
+        maxTurns: 50
+        tools: readonly
+      - name: execution
+        prompt: builtin:execution
+        model: opus
+        maxTurns: 75
+        tools: default
+    outcomes:
+      success: { status: "In Review" }
+      failure: { status: "Critter Failed" }
+    concurrency: 2
+    timeoutMinutes: 30
+
+  review:
+    provider: linear
+    trigger: { label: "Critter Review", status: "In Review" }
+    repo: { clone: true }
+    phases:
+      - name: review
+        prompt: builtin:review
+        model: opus
+        maxTurns: 30
+        tools: review
+    outcomes:
+      merged: { status: "Done" }
+      needsChanges: { status: "Human Review" }
+      failure: { status: "Critter Failed" }
+    concurrency: 2
+    timeoutMinutes: 15
+    enrichment: extractPrUrl

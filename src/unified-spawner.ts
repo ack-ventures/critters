@@ -46,7 +46,7 @@ export interface TaskResult {
 
 export class UnifiedSpawner {
   private config: Config;
-  private tracker: IssueTracker;
+  private trackers: Map<string, IssueTracker>;
   /** Per-type queues */
   private queues = new Map<string, QueuedTask[]>();
   /** Per-type running counts */
@@ -57,9 +57,18 @@ export class UnifiedSpawner {
   private activeWorkDirs = new Set<string>();
   private activeCritterMap = new Map<string, ActiveCritterDetail>();
 
-  constructor(config: Config, tracker: IssueTracker) {
+  constructor(config: Config, trackers: Map<string, IssueTracker>) {
     this.config = config;
-    this.tracker = tracker;
+    this.trackers = trackers;
+  }
+
+  private getTracker(critterType: CritterTypeConfig): IssueTracker {
+    const providerName = critterType.provider ?? this.config.provider;
+    const tracker = this.trackers.get(providerName);
+    if (!tracker) {
+      throw new Error(`No tracker configured for provider "${providerName}" (critter type "${critterType.name}")`);
+    }
+    return tracker;
   }
 
   cleanupStale(): void {
@@ -174,6 +183,7 @@ export class UnifiedSpawner {
   }
 
   private async runTask(task: TrackerTask, critterType: CritterTypeConfig): Promise<TaskResult> {
+    const tracker = this.getTracker(critterType);
     const isReviewType = critterType.name === "review";
     const workDirPrefix = isReviewType ? "review-" : "";
     const branch = critterType.repo.branch
@@ -210,13 +220,13 @@ export class UnifiedSpawner {
 
       // Handle status update for create-type tasks
       if (critterType.name === "create") {
-        await this.tracker.updateStatus(task.id, "In Progress", task.groupId);
-        await this.tracker.comment(task.id, "Cloning repo...");
+        await tracker.updateStatus(task.id, "In Progress", task.groupId);
+        await tracker.comment(task.id, "Cloning repo...");
       } else if (isReviewType) {
-        await this.tracker.comment(task.id, "Review critter picking up PR...");
+        await tracker.comment(task.id, "Review critter picking up PR...");
       } else {
         // Custom type — update to first phase status or just comment
-        await this.tracker.comment(task.id, `Critter [${critterType.name}] picking up task...`);
+        await tracker.comment(task.id, `Critter [${critterType.name}] picking up task...`);
       }
 
       // 1. Clone repo
@@ -244,7 +254,7 @@ export class UnifiedSpawner {
         }
 
         if (resuming) {
-          await this.tracker.comment(task.id, "Resuming from previous attempt (branch already exists)...");
+          await tracker.comment(task.id, "Resuming from previous attempt (branch already exists)...");
         }
       }
 
@@ -300,7 +310,7 @@ export class UnifiedSpawner {
       const phaseDataList: Record<string, unknown>[] = [];
       for (const phase of critterType.phases) {
         if (critterType.name === "create") {
-          await this.tracker.comment(task.id, `${phase.name === "planning" ? "Planning" : "Plan approved, executing"}...`);
+          await tracker.comment(task.id, `${phase.name === "planning" ? "Planning" : "Plan approved, executing"}...`);
         }
         logTask(task.identifier, `Starting phase: ${phase.name} | ${shortRepoName(task.repoUrl)} | ${branch || task.prBranch || ""}`);
         const detail = this.activeCritterMap.get(task.id);
@@ -314,7 +324,7 @@ export class UnifiedSpawner {
           phase,
           workDir,
           branch,
-          tracker: this.tracker,
+          tracker,
           config: this.config,
           repoConfig,
           signal: abortController.signal,
@@ -338,7 +348,7 @@ export class UnifiedSpawner {
         const phaseDuration = Date.now() - phaseStart;
         const phaseStats = `${phase.name} completed in ${formatDuration(phaseDuration)}${formatPhaseStats(phaseResult.spawn)}`;
         logTask(task.identifier, phaseStats);
-        await this.tracker.comment(task.id, phaseStats);
+        await tracker.comment(task.id, phaseStats);
 
         // Slack notification and hook for planning completion
         if (phase.name === "planning" && critterType.name === "create") {
@@ -357,17 +367,17 @@ export class UnifiedSpawner {
 
         // Handle review phase outcomes inline
         if (phase.prompt === "builtin:review") {
-          return this.handleReviewOutcome(task, critterType, phaseResult.data, phaseResult.spawn, taskStart);
+          return this.handleReviewOutcome(task, critterType, phaseResult.data, phaseResult.spawn, taskStart, tracker);
         }
 
         // Handle execution phase outcomes inline
         if (phase.prompt === "builtin:execution") {
           const prUrl = phaseResult.data.prUrl as string | null;
           if (prUrl) {
-            return this.handleCreateSuccess(task, critterType, prUrl, branch, phaseResults, taskStart);
+            return this.handleCreateSuccess(task, critterType, prUrl, branch, phaseResults, taskStart, tracker);
           }
           // Commits exist but no PR
-          await this.tracker.comment(task.id, "Execution completed with commits but no PR was created.");
+          await tracker.comment(task.id, "Execution completed with commits but no PR was created.");
           throw new Error("Execution completed but no PR was detected");
         }
       }
@@ -378,7 +388,7 @@ export class UnifiedSpawner {
 
       const successOutcome = critterType.outcomes.success;
       if (successOutcome) {
-        await this.tracker.updateStatus(task.id, successOutcome.status, task.groupId);
+        await tracker.updateStatus(task.id, successOutcome.status, task.groupId);
       }
 
       // Upload report from the last phase (generic runner writes .critter-report.md)
@@ -388,7 +398,7 @@ export class UnifiedSpawner {
         // Upload as a .md attachment
         const filename = `${task.identifier}-${critterType.name}.md`;
         const mdContent = `# ${task.identifier}: ${task.title}\n\n**Type**: ${critterType.name}  \n**Duration**: ${totalDuration}\n\n---\n\n${responseText}`;
-        const url = await this.tracker.uploadAttachment(
+        const url = await tracker.uploadAttachment(
           task.id, filename, Buffer.from(mdContent), "text/markdown", task.identifier,
         );
 
@@ -400,9 +410,9 @@ export class UnifiedSpawner {
         if (url) {
           comment += `\n\n[Full report](${url})`;
         }
-        await this.tracker.comment(task.id, comment);
+        await tracker.comment(task.id, comment);
       } else {
-        await this.tracker.comment(task.id, `Critter [${critterType.name}] completed in ${totalDuration}`);
+        await tracker.comment(task.id, `Critter [${critterType.name}] completed in ${totalDuration}`);
       }
 
       const totalCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
@@ -430,7 +440,7 @@ export class UnifiedSpawner {
       const failureOutcome = critterType.outcomes.failure;
       if (failureOutcome) {
         try {
-          await this.tracker.updateStatus(task.id, failureOutcome.status, task.groupId);
+          await tracker.updateStatus(task.id, failureOutcome.status, task.groupId);
         } catch {
           logTaskError(task.identifier, `Failed to update status to ${failureOutcome.status}`);
         }
@@ -450,7 +460,7 @@ export class UnifiedSpawner {
       }
 
       // Upload logs
-      const { uploaded: attachmentUrls, fallbackExcerpts } = await this.uploadFailureLogs(task, critterType, workDir);
+      const { uploaded: attachmentUrls, fallbackExcerpts } = await this.uploadFailureLogs(task, critterType, workDir, tracker);
 
       // Read checkpoint file if it exists
       let checkpointStatus = "";
@@ -478,7 +488,7 @@ export class UnifiedSpawner {
           failComment += `\n\n<details><summary>Log excerpts</summary>\n\n${fallbackExcerpts}\n</details>`;
         }
         failComment += checkpointStatus;
-        await this.tracker.comment(task.id, failComment);
+        await tracker.comment(task.id, failComment);
       } catch {
         logTaskError(task.identifier, "Failed to post error comment");
       }
@@ -540,15 +550,16 @@ export class UnifiedSpawner {
     branch: string,
     phaseResults: SpawnResult[],
     taskStart: number,
+    tracker: IssueTracker,
   ): Promise<TaskResult> {
     const successOutcome = critterType.outcomes.success;
     if (successOutcome) {
-      await this.tracker.updateStatus(task.id, successOutcome.status, task.groupId);
+      await tracker.updateStatus(task.id, successOutcome.status, task.groupId);
     }
 
     const totalDuration = formatDuration(Date.now() - taskStart);
     logTask(task.identifier, `Completed in ${totalDuration}`);
-    await this.tracker.comment(task.id, `PR created: ${prUrl} (completed in ${totalDuration})`);
+    await tracker.comment(task.id, `PR created: ${prUrl} (completed in ${totalDuration})`);
     await sendSlackNotification(
       this.config.slackWebhookUrl,
       formatSuccess(task.identifier, task.title, prUrl, totalDuration),
@@ -595,6 +606,7 @@ export class UnifiedSpawner {
     data: Record<string, unknown>,
     spawn: SpawnResult,
     taskStart: number,
+    tracker: IssueTracker,
   ): Promise<TaskResult> {
     const decision = data.reviewDecision as string;
     const reason = data.reviewReason as string | undefined;
@@ -603,13 +615,13 @@ export class UnifiedSpawner {
     if (decision === "merged" || data.alreadyMerged) {
       const mergedOutcome = critterType.outcomes.merged;
       if (mergedOutcome) {
-        await this.tracker.updateStatus(task.id, mergedOutcome.status, task.groupId);
+        await tracker.updateStatus(task.id, mergedOutcome.status, task.groupId);
       }
       if (data.alreadyMerged) {
-        await this.tracker.comment(task.id, "PR was already merged");
+        await tracker.comment(task.id, "PR was already merged");
         logTask(task.identifier, "Review complete — PR was already merged");
       } else {
-        await this.tracker.comment(task.id, `PR merged by review critter (${totalDuration})`);
+        await tracker.comment(task.id, `PR merged by review critter (${totalDuration})`);
         await sendSlackNotification(
           this.config.slackWebhookUrl,
           formatReviewMerged(task.identifier, task.title, task.prUrl ?? "", totalDuration),
@@ -646,9 +658,9 @@ export class UnifiedSpawner {
     if (decision === "needs_changes") {
       const needsChangesOutcome = critterType.outcomes.needsChanges;
       if (needsChangesOutcome) {
-        await this.tracker.updateStatus(task.id, needsChangesOutcome.status, task.groupId);
+        await tracker.updateStatus(task.id, needsChangesOutcome.status, task.groupId);
       }
-      await this.tracker.comment(task.id, `Review critter requested changes: ${reason}`);
+      await tracker.comment(task.id, `Review critter requested changes: ${reason}`);
       await sendSlackNotification(
         this.config.slackWebhookUrl,
         formatReviewNeedsChanges(task.identifier, task.title, reason ?? "No reason provided", totalDuration),
@@ -689,6 +701,7 @@ export class UnifiedSpawner {
     task: TrackerTask,
     critterType: CritterTypeConfig,
     workDir: string,
+    tracker: IssueTracker,
   ): Promise<{ uploaded: Array<{ name: string; url: string }>; fallbackExcerpts: string }> {
     const uploaded: Array<{ name: string; url: string }> = [];
     let fallbackExcerpts = "";
@@ -717,7 +730,7 @@ export class UnifiedSpawner {
         if (content.length > MAX_LOG_SIZE) {
           content = content.subarray(content.length - MAX_LOG_SIZE);
         }
-        const url = await this.tracker.uploadAttachment(task.id, file.name, content, "text/plain", task.identifier);
+        const url = await tracker.uploadAttachment(task.id, file.name, content, "text/plain", task.identifier);
         if (url) {
           uploaded.push({ name: file.name, url });
           logTask(task.identifier, `Uploaded ${file.name}`);

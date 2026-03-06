@@ -1,9 +1,18 @@
 import type { TriggerConfig } from "../critter-type.js";
 
+export interface IssueTrackerIssue {
+  id: string;
+  identifier: string;
+  statusName: string;
+  labels: string[];
+  groupId: string;
+}
+
 export interface IssueTracker {
   readonly provider: string;
   init(): Promise<void>;
   findIssues(trigger: TriggerConfig): Promise<TrackerTask[]>;
+  findIssueByIdentifier(identifier: string): Promise<IssueTrackerIssue | null>;
   updateStatus(taskId: string, statusName: string, groupId: string): Promise<void>;
   comment(taskId: string, body: string): Promise<void>;
   getComments(taskId: string): Promise<string[]>;
@@ -40,4 +49,5 @@ export interface ProviderConfig {
   host?: string;
   email?: string;
   apiToken?: string;
+  statusMap?: Record<string, string>;
 }

@@ -21,7 +21,7 @@ export function extractPrFromComments(comments: string[]): { prUrl: string; prNu
 
 export class UnifiedWatcher {
   private config: Config;
-  private tracker: IssueTracker;
+  private trackers: Map<string, IssueTracker>;
   private spawner: UnifiedSpawner | null;
   /** Per-type dedup: Map<typeName, Set<taskId>> */
   private activeIssueIds = new Map<string, Set<string>>();
@@ -31,14 +31,23 @@ export class UnifiedWatcher {
 
   constructor(
     config: Config,
-    tracker: IssueTracker,
+    trackers: Map<string, IssueTracker>,
     spawner: UnifiedSpawner | null,
     onPoll?: () => void,
   ) {
     this.config = config;
-    this.tracker = tracker;
+    this.trackers = trackers;
     this.spawner = spawner;
     this.onPoll = onPoll;
+  }
+
+  private getTracker(critterType: CritterTypeConfig): IssueTracker {
+    const providerName = critterType.provider ?? this.config.provider;
+    const tracker = this.trackers.get(providerName);
+    if (!tracker) {
+      throw new Error(`No tracker configured for provider "${providerName}" (critter type "${critterType.name}")`);
+    }
+    return tracker;
   }
 
   async start(): Promise<void> {
@@ -86,7 +95,8 @@ export class UnifiedWatcher {
     let skipped = 0;
 
     for (const critterType of this.config.critterTypes) {
-      const issues = await this.tracker.findIssues(critterType.trigger);
+      const tracker = this.getTracker(critterType);
+      const issues = await tracker.findIssues(critterType.trigger);
 
       for (const task of issues) {
         total++;
@@ -117,7 +127,7 @@ export class UnifiedWatcher {
         if (critterType.enrichment === "extractPrUrl") {
           let comments: string[];
           try {
-            comments = await this.tracker.getComments(task.id);
+            comments = await tracker.getComments(task.id);
           } catch {
             log(`[DRY RUN] [${critterType.name}] Skipping ${task.identifier} "${task.title}" — failed to fetch comments`);
             skipped++;
@@ -148,7 +158,8 @@ export class UnifiedWatcher {
     let totalIssues = 0;
 
     for (const critterType of this.config.critterTypes) {
-      const issues = await this.tracker.findIssues(critterType.trigger);
+      const tracker = this.getTracker(critterType);
+      const issues = await tracker.findIssues(critterType.trigger);
       totalIssues += issues.length;
 
       for (const task of issues) {
@@ -183,7 +194,7 @@ export class UnifiedWatcher {
         if (!repoUrl) {
           logTask(task.identifier, "Could not determine repository — skipping");
           try {
-            await this.tracker.comment(
+            await tracker.comment(
               task.id,
               "Could not determine repository. Add a `repo: <url>` line to the description, or configure a project/team mapping in critters.config.yaml.",
             );
@@ -196,7 +207,7 @@ export class UnifiedWatcher {
 
         // Per-type enrichment
         if (critterType.enrichment === "extractPrUrl") {
-          const enriched = await this.enrichReviewTask(task);
+          const enriched = await this.enrichReviewTask(task, tracker);
           if (!enriched) continue;
         }
 
@@ -221,10 +232,10 @@ export class UnifiedWatcher {
     return totalIssues;
   }
 
-  private async enrichReviewTask(task: TrackerTask): Promise<boolean> {
+  private async enrichReviewTask(task: TrackerTask, tracker: IssueTracker): Promise<boolean> {
     let comments: string[];
     try {
-      comments = await this.tracker.getComments(task.id);
+      comments = await tracker.getComments(task.id);
     } catch (err) {
       logTaskError(task.identifier, `Failed to fetch comments: ${err}`);
       return false;
@@ -234,7 +245,7 @@ export class UnifiedWatcher {
     if (!prInfo) {
       logTask(task.identifier, "No PR URL found in comments — skipping (will retry next poll)");
       try {
-        await this.tracker.comment(
+        await tracker.comment(
           task.id,
           "Review critter could not find a PR URL in the issue comments. Waiting for a `PR created: <url>` comment.",
         );

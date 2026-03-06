@@ -256,7 +256,7 @@ maxReviewTurns: 40
       expect(config.linearApiKey).toBe("my-linear-key");
     });
 
-    test("throws when LINEAR_API_KEY is not set", () => {
+    test("throws when LINEAR_API_KEY is not set and provider is linear", () => {
       delete process.env.LINEAR_API_KEY;
       const yaml = `defaultAllowedTools:\n  - "Read"\n`;
       expect(() => loadConfig(writeYaml(yaml))).toThrow("LINEAR_API_KEY not set");
@@ -274,6 +274,66 @@ maxReviewTurns: 40
       const yaml = `defaultAllowedTools:\n  - "Read"\n`;
       const config = loadConfig(writeYaml(yaml));
       expect(config.slackWebhookUrl).toBeUndefined();
+    });
+  });
+
+  describe("Jira provider config", () => {
+    test("reads Jira env vars", () => {
+      process.env.JIRA_HOST = "mycompany.atlassian.net";
+      process.env.JIRA_EMAIL = "user@example.com";
+      process.env.JIRA_API_TOKEN = "jira-token";
+      const yaml = `
+provider: jira
+defaultAllowedTools:
+  - "Read"
+jiraStatusMap:
+  "In Progress": "Working"
+`;
+      // Remove LINEAR_API_KEY since we're testing Jira-only
+      delete process.env.LINEAR_API_KEY;
+      const config = loadConfig(writeYaml(yaml));
+
+      expect(config.provider).toBe("jira");
+      expect(config.jiraHost).toBe("mycompany.atlassian.net");
+      expect(config.jiraEmail).toBe("user@example.com");
+      expect(config.jiraApiToken).toBe("jira-token");
+      expect(config.jiraStatusMap).toEqual({ "In Progress": "Working" });
+
+      // Restore
+      delete process.env.JIRA_HOST;
+      delete process.env.JIRA_EMAIL;
+      delete process.env.JIRA_API_TOKEN;
+      process.env.LINEAR_API_KEY = "test-key";
+    });
+
+    test("throws when Jira env vars missing for jira provider", () => {
+      delete process.env.LINEAR_API_KEY;
+      const yaml = `provider: jira\ndefaultAllowedTools:\n  - "Read"\n`;
+      expect(() => loadConfig(writeYaml(yaml))).toThrow("JIRA_HOST");
+
+      // Restore
+      process.env.LINEAR_API_KEY = "test-key";
+    });
+
+    test("does not require LINEAR_API_KEY when only jira types configured", () => {
+      delete process.env.LINEAR_API_KEY;
+      process.env.JIRA_HOST = "mycompany.atlassian.net";
+      process.env.JIRA_EMAIL = "user@example.com";
+      process.env.JIRA_API_TOKEN = "jira-token";
+      const yaml = `
+provider: jira
+defaultAllowedTools:
+  - "Read"
+`;
+      const config = loadConfig(writeYaml(yaml));
+      expect(config.provider).toBe("jira");
+      expect(config.linearApiKey).toBeUndefined();
+
+      // Restore
+      delete process.env.JIRA_HOST;
+      delete process.env.JIRA_EMAIL;
+      delete process.env.JIRA_API_TOKEN;
+      process.env.LINEAR_API_KEY = "test-key";
     });
   });
 });

@@ -21,14 +21,24 @@ export function cleanLinearMarkdown(text: string): string {
   return text.replace(/\[([^\]]+)\]\(<mailto:[^>]+>\)/g, "$1");
 }
 
-export function parseRepoUrl(description: string): string | null {
-  const cleaned = cleanLinearMarkdown(description);
+/**
+ * Clean a description based on the provider format.
+ * Linear uses markdown with mailto wrapping; Jira descriptions come as
+ * pre-cleaned plain text from the tracker (ADF → text conversion happens there).
+ */
+export function cleanDescription(text: string, provider?: string): string {
+  if (provider === "jira") return text;
+  return cleanLinearMarkdown(text);
+}
+
+export function parseRepoUrl(description: string, provider?: string): string | null {
+  const cleaned = cleanDescription(description, provider);
   const match = cleaned.match(REPO_LINE_RE);
   return match ? match[1].trim() : null;
 }
 
-export function stripRepoLine(description: string): string {
-  const cleaned = cleanLinearMarkdown(description);
+export function stripRepoLine(description: string, provider?: string): string {
+  const cleaned = cleanDescription(description, provider);
   return cleaned.replace(REPO_LINE_RE, "").trim();
 }
 

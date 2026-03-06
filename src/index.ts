@@ -5,15 +5,17 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "./config.js";
+import type { CritterTypeConfig } from "./critter-type.js";
 import { startHealthServer } from "./health.js";
 import { runInit } from "./init.js";
 import { runInitRepo } from "./init-repo.js";
-import { initLinear } from "./linear.js";
 import { initFileLogging, log, logError } from "./logger.js";
 import { initMetrics } from "./metrics.js";
 import { checkPrerequisites } from "./prerequisites.js";
 import { runStatus } from "./status.js";
 import { createTracker } from "./tracker/index.js";
+import type { IssueTracker } from "./tracker/types.js";
+import type { Config } from "./types.js";
 import { UnifiedSpawner } from "./unified-spawner.js";
 import { UnifiedWatcher } from "./unified-watcher.js";
 import { checkForUpdate, fetchLatestVersion, getDisplayVersion } from "./updater.js";
@@ -165,20 +167,16 @@ async function main() {
     await fetchLatestVersion();
   }
 
-  // Create issue tracker
-  const tracker = createTracker({
-    type: config.provider,
-    apiKey: config.linearApiKey,
-  });
-
-  // Also init the legacy Linear module for backward compat (used by retry, etc.)
-  initLinear(config);
+  // Create issue trackers (one per unique provider)
+  const trackers = createTrackers(config);
 
   if (dryRun) {
     log(`Critters ${getDisplayVersion()} — dry run`);
-    await tracker.init();
+    for (const tracker of trackers.values()) {
+      await tracker.init();
+    }
 
-    const watcher = new UnifiedWatcher(config, tracker, null);
+    const watcher = new UnifiedWatcher(config, trackers, null);
     const summary = await watcher.dryRunPoll();
 
     log("");
@@ -226,51 +224,16 @@ async function main() {
   log(`Config loaded: types=[${typesSummary}], poll=${config.pollIntervalSeconds}s, noTmux=${noTmux}`);
   initMetrics();
 
-  // Init tracker
-  await tracker.init();
-
-  // Ensure labels for all configured types
-  for (const ct of config.critterTypes) {
-    await tracker.ensureLabel(ct.trigger.label);
+  // Init all trackers
+  for (const tracker of trackers.values()) {
+    await tracker.init();
   }
 
-  // Ensure required workflow statuses across all teams.
-  // The tracker loaded team statuses during init(). We use the LinearTracker's
-  // cache to find all team IDs and ensure the needed statuses.
-  const { LinearTracker } = await import("./tracker/linear.js");
-  if (tracker instanceof LinearTracker) {
-    const teamCache = tracker.getTeamStatusCache();
-    const teamIds = Object.keys(teamCache);
-
-    // Collect all outcome statuses that need creation
-    const statusesToEnsure = new Set<string>();
-    for (const ct of config.critterTypes) {
-      for (const outcome of Object.values(ct.outcomes)) {
-        if (outcome.status) statusesToEnsure.add(outcome.status);
-      }
-    }
-
-    // Standard statuses like "Done", "In Progress", "In Review", "Todo" already exist in Linear.
-    // We only need to create custom ones that don't exist yet.
-    const standardStatuses = new Set(["Done", "In Progress", "In Review", "Todo", "Backlog", "Canceled", "Cancelled"]);
-
-    for (const teamId of teamIds) {
-      for (const statusName of statusesToEnsure) {
-        if (standardStatuses.has(statusName)) continue;
-        // Already exists in this team's cache — skip
-        if (teamCache[teamId]?.[statusName]) continue;
-
-        const color = statusName.includes("Failed") ? "#EF4444"
-          : statusName === "Human Review" ? "#F59E0B"
-          : "#8B5CF6";
-        const type = statusName.includes("Failed") || statusName === "Human Review" ? "started" : "started";
-        await tracker.ensureStatus(teamId, statusName, type, color);
-      }
-    }
-  }
+  // Ensure labels and workflow statuses for each type via its provider's tracker
+  await ensureLabelsAndStatuses(config, trackers);
 
   // Create unified spawner + cleanup stale work dirs
-  const spawner = new UnifiedSpawner(config, tracker);
+  const spawner = new UnifiedSpawner(config, trackers);
   spawner.cleanupStale();
   spawner.startPeriodicCleanup();
   log("Cleaned up stale work directories");
@@ -279,7 +242,7 @@ async function main() {
   const updatePollTime = () => { lastPollAt = new Date().toISOString(); };
 
   // Create unified watcher
-  const watcher = new UnifiedWatcher(config, tracker, spawner, updatePollTime);
+  const watcher = new UnifiedWatcher(config, trackers, spawner, updatePollTime);
 
   // Start health server
   let healthServer: { stop: () => void } | null = null;
@@ -334,6 +297,87 @@ async function main() {
 
   // Start watching
   await watcher.start();
+}
+
+function createTrackers(config: Config): Map<string, IssueTracker> {
+  const trackers = new Map<string, IssueTracker>();
+  const neededProviders = new Set<string>();
+  for (const ct of config.critterTypes) {
+    neededProviders.add(ct.provider ?? config.provider);
+  }
+
+  for (const provider of neededProviders) {
+    switch (provider) {
+      case "linear":
+        trackers.set("linear", createTracker({
+          type: "linear",
+          apiKey: config.linearApiKey,
+        }));
+        break;
+      case "jira":
+        trackers.set("jira", createTracker({
+          type: "jira",
+          host: config.jiraHost,
+          email: config.jiraEmail,
+          apiToken: config.jiraApiToken,
+          statusMap: config.jiraStatusMap,
+        }));
+        break;
+    }
+  }
+
+  return trackers;
+}
+
+async function ensureLabelsAndStatuses(config: Config, trackers: Map<string, IssueTracker>): Promise<void> {
+  // Group critter types by provider
+  const typesByProvider = new Map<string, CritterTypeConfig[]>();
+  for (const ct of config.critterTypes) {
+    const provider = ct.provider ?? config.provider;
+    if (!typesByProvider.has(provider)) {
+      typesByProvider.set(provider, []);
+    }
+    typesByProvider.get(provider)!.push(ct);
+  }
+
+  for (const [provider, types] of typesByProvider) {
+    const tracker = trackers.get(provider);
+    if (!tracker) continue;
+
+    // Ensure labels
+    const labels = new Set(types.map((ct) => ct.trigger.label));
+    for (const label of labels) {
+      await tracker.ensureLabel(label);
+    }
+
+    // Ensure workflow statuses (Linear-specific — Jira manages these in workflows)
+    const { LinearTracker } = await import("./tracker/linear.js");
+    if (tracker instanceof LinearTracker) {
+      const teamCache = tracker.getTeamStatusCache();
+      const teamIds = Object.keys(teamCache);
+
+      const statusesToEnsure = new Set<string>();
+      for (const ct of types) {
+        for (const outcome of Object.values(ct.outcomes)) {
+          if (outcome.status) statusesToEnsure.add(outcome.status);
+        }
+      }
+
+      const standardStatuses = new Set(["Done", "In Progress", "In Review", "Todo", "Backlog", "Canceled", "Cancelled"]);
+
+      for (const teamId of teamIds) {
+        for (const statusName of statusesToEnsure) {
+          if (standardStatuses.has(statusName)) continue;
+          if (teamCache[teamId]?.[statusName]) continue;
+
+          const color = statusName.includes("Failed") ? "#EF4444"
+            : statusName === "Human Review" ? "#F59E0B"
+            : "#8B5CF6";
+          await tracker.ensureStatus(teamId, statusName, "started", color);
+        }
+      }
+    }
+  }
 }
 
 main().catch((err) => {

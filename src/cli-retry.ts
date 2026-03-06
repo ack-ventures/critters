@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { loadConfig } from "./config.js";
-import { commentOnIssue, getIssueByIdentifier, initLinear, updateIssueStatus } from "./linear.js";
+import { createTracker } from "./tracker/index.js";
 
 function loadEnv(): void {
   const cwdEnv = "./.env";
@@ -26,29 +26,37 @@ export async function runRetry(identifier: string, force: boolean): Promise<void
   loadEnv();
 
   const config = loadConfig();
-  initLinear(config);
 
-  const issue = await getIssueByIdentifier(identifier);
+  // Find which provider handles this identifier's trigger label.
+  // For retry, we need to figure out which tracker to use. We'll try the default
+  // provider first since we don't know which critter type this issue belongs to.
+  const tracker = createTracker({
+    type: config.provider,
+    apiKey: config.linearApiKey,
+    host: config.jiraHost,
+    email: config.jiraEmail,
+    apiToken: config.jiraApiToken,
+    statusMap: config.jiraStatusMap,
+  });
+
+  const issue = await tracker.findIssueByIdentifier(identifier);
   if (!issue) {
     console.error(`Error: Issue ${identifier} not found.`);
     process.exit(1);
   }
 
-  const state = await issue.state;
-  const labels = await issue.labels();
-  const team = await issue.team;
-
-  const hasTriggerLabel = labels.nodes.some(
-    (l: { name: string }) => l.name === config.triggerLabel,
-  );
+  // Check that the issue has at least one trigger label from the configured critter types
+  const triggerLabels = new Set(config.critterTypes.map((ct) => ct.trigger.label));
+  const hasTriggerLabel = issue.labels.some((l) => triggerLabels.has(l));
   if (!hasTriggerLabel) {
+    const labelList = [...triggerLabels].map((l) => `"${l}"`).join(" or ");
     console.error(
-      `Error: ${identifier} isn't a critter task (missing "${config.triggerLabel}" label).`,
+      `Error: ${identifier} isn't a critter task (missing ${labelList} label).`,
     );
     process.exit(1);
   }
 
-  const statusName = state?.name ?? "Unknown";
+  const statusName = issue.statusName;
 
   if (statusName === "Todo") {
     console.log(
@@ -85,25 +93,8 @@ export async function runRetry(identifier: string, force: boolean): Promise<void
     }
   }
 
-  // Resolve "Todo" status ID from the issue's team
-  if (!team) {
-    console.error(`Error: Could not resolve team for ${identifier}.`);
-    process.exit(1);
-  }
-
-  const states = await team.states();
-  const todoState = states.nodes.find(
-    (s: { name: string }) => s.name === "Todo",
-  );
-  if (!todoState) {
-    const names = states.nodes.map((s: { name: string }) => s.name);
-    throw new Error(
-      `No "Todo" status found for team ${team.name}. Available statuses: ${names.join(", ")}`,
-    );
-  }
-
-  await updateIssueStatus(issue.id, todoState.id);
-  await commentOnIssue(issue.id, "Retry triggered via CLI");
+  await tracker.updateStatus(issue.id, "Todo", issue.groupId);
+  await tracker.comment(issue.id, "Retry triggered via CLI");
 
   console.log(
     `Retried ${identifier} — status set to Todo. The daemon will pick it up on the next poll cycle.`,

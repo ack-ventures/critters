@@ -1,6 +1,6 @@
 # Critters
 
-TypeScript daemon that watches Linear for issues labeled "Critter", spawns Claude Code CLI instances to work on them, and produces draft PRs.
+TypeScript daemon that watches issue trackers (Linear and Jira) for issues labeled "Critter", spawns Claude Code CLI instances to work on them, and produces draft PRs.
 
 ## Stack
 - Runtime: Bun
@@ -29,7 +29,8 @@ TypeScript daemon that watches Linear for issues labeled "Critter", spawns Claud
    ```
    cp .env.example .env
    ```
-   Required: `LINEAR_API_KEY` — your Linear API key
+   Required (for Linear): `LINEAR_API_KEY` — your Linear API key
+   Required (for Jira): `JIRA_HOST`, `JIRA_EMAIL`, `JIRA_API_TOKEN`
    Optional: `SLACK_WEBHOOK_URL` — for Slack notifications
 3. Review `critters.config.yaml` and adjust settings as needed.
 4. Start a tmux session (name must match `tmuxSession` in config, defaults to "critters"):
@@ -51,8 +52,8 @@ TypeScript daemon that watches Linear for issues labeled "Critter", spawns Claud
 ## Architecture
 
 ```
-Linear (issues matching any critter type trigger)
-    │  ← polls every 120s
+Linear / Jira (issues matching any critter type trigger)
+    │  ← polls every 120s (per-type, per-provider)
     ▼
   UnifiedWatcher (src/unified-watcher.ts)
     │  → per-type dedup, resolves repo URL
@@ -73,15 +74,15 @@ Linear (issues matching any critter type trigger)
 
 Each phase runs `claude -p` with `--output-format stream-json` in a tmux pane. Output is piped through `jq` using `src/stream-filter.jq` for readable display.
 
-## Creating Linear tickets for critters
+## Creating tickets for critters
 
-Issues must have:
-- **Label**: "Critter" (exact match)
-- **Status**: "Todo"
+Works with both Linear and Jira. Issues must have:
+- **Label**: "Critter" (exact match, configurable via `trigger.label`)
+- **Status**: "Todo" (Linear) or the mapped Jira status (configurable via `jiraStatusMap`)
 - **Description**: must include `repo: git@github.com:org/repo.git` on its own line (unless a project/team mapping exists in config)
 
 Optional but recommended:
-- **Project**: assign to the relevant Linear project
+- **Project**: assign to the relevant project
 - Put implementation guidance in the description — the critter reads it as its task spec
 
 The unified watcher picks up matching issues every 120 seconds. Once picked up, status moves to "In Progress" → "In Review" (on PR) or "Critter Failed" (on error).
@@ -89,7 +90,7 @@ The unified watcher picks up matching issues every 120 seconds. Once picked up, 
 ## Creating review tickets
 
 To trigger an automated review of a critter's PR:
-- **Label**: "Critter Review" (exact match, configurable via `reviewTriggerLabel`)
+- **Label**: "Critter Review" (exact match, configurable via `reviewTriggerLabel` or `trigger.label`)
 - **Status**: "In Review"
 - The issue must have a comment containing `PR created: <url>` (created automatically by the create critter)
 
@@ -143,9 +144,11 @@ critterTypes:
 
 | Field | Required | Default | Description |
 |---|---|---|---|
-| `trigger.label` | yes | — | Linear label that triggers this type |
-| `trigger.status` | yes | — | Linear status name to match (e.g., "Todo", "In Review") |
-| `trigger.statusType` | no | — | Linear status type to match (e.g., "unstarted"). More reliable than matching by name |
+| `provider` | no | top-level `provider` | `"linear"`, `"jira"`, or an array like `[linear, jira]` to poll both providers with the same config |
+| `trigger.label` | yes | — | Label that triggers this type |
+| `trigger.status` | yes | — | Status name to match (e.g., "Todo", "In Review") |
+| `trigger.statusType` | no | — | Linear status type to match (e.g., "unstarted"). More reliable than matching by name. Linear-only |
+| `trigger.assignee` | no | — | Only pick up issues assigned to this user. Email address, or `"me"` for the authenticated user |
 | `repo.clone` | no | true | Whether to shallow clone the repo |
 | `repo.branch` | no | — | Whether to create a feature branch (needed for PR-creating types) |
 | `phases` | yes | — | Array of phases to run sequentially (at least one) |
@@ -176,13 +179,189 @@ Use `--dry-run` to verify the daemon picks up the right issues for each type wit
 bun run src/index.ts --config test-configs/custom-types.yaml --dry-run
 ```
 
-A sample config with multiple custom types lives at `test-configs/custom-types.yaml`. Prompt templates for testing are at `~/.critters/prompts/`.
+A sample config with multiple custom types lives at `test-configs/custom-types.yaml`. A multi-provider example is at `test-configs/multi-provider.yaml`. Prompt templates for testing are at `~/.critters/prompts/`.
+
+## Multi-Provider Support
+
+A single daemon can poll both Linear and Jira simultaneously. Each critter type specifies which provider(s) to use via the `provider` field.
+
+### Provider setup
+
+Set `provider` at the top level for the default, then override per critter type:
+
+```yaml
+provider: linear  # default for types that don't specify
+
+jiraStatusMap:
+  "Todo": "To Do"
+  "In Progress": "In Progress"
+  "In Review": "In Review"
+  "Done": "Done"
+  "Critter Failed": "Failed"
+  "Human Review": "Needs Review"
+```
+
+### Per-type provider
+
+Each critter type can set `provider` to a single value or an array:
+
+```yaml
+critterTypes:
+  create:
+    provider: jira              # only polls Jira
+    trigger: { label: "Critter", status: "To Do" }
+    # ...
+
+  review:
+    provider: [linear, jira]    # polls both providers
+    trigger: { label: "Critter Review", status: "In Review" }
+    # ...
+```
+
+When `provider` is an array, the type is expanded internally — `create` with `provider: [linear, jira]` becomes `create:linear` and `create:jira`, each polling its own tracker with the same phases, tools, and outcomes. This avoids duplicating config.
+
+### Jira status mapping
+
+Jira workflows use different status names than Linear. The `jiraStatusMap` translates critter's internal status names (used in `outcomes`) to your Jira workflow's status names. The map is used when transitioning issues. If a status isn't in the map, the name is used as-is.
+
+### Jira differences from Linear
+
+- **Statuses**: Jira statuses are workflow-managed. The daemon can't create new statuses (unlike Linear where it auto-creates "Critter Failed" etc). Your Jira workflow must already have the target statuses.
+- **Labels**: Jira labels auto-create when applied — no setup needed.
+- **Descriptions**: Jira uses ADF (Atlassian Document Format). The tracker converts ADF to plain text automatically, so `repo: <url>` lines in descriptions work the same way.
+- **Status transitions**: Jira requires using the transitions API rather than setting status directly. The tracker finds the matching transition automatically.
+- **Blockers**: Detected via Jira issue links of type "is blocked by".
+
+### Example: Linear-only (default, backward compatible)
+
+```yaml
+defaultAllowedTools:
+  - "Read"
+  - "Write"
+  - "Edit"
+  - "Glob"
+  - "Grep"
+  - "Bash(git:*)"
+  - "Bash(gh:*)"
+  - "Bash(bun:*)"
+```
+
+No `provider` or `critterTypes` needed — defaults to Linear with built-in create + review types.
+
+### Example: Jira-only
+
+```yaml
+provider: jira
+
+jiraStatusMap:
+  "Todo": "To Do"
+  "In Progress": "In Progress"
+  "In Review": "In Review"
+  "Done": "Done"
+  "Critter Failed": "Failed"
+
+defaultAllowedTools:
+  - "Read"
+  - "Write"
+  - "Edit"
+  - "Glob"
+  - "Grep"
+  - "Bash(git:*)"
+  - "Bash(gh:*)"
+  - "Bash(bun:*)"
+
+critterTypes:
+  create:
+    trigger: { label: "Critter", status: "To Do" }
+    repo: { clone: true, branch: true }
+    phases:
+      - name: planning
+        prompt: builtin:planning
+        model: opus
+        maxTurns: 50
+        tools: readonly
+      - name: execution
+        prompt: builtin:execution
+        model: opus
+        maxTurns: 75
+        tools: default
+    outcomes:
+      success: { status: "In Review" }
+      failure: { status: "Critter Failed" }
+    concurrency: 2
+    timeoutMinutes: 30
+```
+
+### Example: Both providers, same config
+
+```yaml
+provider: linear
+
+jiraStatusMap:
+  "Todo": "To Do"
+  "In Progress": "In Progress"
+  "In Review": "In Review"
+  "Done": "Done"
+  "Critter Failed": "Failed"
+  "Human Review": "Needs Review"
+
+defaultAllowedTools:
+  - "Read"
+  - "Write"
+  - "Edit"
+  - "Glob"
+  - "Grep"
+  - "Bash(git:*)"
+  - "Bash(gh:*)"
+  - "Bash(bun:*)"
+
+critterTypes:
+  create:
+    provider: [linear, jira]
+    trigger: { label: "Critter", status: "Todo", statusType: "unstarted" }
+    repo: { clone: true, branch: true }
+    phases:
+      - name: planning
+        prompt: builtin:planning
+        model: opus
+        maxTurns: 50
+        tools: readonly
+      - name: execution
+        prompt: builtin:execution
+        model: opus
+        maxTurns: 75
+        tools: default
+    outcomes:
+      success: { status: "In Review" }
+      failure: { status: "Critter Failed" }
+    concurrency: 2
+    timeoutMinutes: 30
+
+  review:
+    provider: [linear, jira]
+    trigger: { label: "Critter Review", status: "In Review" }
+    repo: { clone: true }
+    phases:
+      - name: review
+        prompt: builtin:review
+        model: opus
+        maxTurns: 30
+        tools: review
+    outcomes:
+      merged: { status: "Done" }
+      needsChanges: { status: "Human Review" }
+      failure: { status: "Critter Failed" }
+    concurrency: 2
+    timeoutMinutes: 15
+    enrichment: extractPrUrl
+```
 
 ## Config (`critters.config.yaml`)
 
 | Field | Default | Description |
 |---|---|---|
-| `pollIntervalSeconds` | 120 | How often to poll Linear |
+| `provider` | "linear" | Default issue tracker provider: `"linear"` or `"jira"` |
+| `pollIntervalSeconds` | 120 | How often to poll for issues |
 | `concurrency` | 2 | Max parallel critters |
 | `timeoutMinutes` | 30 | Total timeout per task (both phases) |
 | `workDir` | /tmp/critters-work | Temp clone directory |
@@ -202,6 +381,7 @@ A sample config with multiple custom types lives at `test-configs/custom-types.y
 | `maxReviewTurns` | 30 | Max Claude turns per review |
 | `healthPort` | 3847 | HTTP server port for dashboard and health checks (0 to disable) |
 | `maxLogSizeMb` | 10 | Max log file size in MB before rotation (with `--no-tmux`) |
+| `jiraStatusMap` | {} | Map critter status names to Jira status names (e.g., `"Todo": "To Do"`) |
 | `hooks` | {} | Shell commands run on lifecycle events |
 
 ### Allowed tools
@@ -229,6 +409,7 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 | `src/critter-type.ts` | CritterTypeConfig definitions, synthesizeDefaultTypes(), parsing |
 | `src/tracker/types.ts` | IssueTracker interface, TrackerTask, ProviderConfig |
 | `src/tracker/linear.ts` | LinearTracker class (wraps Linear SDK) |
+| `src/tracker/jira.ts` | JiraTracker class (Jira Cloud REST API v3) |
 | `src/tracker/index.ts` | createTracker() factory |
 | `src/runner/types.ts` | PhaseRunner interface, PhaseContext, PhaseResult |
 | `src/runner/planning.ts` | PlanningPhaseRunner (plan + reviewer subagent loop) |
@@ -239,7 +420,7 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 | `src/prompt-template.ts` | resolvePrompt(), resolveTools(), variable substitution |
 | `src/claude.ts` | tmux pane spawning, stream-json piping |
 | `src/prompt.ts` | Build planning/execution prompts, parse repo URL |
-| `src/linear.ts` | Linear SDK wrapper (legacy, used by CLI commands) |
+| `src/linear.ts` | Linear SDK wrapper (legacy, mostly unused — tracker abstraction preferred) |
 | `src/review-prompt.ts` | Build review prompt, review allowed tools |
 | `src/git.ts` | Clone, branch, commit, cleanup |
 | `src/config.ts` | Load YAML + env, parse critterTypes |
@@ -267,8 +448,13 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 
 ## Environment variables
 
-- `LINEAR_API_KEY` (required) — in `.env` file
+- `LINEAR_API_KEY` — required when using `provider: linear` (default)
+- `JIRA_HOST` — Jira Cloud hostname (e.g., `mycompany.atlassian.net`), required when using `provider: jira`
+- `JIRA_EMAIL` — Jira user email, required when using `provider: jira`
+- `JIRA_API_TOKEN` — Jira API token (from https://id.atlassian.com), required when using `provider: jira`
 - `SLACK_WEBHOOK_URL` (optional) — for completion notifications
+
+Only the credentials for providers actually referenced by your `critterTypes` are required. A Linear-only config doesn't need Jira vars and vice versa.
 
 ## Build & Binary
 
