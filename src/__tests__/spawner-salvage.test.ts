@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createBranch, hasCommitsOnBranch, shallowClone } from "../git.js";
-import { salvagePartialProgress } from "../unified-spawner.js";
+import { addPrTimeoutComment, salvagePartialProgress } from "../unified-spawner.js";
 
 let bareRepo: string;
 let tempDirs: string[];
@@ -125,5 +125,21 @@ describe("salvagePartialProgress", () => {
 		// Passing a completely invalid workDir — function should catch and return {}
 		const result = await salvagePartialProgress("/dev/null", "bad-branch", "TEST-1", "Bad");
 		expect(result).toEqual({});
+	});
+});
+
+describe("addPrTimeoutComment", () => {
+	test("returns without error for malformed PR URL", async () => {
+		// URL without /pull/<number> — should return silently
+		await expect(
+			addPrTimeoutComment("/tmp", "https://github.com/org/repo", "TEST-1", 30),
+		).resolves.toBeUndefined();
+	});
+
+	test("handles gh failure gracefully", async () => {
+		// Valid-looking URL but no actual GitHub repo — gh will fail, should not throw
+		await expect(
+			addPrTimeoutComment("/tmp", "https://github.com/org/repo/pull/999", "TEST-1", 30),
+		).resolves.toBeUndefined();
 	});
 });

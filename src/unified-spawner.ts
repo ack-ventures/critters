@@ -215,7 +215,9 @@ export class UnifiedSpawner {
     const taskStart = Date.now();
 
     // Timeout for the entire task
+    let timedOut = false;
     const timeout = setTimeout(() => {
+      timedOut = true;
       abortController.abort();
     }, critterType.timeoutMinutes * 60 * 1000);
 
@@ -450,7 +452,9 @@ export class UnifiedSpawner {
 
       return { success: true };
     } catch (err) {
-      const error = err instanceof Error ? err.message : String(err);
+      const error = timedOut
+        ? `Timed out after ${critterType.timeoutMinutes} minutes`
+        : (err instanceof Error ? err.message : String(err));
       logTaskError(task.identifier, error);
 
       const totalDuration = formatDuration(Date.now() - taskStart);
@@ -465,16 +469,25 @@ export class UnifiedSpawner {
         }
       }
 
-      // Salvage partial progress (for create type)
+      // Salvage partial progress (for any type with a feature branch)
       let salvageInfo = "";
-      if (critterType.name === "create" && critterType.repo.branch && branch) {
-        const salvage = await salvagePartialProgress(workDir, branch, task.identifier, task.title, task.repoUrl);
-        if (salvage.prUrl) {
-          salvageInfo = `\n\nPartial progress was saved as a draft PR: ${salvage.prUrl}`;
-          logTask(task.identifier, `Salvaged partial progress — draft PR: ${salvage.prUrl}`);
-        } else if (salvage.branchPushed) {
+      let salvageResult: { prUrl?: string; branchPushed?: boolean } = {};
+      if (critterType.repo.branch && branch) {
+        salvageResult = await salvagePartialProgress(workDir, branch, task.identifier, task.title, task.repoUrl);
+        if (salvageResult.prUrl) {
+          salvageInfo = `\n\nPartial progress was saved as a draft PR: ${salvageResult.prUrl}`;
+          logTask(task.identifier, `Salvaged partial progress — draft PR: ${salvageResult.prUrl}`);
+        } else if (salvageResult.branchPushed) {
           salvageInfo = `\n\nPartial commits were pushed to branch \`${branch}\`.`;
           logTask(task.identifier, `Salvaged partial progress — branch pushed: ${branch}`);
+        }
+      }
+
+      // Post a comment on the PR when timeout occurs
+      if (timedOut) {
+        const prUrlForComment = salvageResult.prUrl ?? task.prUrl;
+        if (prUrlForComment) {
+          await addPrTimeoutComment(workDir, prUrlForComment, task.identifier, critterType.timeoutMinutes, task.repoUrl);
         }
       }
 
@@ -498,7 +511,9 @@ export class UnifiedSpawner {
       }
 
       try {
-        let failComment = `${isReviewType ? "Review critter" : "Critter"} failed after ${totalDuration}: ${error}`;
+        let failComment = timedOut
+          ? `Critter timed out after ${critterType.timeoutMinutes} minutes.`
+          : `${isReviewType ? "Review critter" : "Critter"} failed after ${totalDuration}: ${error}`;
         failComment += salvageInfo;
         if (attachmentUrls.length > 0) {
           failComment += `\n\nAttached logs:\n${attachmentUrls.map((a) => `- [${a.name}](${a.url})`).join("\n")}`;
@@ -828,7 +843,7 @@ export async function salvagePartialProgress(
         "pr", "create", "--draft",
         "--head", branch,
         "--title", `[${identifier}] ${title} (partial)`,
-        "--body", "Critter failed mid-execution. See Linear issue for details.",
+        "--body", "Critter failed mid-execution. See the linked issue for details.",
         ...repoArgs,
       ],
       { cwd: workDir },
@@ -842,5 +857,25 @@ export async function salvagePartialProgress(
   } catch (err) {
     logTaskError(identifier, `Salvage failed entirely: ${err}`);
     return {};
+  }
+}
+
+export async function addPrTimeoutComment(
+  workDir: string,
+  prUrl: string,
+  identifier: string,
+  timeoutMinutes: number,
+  repoUrl?: string,
+): Promise<void> {
+  try {
+    const ownerRepo = repoUrl ? extractOwnerRepo(repoUrl) : null;
+    const repoArgs = ownerRepo ? ["--repo", ownerRepo] : [];
+    const prNumber = prUrl.match(/\/pull\/(\d+)/)?.[1];
+    if (!prNumber) return;
+
+    const body = `**Timeout**: Critter \`${identifier}\` timed out after ${timeoutMinutes} minutes. Partial work may have been committed to this branch. See the linked issue for details.`;
+    await runCommand("gh", ["pr", "comment", prNumber, "--body", body, ...repoArgs], { cwd: workDir });
+  } catch (err) {
+    logTaskError(identifier, `Failed to comment on PR: ${err}`);
   }
 }
