@@ -561,7 +561,7 @@ An HTTP server starts on `healthPort` (default 3847, set to 0 to disable).
 | Endpoint | Method | Description |
 |---|---|---|
 | `/` or `/dashboard` | GET | HTML dashboard with summary stats, charts (14-day tasks/cost), and recent activity table. Auto-refreshes every 30s. |
-| `/healthz` | GET | JSON health check: uptime, version, active/queued counts, last poll time, metrics summary |
+| `/healthz` | GET | JSON health check: uptime, version, active/queued counts (per-type and flat), active critter details, last poll time, metrics summary |
 | `/metrics` | GET | JSON array of recent metric events (last 100) |
 | `/poll` | POST | Trigger an immediate critter poll cycle |
 | `/review-poll` | POST | Trigger an immediate review poll cycle |
