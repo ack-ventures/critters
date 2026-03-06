@@ -175,6 +175,18 @@ Prompt files support `{{identifier}}`, `{{title}}`, `{{description}}`, and other
 
 If `critterTypes` is omitted from config, the daemon synthesizes the default `create` and `review` types from the flat config fields — fully backward compatible.
 
+## Use cases
+
+Critters is a general-purpose agent orchestrator — the built-in create and review types are just the start. Any workflow matching "watch for trigger → run Claude with a prompt → produce an outcome" can be a critter type:
+
+- **Issue triage bot** — automatically labels, prioritizes, and summarizes new issues
+- **Documentation writer** — reads code and generates or updates markdown docs, opens a PR
+- **Security auditor** — scans for OWASP top 10 vulnerabilities, dependency issues, and hardcoded secrets
+- **Test generator** — reads implementation code and writes missing test cases, opens a PR
+- **Multi-step workflows** — chain critter types using Linear/Jira blocking relationships (e.g., a "plan" critter spawns sub-tickets, then "implement" critters pick up each one)
+
+See [CLAUDE.md](CLAUDE.md#use-cases) for complete config examples.
+
 ## Multi-provider (Linear + Jira)
 
 A single daemon can poll both Linear and Jira. Set the default provider at the top level, then use `provider` on each critter type to override:
