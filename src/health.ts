@@ -65,6 +65,8 @@ export function startHealthServer(
             elapsed: formatDuration(now - d.startedAt),
             prUrl: d.prUrl ?? null,
             timeoutMinutes: d.timeoutMinutes ?? null,
+            critterType: d.critterType ?? null,
+            workDir: d.workDir ?? null,
           })),
         });
       }

@@ -96,6 +96,8 @@ export interface ActiveCritterDetail {
   startedAt: number;    // Date.now() timestamp
   prUrl?: string;
   timeoutMinutes?: number;
+  critterType?: string; // the critter type name (e.g., "create", "review", "code-audit")
+  workDir?: string;     // the work directory path for this critter
 }
 
 export interface ReviewTask extends CritterTask {

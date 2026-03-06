@@ -49,6 +49,7 @@ Commands:
   init        Interactive config setup (~/.critters/)
   list-types  Show configured critter types
   logs        Show logs for a critter run
+  tail        Live-stream output from all active critters
   init-repo   Scaffold .critters.yaml in current repo
   prompt-help Launch Claude to help design critter types and prompts
   clean       Clean up stale work directories
@@ -65,7 +66,10 @@ Flags:
 
 Logs flags:
   --phase planning|execution|review  Show specific phase (default: most recent)
-  --follow, -f                       Tail mode (stream new output)`);
+  --follow, -f                       Tail mode (stream new output)
+
+Tail flags:
+  --type NAME  Filter to a specific critter type`);
   process.exit(0);
 }
 
@@ -140,6 +144,12 @@ if (subcommand === "list-types") {
 if (subcommand === "clean") {
   const { runClean } = await import("./cli-clean.js");
   await runClean(Bun.argv.slice(3));
+  process.exit(0);
+}
+
+if (subcommand === "tail") {
+  const { tailCommand } = await import("./cli-tail.js");
+  await tailCommand(Bun.argv.slice(3));
   process.exit(0);
 }
 
