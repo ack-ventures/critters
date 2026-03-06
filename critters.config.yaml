@@ -1,23 +1,12 @@
-pollIntervalSeconds: 120
-concurrency: 5
-timeoutMinutes: 30
-workDir: /tmp/critters-work
-triggerLabel: "Critter"
-maxPlanningTurns: 50
-maxExecutionTurns: 75
-tmuxSession: critters
-# maxLogSizeMb: 10          # Max log file size before rotation (keeps 3 rotated files)
-# Health check HTTP server port (0 to disable, must be 1024-65535)
-healthPort: 3847
-# planningModel: opus
-# executionModel: opus
+provider: linear
+# provider: jira
+# provider: [linear, jira]
 
-# Review critter settings
-# reviewTriggerLabel: "Critter Review"
-# reviewModel: opus
-# reviewConcurrency: 2
-# reviewTimeoutMinutes: 15
-# maxReviewTurns: 30
+pollIntervalSeconds: 120
+workDir: /tmp/critters-work
+tmuxSession: critters
+healthPort: 3847
+# maxLogSizeMb: 10          # Max log file size before rotation (with --no-tmux)
 
 defaultAllowedTools:
   - "Read"
@@ -37,7 +26,7 @@ defaultAllowedTools:
   - "Bash(cat:*)"
 
 repos:
-  # Linear project ID → repo config
+  # Linear project ID or Jira project key → repo config
   # "project-uuid-1":
   #   url: "git@github.com:your-org/your-repo.git"
   #   extraAllowedTools: ["Bash(poetry:*)"]
@@ -45,6 +34,54 @@ repos:
 teamRepos:
   # Fallback: Linear team ID → repo URL
   # "team-uuid-1": "git@github.com:your-org/default-repo.git"
+
+# Jira status mapping (required when using provider: jira)
+# jiraStatusMap:
+#   "Todo": "To Do"
+#   "In Progress": "In Progress"
+#   "In Review": "In Review"
+#   "Done": "Done"
+#   "Critter Failed": "Failed"
+#   "Human Review": "Needs Review"
+
+critterTypes:
+  create:
+    trigger: { label: "Critter", status: "Todo", statusType: "unstarted" }
+    # trigger.assignee: "alice@company.com"  # optional: only pick up issues assigned to this user
+    repo: { clone: true, branch: true }
+    phases:
+      - name: planning
+        prompt: builtin:planning
+        model: opus
+        maxTurns: 50
+        tools: readonly
+      - name: execution
+        prompt: builtin:execution
+        model: opus
+        maxTurns: 75
+        tools: default
+    outcomes:
+      success: { status: "In Review" }
+      failure: { status: "Critter Failed" }
+    concurrency: 2
+    timeoutMinutes: 30
+
+  review:
+    trigger: { label: "Critter Review", status: "In Review" }
+    repo: { clone: true }
+    phases:
+      - name: review
+        prompt: builtin:review
+        model: opus
+        maxTurns: 30
+        tools: review
+    outcomes:
+      merged: { status: "Done" }
+      needsChanges: { status: "Human Review" }
+      failure: { status: "Critter Failed" }
+    concurrency: 2
+    timeoutMinutes: 15
+    enrichment: extractPrUrl
 
 # Shell hooks — commands run on lifecycle events
 # Environment variables available: CRITTER_ISSUE_ID, CRITTER_IDENTIFIER,
