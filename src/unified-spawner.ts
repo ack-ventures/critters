@@ -13,6 +13,7 @@ import { triggerHook } from "./hooks.js";
 import { log, logTask, logTaskError } from "./logger.js";
 import { recordMetric } from "./metrics.js";
 import { loadRepoConfig } from "./repo-config.js";
+import { updatePrWithPlan } from "./runner/execution.js";
 import { getPhaseRunner } from "./runner/index.js";
 import type { PhaseContext } from "./runner/types.js";
 import {
@@ -342,6 +343,7 @@ export class UnifiedSpawner {
 
       // Run phases sequentially
       const phaseDataList: Record<string, unknown>[] = [];
+      const allPhaseStats: { name: string; durationMs: number; costUsd?: number }[] = [];
       let costAlertSent = false;
       for (const phase of critterType.phases) {
         if (critterType.name === "create") {
@@ -381,6 +383,11 @@ export class UnifiedSpawner {
         phaseDataList.push(phaseResult.data);
 
         const phaseDuration = Date.now() - phaseStart;
+        allPhaseStats.push({
+          name: phase.name,
+          durationMs: phaseDuration,
+          costUsd: phaseResult.spawn.costUsd,
+        });
         const phaseStats = `${phase.name} completed in ${formatDuration(phaseDuration)}${formatPhaseStats(phaseResult.spawn)}`;
         logTask(task.identifier, phaseStats);
         await tracker.comment(task.id, phaseStats);
@@ -424,7 +431,7 @@ export class UnifiedSpawner {
           if (prUrl) {
             const detail = this.activeCritterMap.get(task.id);
             if (detail) detail.prUrl = prUrl;
-            return this.handleCreateSuccess(task, critterType, prUrl, branch, phaseResults, taskStart, tracker);
+            return this.handleCreateSuccess(task, critterType, prUrl, branch, phaseResults, allPhaseStats, workDir, taskStart, tracker);
           }
           // Commits exist but no PR
           await tracker.comment(task.id, "Execution completed with commits but no PR was created.");
@@ -630,12 +637,20 @@ export class UnifiedSpawner {
     prUrl: string,
     branch: string,
     phaseResults: SpawnResult[],
+    allPhaseStats: { name: string; durationMs: number; costUsd?: number }[],
+    workDir: string,
     taskStart: number,
     tracker: IssueTracker,
   ): Promise<TaskResult> {
     const successOutcome = critterType.outcomes.success;
     if (successOutcome) {
       await tracker.updateStatus(task.id, successOutcome.status, task.groupId);
+    }
+
+    try {
+      await updatePrWithPlan(workDir, prUrl, task.identifier, allPhaseStats);
+    } catch (err) {
+      logTaskError(task.identifier, `Failed to update PR description: ${err}`);
     }
 
     const totalDuration = formatDuration(Date.now() - taskStart);
