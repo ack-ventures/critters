@@ -57,6 +57,28 @@ function formatShortDate(dateStr: string): string {
   return `${months[monthIdx] ?? parts[1]} ${day}`;
 }
 
+function chartDateLabel(dateStr: string, prevDateStr: string | null): string {
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const parts = dateStr.split("-");
+  if (parts.length < 3) return dateStr;
+  const day = parseInt(parts[2], 10);
+  const month = parts[1];
+  const monthIdx = parseInt(month, 10) - 1;
+
+  // Show month name + day when month changes (or for the first label)
+  if (prevDateStr == null) {
+    return `${months[monthIdx] ?? month} ${day}`;
+  }
+
+  const prevParts = prevDateStr.split("-");
+  if (prevParts.length >= 2 && prevParts[1] !== month) {
+    return `${months[monthIdx] ?? month} ${day}`;
+  }
+
+  // Same month: just show the day number
+  return `${day}`;
+}
+
 function formatDurationMinutes(ms: number): string {
   if (ms <= 0) return "0m";
   const mins = Math.round(ms / 60000);
@@ -229,7 +251,7 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
     .card .value { font-size: 1.8rem; font-weight: 700; margin-top: 4px; }
     .card .sub { font-size: 0.75rem; color: var(--text-dim); margin-top: 2px; }
 
-    .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .charts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px; }
     .chart-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
     .chart-card:hover { z-index: 10; position: relative; }
     .chart-card h3 { font-size: 0.9rem; margin-bottom: 12px; color: var(--text-dim); }
@@ -251,7 +273,7 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
     .donut-svg { width: 100px; height: 100px; }
     .donut-text { font-family: inherit; font-size: 0.45rem; fill: var(--text); font-weight: 700; text-anchor: middle; dominant-baseline: central; }
     .donut-legend { font-size: 0.75rem; color: var(--text-dim); margin-top: 8px; text-align: center; }
-    .bar-label { font-size: 0.6rem; color: var(--text-dim); margin-top: 4px; white-space: nowrap; }
+    .bar-label { font-size: 0.6rem; color: var(--text-dim); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .bar[data-tooltip]:hover::after {
       content: attr(data-tooltip);
       position: absolute;
@@ -365,7 +387,7 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
     a { color: #5dade2; text-decoration: none; }
     a:hover { text-decoration: underline; }
 
-    @media (max-width: 600px) {
+    @media (max-width: 768px) {
       body { padding: 12px; }
       .summary { grid-template-columns: repeat(2, 1fr); gap: 10px; }
       .card .value { font-size: 1.4rem; }
@@ -531,16 +553,17 @@ ${status.activeCritterDetails.map((d) => {
         </div>
         <div class="bar-chart">
 ${dailyStats
-  .map((d) => {
+  .map((d, i) => {
     const successH = Math.round(((d.completed) / maxTasksPerDay) * 100);
     const failH = Math.round(((d.failed) / maxTasksPerDay) * 100);
     const shortDate = formatShortDate(d.date);
+    const label = chartDateLabel(d.date, i > 0 ? dailyStats[i - 1].date : null);
     return `          <div class="bar-group" data-tooltip="${shortDate}: ${d.completed} completed, ${d.failed} failed">
             <div class="bar-stack">
               <div class="bar failure" style="height:${failH}%"${failH > 0 ? ` data-tooltip="${d.failed} failed"` : ""}></div>
               <div class="bar success" style="height:${successH}%"${successH > 0 ? ` data-tooltip="${d.completed} completed"` : ""}></div>
             </div>
-            <div class="bar-label">${escapeHtml(shortDate)}</div>
+            <div class="bar-label">${escapeHtml(label)}</div>
           </div>`;
   })
   .join("\n")}
@@ -557,14 +580,15 @@ ${dailyStats
         </div>
         <div class="bar-chart">
 ${dailyStats
-  .map((d) => {
+  .map((d, i) => {
     const h = Math.round((d.cost / maxCostPerDay) * 100);
     const shortDate = formatShortDate(d.date);
+    const label = chartDateLabel(d.date, i > 0 ? dailyStats[i - 1].date : null);
     return `          <div class="bar-group" data-tooltip="${shortDate}: $${d.cost.toFixed(2)}">
             <div class="bar-stack">
               <div class="bar cost" style="height:${h}%"${h > 0 ? ` data-tooltip="$${d.cost.toFixed(2)}"` : ""}></div>
             </div>
-            <div class="bar-label">${escapeHtml(shortDate)}</div>
+            <div class="bar-label">${escapeHtml(label)}</div>
           </div>`;
   })
   .join("\n")}
@@ -581,14 +605,15 @@ ${dailyStats
         </div>
         <div class="bar-chart">
 ${dailyStats
-  .map((d) => {
+  .map((d, i) => {
     const h = maxDurationPerDay > 0 ? Math.round((d.avgDuration / maxDurationPerDay) * 100) : 0;
     const shortDate = formatShortDate(d.date);
+    const label = chartDateLabel(d.date, i > 0 ? dailyStats[i - 1].date : null);
     return `          <div class="bar-group" data-tooltip="${shortDate}: ${fmtDuration(d.avgDuration)}">
             <div class="bar-stack">
               <div class="bar duration" style="height:${h}%"${h > 0 ? ` data-tooltip="${fmtDuration(d.avgDuration)}"` : ""}></div>
             </div>
-            <div class="bar-label">${escapeHtml(shortDate)}</div>
+            <div class="bar-label">${escapeHtml(label)}</div>
           </div>`;
   })
   .join("\n")}
