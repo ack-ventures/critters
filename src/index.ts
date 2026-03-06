@@ -46,6 +46,7 @@ Commands:
   version     Show version
   update      Check for and apply updates
   init        Interactive config setup (~/.critters/)
+  list-types  Show configured critter types
   logs        Show logs for a critter run
   init-repo   Scaffold .critters.yaml in current repo
   help        Show this help
@@ -103,6 +104,14 @@ if (subcommand === "init-repo") {
 if (subcommand === "kickoff") {
   const { runKickoff } = await import("./cli-kickoff.js");
   await runKickoff();
+  process.exit(0);
+}
+
+if (subcommand === "list-types") {
+  const { runListTypes } = await import("./cli-list-types.js");
+  const configIdx = Bun.argv.indexOf("--config");
+  const configPath = configIdx !== -1 && Bun.argv[configIdx + 1] ? Bun.argv[configIdx + 1] : undefined;
+  await runListTypes(configPath);
   process.exit(0);
 }
 

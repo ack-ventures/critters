@@ -476,6 +476,7 @@ Usage: `critters [command] [flags]`
 | `logs <ID>` | View critter logs (`--phase planning\|execution\|review`, `--follow\|-f`) |
 | `retry <ID>` | Reset a failed critter to Todo for re-pickup (`--force` to override non-failed states) |
 | `kickoff` | Trigger an immediate poll cycle via the health server |
+| `list-types` | Show configured critter types |
 | `init` | Interactive setup — creates `~/.critters/` with config, env, and prompt template files |
 | `init-repo` | Scaffold `.critters.yaml` in the current repo |
 | `update` | Check for and apply binary updates |
