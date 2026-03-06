@@ -894,6 +894,7 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="7" class="empty-stat
 })();
 
 (function() {
+  if (window._refreshInterval) clearInterval(window._refreshInterval);
   var INTERVAL = 30;
   var remaining = INTERVAL;
   var countdownEl = document.getElementById('refresh-countdown');
@@ -934,7 +935,7 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="7" class="empty-stat
       });
   }
 
-  setInterval(function() {
+  window._refreshInterval = setInterval(function() {
     if (paused) return;
     remaining--;
     if (remaining <= 0) {

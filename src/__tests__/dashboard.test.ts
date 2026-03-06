@@ -142,7 +142,7 @@ describe("renderDashboard", () => {
     recordMetric({ timestamp: now, event: "task_completed", identifier: '<script>alert("xss")</script>' });
 
     const html = renderDashboard("", defaultStatus(), 0);
-    expect(html).not.toContain("<script>");
+    expect(html).not.toContain('<script>alert("xss")</script>');
     expect(html).toContain("&lt;script&gt;");
   });
 
@@ -169,7 +169,8 @@ describe("renderDashboard", () => {
 
     const html = renderDashboard("", defaultStatus(), 0);
     expect(html).toContain("8m");
-    expect(html).not.toContain("480000");
+    // data-sort-value contains the raw ms, but the display text should be formatted
+    expect(html).toContain("8m 0s");
   });
 
   test("duration formatting for sub-minute values", () => {
