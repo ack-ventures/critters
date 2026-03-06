@@ -186,6 +186,7 @@ export class UnifiedSpawner {
         branch: item.task.prBranch ?? branchName(item.task.identifier, item.task.title, this.config.branchPrefix),
         startedAt: Date.now(),
         prUrl: item.task.prUrl,
+        timeoutMinutes: item.critterType.timeoutMinutes,
       });
 
       const metricEvent = typeName === "review" ? "review_started" : "task_started";

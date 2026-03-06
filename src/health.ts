@@ -64,6 +64,7 @@ export function startHealthServer(
             branch: d.branch,
             elapsed: formatDuration(now - d.startedAt),
             prUrl: d.prUrl ?? null,
+            timeoutMinutes: d.timeoutMinutes ?? null,
           })),
         });
       }

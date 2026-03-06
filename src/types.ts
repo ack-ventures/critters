@@ -95,6 +95,7 @@ export interface ActiveCritterDetail {
   branch: string;
   startedAt: number;    // Date.now() timestamp
   prUrl?: string;
+  timeoutMinutes?: number;
 }
 
 export interface ReviewTask extends CritterTask {
