@@ -14,6 +14,7 @@ function defaultStatus(): HealthStatus {
     queuedCritters: 0,
     activeReviews: 0,
     queuedReviews: 0,
+    perType: {},
     lastPollAt: null,
     activeCritterDetails: [],
   };
@@ -76,6 +77,7 @@ describe("GET /healthz", () => {
       queuedCritters: 3,
       activeReviews: 1,
       queuedReviews: 0,
+      perType: { create: { active: 2, queued: 3 }, review: { active: 1, queued: 0 } },
       lastPollAt: "2026-01-15T10:00:00.000Z",
       activeCritterDetails: [],
     }));
@@ -87,6 +89,7 @@ describe("GET /healthz", () => {
     expect(body.queuedCritters).toBe(3);
     expect(body.activeReviews).toBe(1);
     expect(body.queuedReviews).toBe(0);
+    expect(body.perType).toEqual({ create: { active: 2, queued: 3 }, review: { active: 1, queued: 0 } });
     expect(body.lastPollAt).toBe("2026-01-15T10:00:00.000Z");
   });
 

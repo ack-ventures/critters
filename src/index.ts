@@ -290,6 +290,7 @@ async function main() {
       queuedCritters: spawner.getQueueSize("create"),
       activeReviews: spawner.getActiveCount("review"),
       queuedReviews: spawner.getQueueSize("review"),
+      perType: spawner.getPerTypeCounts(),
       lastPollAt,
       activeCritterDetails: spawner.getActiveDetails(),
     }), metricsPath, {
