@@ -105,6 +105,7 @@ describe("renderDashboard", () => {
       queuedReviews: 0,
       perType: {},
       lastPollAt: null,
+      activeCritterDetails: [],
     };
     const html = renderDashboard("", status);
     expect(html).toContain("Active Tasks");
