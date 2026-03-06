@@ -37,15 +37,27 @@ Compare the PR against the original task description above. Check:
 - **Tests**: Are new/changed behaviors covered by tests?
 - **Edge cases**: Error paths and boundary conditions handled?
 
-### Step 3: Make your decision
+### Step 3: Wait for CI and merge (if approved)
 
 **If the PR looks good** (no significant issues):
 1. Run: \`gh pr review ${task.prNumber} --approve -b "LGTM. Automated review by Critters."\`
-2. Run: \`gh pr checks ${task.prNumber} --watch --fail-fast\`
-   - If checks pass → \`gh pr merge ${task.prNumber} --squash --delete-branch\`
-   - If checks fail → \`gh pr review ${task.prNumber} --request-changes -b "CI checks failed. Please investigate."\` then output: REVIEW_RESULT:NEEDS_CHANGES:CI checks failed
+2. Check CI status: \`gh pr checks ${task.prNumber}\`
+   - If all checks have already passed → skip to merge
+   - If any check has failed → skip to the CI-failed path below
+   - If checks are pending or no checks exist yet → continue to step 3
+3. Wait for CI using: \`gh pr checks ${task.prNumber} --watch --fail-fast\`
+   - This command blocks until checks complete. It may take several minutes — this is expected.
+   - If the command exits 0 → checks passed, proceed to merge
+   - If the command exits non-zero → checks failed, go to CI-failed path
+   - If the command appears to hang or you get a timeout error → run \`gh pr checks ${task.prNumber}\` one final time to snapshot the current state, then output: REVIEW_RESULT:NEEDS_CHANGES:CI timed out — checks still pending after extended wait
+4. Merge: \`gh pr merge ${task.prNumber} --squash --delete-branch\`
    - If merge fails → output: REVIEW_RESULT:NEEDS_CHANGES:Merge failed
-3. After successful merge, output: REVIEW_RESULT:MERGED
+5. After successful merge → output: REVIEW_RESULT:MERGED
+
+**CI-failed path:**
+1. Run \`gh pr checks ${task.prNumber}\` to capture which checks failed
+2. Run: \`gh pr review ${task.prNumber} --request-changes -b "CI checks failed: <list failed check names>"\`
+3. Output: REVIEW_RESULT:NEEDS_CHANGES:CI checks failed
 
 **If the PR needs changes** (real issues, not just style nits):
 1. Write clear, actionable feedback explaining what needs to change and why
