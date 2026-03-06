@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { spawnClaude, spawnClaudeSubprocess } from "../claude.js";
 import { autoCommit, hasCommitsOnBranch, hasUncommittedChanges } from "../git.js";
 import { logTask, logTaskError } from "../logger.js";
@@ -67,6 +68,11 @@ export class ExecutionPhaseRunner implements PhaseRunner {
     // Detect PR
     const prUrl = await detectPr(workDir, branch, task.identifier);
 
+    // Include plan in PR body
+    if (prUrl) {
+      await updatePrWithPlan(workDir, prUrl, task.identifier);
+    }
+
     return { spawn, data: { prUrl } };
   }
 }
@@ -121,5 +127,57 @@ async function detectPr(
   } catch {
     logTaskError(identifier, "PR not detected after 5 attempts");
     return null;
+  }
+}
+
+async function updatePrWithPlan(
+  workDir: string,
+  prUrl: string,
+  identifier: string,
+): Promise<void> {
+  const planFile = `${workDir}/critters/plans/${identifier}.md`;
+  if (!existsSync(planFile)) {
+    logTask(identifier, "No plan file found, skipping PR body update");
+    return;
+  }
+
+  let planContent = readFileSync(planFile, "utf-8").trim();
+  if (!planContent) return;
+
+  // Truncate very long plans to keep PR body manageable
+  const MAX_PLAN_LENGTH = 10000;
+  if (planContent.length > MAX_PLAN_LENGTH) {
+    planContent = planContent.slice(0, MAX_PLAN_LENGTH) + "\n\n*(plan truncated)*";
+  }
+
+  // Get current PR body
+  const { code: viewCode, stdout: viewOut } = await runCommand(
+    "gh",
+    ["pr", "view", prUrl, "--json", "body"],
+    { cwd: workDir },
+  );
+  if (viewCode !== 0) {
+    logTask(identifier, "Could not read current PR body, skipping plan injection");
+    return;
+  }
+
+  let currentBody = "";
+  try {
+    currentBody = JSON.parse(viewOut).body ?? "";
+  } catch {
+    // Best effort
+  }
+
+  const newBody = currentBody + "\n\n## Plan\n\n" + planContent;
+
+  const { code } = await runCommand(
+    "gh",
+    ["pr", "edit", prUrl, "--body", newBody],
+    { cwd: workDir },
+  );
+  if (code !== 0) {
+    logTask(identifier, "Failed to update PR body with plan (non-fatal)");
+  } else {
+    logTask(identifier, "Updated PR body with implementation plan");
   }
 }
