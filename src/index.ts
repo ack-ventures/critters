@@ -55,6 +55,7 @@ Flags:
   --no-tmux       Run without tmux (log to file instead)
   --skip-update   Skip auto-update check on startup
   --config PATH   Use a custom config file
+  --type NAME     Filter to a specific critter type (use with --dry-run)
 
 Logs flags:
   --phase planning|execution|review  Show specific phase (default: most recent)
@@ -117,6 +118,15 @@ async function main() {
   const noTmux = Bun.argv.includes("--no-tmux");
   const skipUpdate = Bun.argv.includes("--skip-update");
   const dryRun = Bun.argv.includes("--dry-run");
+  const typeFilter = (() => {
+    const idx = Bun.argv.indexOf("--type");
+    return idx !== -1 && Bun.argv[idx + 1] ? Bun.argv[idx + 1] : undefined;
+  })();
+
+  if (typeFilter && !dryRun) {
+    logError("--type can only be used with --dry-run");
+    process.exit(1);
+  }
 
   // Auto-launch inside tmux if not already there
   if (!noTmux && !dryRun && !process.env.TMUX) {
@@ -167,11 +177,33 @@ async function main() {
     await fetchLatestVersion();
   }
 
+  // Filter critter types if --type is specified (before creating trackers
+  // so only the needed provider's tracker is instantiated)
+  if (typeFilter) {
+    const match = config.critterTypes.filter(
+      (ct) => ct.name === typeFilter || ct.name.startsWith(typeFilter + ":")
+    );
+    if (match.length === 0) {
+      const baseNames = [...new Set(config.critterTypes.map((ct) => ct.name.split(":")[0]))];
+      const available = config.critterTypes.length === baseNames.length
+        ? baseNames.join(", ")
+        : baseNames.map((base) => {
+            const variants = config.critterTypes
+              .filter((ct) => ct.name === base || ct.name.startsWith(base + ":"))
+              .map((ct) => ct.name);
+            return variants.length > 1 ? `${base} (${variants.join(", ")})` : base;
+          }).join(", ");
+      logError(`Unknown type "${typeFilter}". Available types: ${available}`);
+      process.exit(1);
+    }
+    config.critterTypes = match;
+  }
+
   // Create issue trackers (one per unique provider)
   const trackers = createTrackers(config);
 
   if (dryRun) {
-    log(`Critters ${getDisplayVersion()} — dry run`);
+    log(`Critters ${getDisplayVersion()} — dry run${typeFilter ? ` (type: ${typeFilter})` : ""}`);
     for (const tracker of trackers.values()) {
       await tracker.init();
     }

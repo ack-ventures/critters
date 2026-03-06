@@ -31,6 +31,7 @@ This downloads the latest binary, installs it to your PATH, and walks you throug
 - `--no-tmux` — run without tmux (log to file instead)
 - `--skip-update` — skip auto-update check on startup
 - `--config PATH` — use a custom config file
+- `--type NAME` — filter dry-run to a specific critter type
 
 ## Development quick start
 
