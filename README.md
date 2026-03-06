@@ -118,7 +118,7 @@ The daemon runs an HTTP server on port 3847 (configurable via `healthPort`, set 
 | Route | Description |
 |---|---|
 | `/` or `/dashboard` | Live dashboard with task stats, charts, and recent activity |
-| `/healthz` | JSON health check (uptime, version, active/queued counts, metrics summary) |
+| `/healthz` | JSON health check (uptime, version, per-type active/queued counts, active critter details, metrics summary) |
 | `/metrics` | JSON array of recent metric events |
 
 `critters status` queries the health endpoint to display a quick summary in the terminal.
