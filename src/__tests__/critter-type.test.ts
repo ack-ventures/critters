@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   type CritterTypeConfig,
   parseCritterType,
+  parseCritterTypes,
   synthesizeDefaultTypes,
   validateCritterType,
 } from "../critter-type.js";
@@ -282,5 +283,75 @@ describe("validateCritterType", () => {
     expect(() => validateCritterType(validType({
       phases: [{ name: "", prompt: "f.md", model: "opus", maxTurns: 10, tools: "default" }],
     }))).toThrow("invalid phase config");
+  });
+});
+
+describe("parseCritterTypes (multi-provider)", () => {
+  const baseRaw = {
+    trigger: { label: "Critter", status: "Todo" },
+    repo: { clone: true, branch: true },
+    phases: [{ name: "planning", prompt: "builtin:planning", model: "opus", maxTurns: 50, tools: "readonly" }],
+    outcomes: { success: { status: "Done" }, failure: { status: "Failed" } },
+  };
+
+  test("single string provider returns one entry", () => {
+    const result = parseCritterTypes("create", { ...baseRaw, provider: "jira" });
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("create");
+    expect(result[0].provider).toBe("jira");
+  });
+
+  test("no provider returns one entry with undefined provider", () => {
+    const result = parseCritterTypes("create", baseRaw);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("create");
+    expect(result[0].provider).toBeUndefined();
+  });
+
+  test("array with two providers returns two entries", () => {
+    const result = parseCritterTypes("create", { ...baseRaw, provider: ["linear", "jira"] });
+    expect(result).toHaveLength(2);
+    expect(result[0].name).toBe("create:linear");
+    expect(result[0].provider).toBe("linear");
+    expect(result[1].name).toBe("create:jira");
+    expect(result[1].provider).toBe("jira");
+  });
+
+  test("array with single provider returns one entry without suffix", () => {
+    const result = parseCritterTypes("create", { ...baseRaw, provider: ["jira"] });
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("create");
+    expect(result[0].provider).toBe("jira");
+  });
+
+  test("expanded types share the same config", () => {
+    const result = parseCritterTypes("create", { ...baseRaw, provider: ["linear", "jira"], concurrency: 5 });
+    expect(result[0].concurrency).toBe(5);
+    expect(result[1].concurrency).toBe(5);
+    expect(result[0].trigger.label).toBe("Critter");
+    expect(result[1].trigger.label).toBe("Critter");
+  });
+});
+
+describe("parseCritterType provider field", () => {
+  test("preserves provider field", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5 }],
+      outcomes: { success: { status: "Done" } },
+      provider: "jira",
+    };
+    const ct = parseCritterType("test", raw);
+    expect(ct.provider).toBe("jira");
+  });
+
+  test("provider defaults to undefined when not specified", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5 }],
+      outcomes: { success: { status: "Done" } },
+    };
+    const ct = parseCritterType("test", raw);
+    expect(ct.provider).toBeUndefined();
   });
 });

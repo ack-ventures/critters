@@ -2,7 +2,7 @@ import { LinearClient } from "@linear/sdk";
 import type { TriggerConfig } from "../critter-type.js";
 import { log, logError, logTaskError } from "../logger.js";
 import { withRetry } from "../retry.js";
-import type { IssueTracker, TrackerTask } from "./types.js";
+import type { IssueTracker, IssueTrackerIssue, TrackerTask } from "./types.js";
 
 const MAX_PAGINATED_ISSUES = 200;
 
@@ -242,6 +242,34 @@ export class LinearTracker implements IssueTracker {
     const label = await result.issueLabel;
     if (!label) throw new Error(`Failed to create label "${labelName}"`);
     log(`Created label "${labelName}" (${label.id})`);
+  }
+
+  async findIssueByIdentifier(identifier: string): Promise<IssueTrackerIssue | null> {
+    const match = identifier.match(/^([A-Za-z]+-?)(\d+)$/);
+    if (!match) return null;
+    const teamKey = match[1].replace(/-$/, "");
+    const issueNumber = parseInt(match[2], 10);
+    const result = await this.client.issues({
+      filter: {
+        number: { eq: issueNumber },
+        team: { key: { eq: teamKey } },
+      },
+      first: 1,
+    });
+    const issue = result.nodes[0];
+    if (!issue) return null;
+
+    const state = await issue.state;
+    const labels = await issue.labels();
+    const team = await issue.team;
+
+    return {
+      id: issue.id,
+      identifier: issue.identifier,
+      statusName: state?.name ?? "Unknown",
+      labels: labels.nodes.map((l) => l.name),
+      groupId: team?.id ?? "",
+    };
   }
 
   /**

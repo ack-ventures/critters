@@ -28,6 +28,7 @@ export interface CritterTypeConfig {
   concurrency: number;
   timeoutMinutes: number;
   enrichment?: string;
+  provider?: "linear" | "jira";
 }
 
 /**
@@ -171,8 +172,33 @@ export function parseCritterType(name: string, raw: Record<string, unknown>): Cr
     concurrency: (raw.concurrency as number) ?? 2,
     timeoutMinutes: (raw.timeoutMinutes as number) ?? 30,
     enrichment: raw.enrichment as string | undefined,
+    provider: raw.provider as "linear" | "jira" | undefined,
   };
 
   validateCritterType(ct);
   return ct;
+}
+
+/**
+ * Parse a raw YAML critter type, expanding multi-provider arrays into
+ * separate configs. `provider: [linear, jira]` becomes two entries
+ * with names like "create:linear" and "create:jira".
+ */
+export function parseCritterTypes(name: string, raw: Record<string, unknown>): CritterTypeConfig[] {
+  const providerRaw = raw.provider;
+
+  if (Array.isArray(providerRaw) && providerRaw.length > 1) {
+    const results: CritterTypeConfig[] = [];
+    for (const p of providerRaw) {
+      const provider = p as "linear" | "jira";
+      const ct = parseCritterType(`${name}:${provider}`, { ...raw, provider });
+      results.push(ct);
+    }
+    return results;
+  }
+
+  // Single provider (string or single-element array)
+  const provider = Array.isArray(providerRaw) ? providerRaw[0] : providerRaw;
+  const ct = parseCritterType(name, { ...raw, provider: provider as string | undefined });
+  return [ct];
 }

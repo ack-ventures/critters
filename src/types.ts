@@ -38,7 +38,11 @@ export interface Config {
   maxReviewTurns: number;
   maxLogSizeMb: number;
   healthPort: number;
-  linearApiKey: string;
+  linearApiKey?: string;
+  jiraHost?: string;
+  jiraEmail?: string;
+  jiraApiToken?: string;
+  jiraStatusMap?: Record<string, string>;
   slackWebhookUrl?: string;
   hooks?: {
     onTaskStarted?: string;

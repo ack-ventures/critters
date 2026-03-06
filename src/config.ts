@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { parse as parseYaml } from "yaml";
-import { type CritterTypeConfig, parseCritterType, synthesizeDefaultTypes, validateCritterType } from "./critter-type.js";
+import { type CritterTypeConfig, parseCritterTypes as parseCritterTypesFromYaml, synthesizeDefaultTypes, validateCritterType } from "./critter-type.js";
 import type { Config, RepoConfig } from "./types.js";
 
 function validateWorkDir(workDir: string): void {
@@ -75,11 +75,10 @@ export function loadConfig(configPath?: string): Config {
   const raw = readFileSync(resolved, "utf-8");
   const yaml = parseYaml(raw) as Record<string, unknown>;
 
-  const linearApiKey = process.env.LINEAR_API_KEY;
-  if (!linearApiKey) {
-    throw new Error("LINEAR_API_KEY not set in environment or .env");
-  }
-
+  const linearApiKey = process.env.LINEAR_API_KEY || undefined;
+  const jiraHost = process.env.JIRA_HOST || undefined;
+  const jiraEmail = process.env.JIRA_EMAIL || undefined;
+  const jiraApiToken = process.env.JIRA_API_TOKEN || undefined;
   const slackWebhookUrl = process.env.SLACK_WEBHOOK_URL || undefined;
 
   const repos: Record<string, RepoConfig> = {};
@@ -134,6 +133,10 @@ export function loadConfig(configPath?: string): Config {
     repos,
     teamRepos,
     linearApiKey,
+    jiraHost,
+    jiraEmail,
+    jiraApiToken,
+    jiraStatusMap: (yaml.jiraStatusMap as Record<string, string>) ?? undefined,
     slackWebhookUrl,
     hooks,
     provider,
@@ -178,9 +181,11 @@ function parseCritterTypes(yaml: Record<string, unknown>, config: Config): Critt
 
   const types: CritterTypeConfig[] = [];
   for (const [name, raw] of Object.entries(rawTypes)) {
-    const ct = parseCritterType(name, raw);
-    validateCritterType(ct);
-    types.push(ct);
+    const expanded = parseCritterTypesFromYaml(name, raw);
+    for (const ct of expanded) {
+      validateCritterType(ct);
+      types.push(ct);
+    }
   }
 
   if (types.length === 0) {
@@ -201,6 +206,28 @@ function validateRepoUrls(config: Config): void {
   for (const [key, url] of Object.entries(config.teamRepos)) {
     if (!GIT_URL_RE.test(url)) {
       throw new Error(`Invalid git URL for teamRepo '${key}': ${url}`);
+    }
+  }
+}
+
+function validateProviderCredentials(config: Config): void {
+  // Collect which providers are actually needed
+  const neededProviders = new Set<string>();
+  for (const ct of config.critterTypes) {
+    neededProviders.add(ct.provider ?? config.provider);
+  }
+
+  if (neededProviders.has("linear") && !config.linearApiKey) {
+    throw new Error("LINEAR_API_KEY not set in environment or .env (required by at least one critter type using the Linear provider)");
+  }
+
+  if (neededProviders.has("jira")) {
+    const missing: string[] = [];
+    if (!config.jiraHost) missing.push("JIRA_HOST");
+    if (!config.jiraEmail) missing.push("JIRA_EMAIL");
+    if (!config.jiraApiToken) missing.push("JIRA_API_TOKEN");
+    if (missing.length > 0) {
+      throw new Error(`${missing.join(", ")} not set in environment or .env (required by at least one critter type using the Jira provider)`);
     }
   }
 }
@@ -240,4 +267,5 @@ function validateConfig(config: Config): void {
     throw new Error("Invalid config: defaultAllowedTools must be a non-empty array of tool patterns");
   }
   validateRepoUrls(config);
+  validateProviderCredentials(config);
 }

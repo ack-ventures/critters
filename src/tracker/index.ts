@@ -1,7 +1,8 @@
+import { JiraTracker } from "./jira.js";
 import { LinearTracker } from "./linear.js";
 import type { IssueTracker, ProviderConfig } from "./types.js";
 
-export type { IssueTracker, ProviderConfig, TrackerTask } from "./types.js";
+export type { IssueTracker, IssueTrackerIssue, ProviderConfig, TrackerTask } from "./types.js";
 
 export function createTracker(providerConfig: ProviderConfig): IssueTracker {
   switch (providerConfig.type) {
@@ -11,8 +12,12 @@ export function createTracker(providerConfig: ProviderConfig): IssueTracker {
       }
       return new LinearTracker(providerConfig.apiKey);
     }
-    case "jira":
-      throw new Error("Jira tracker is not yet implemented");
+    case "jira": {
+      if (!providerConfig.host || !providerConfig.email || !providerConfig.apiToken) {
+        throw new Error("Jira tracker requires JIRA_HOST, JIRA_EMAIL, and JIRA_API_TOKEN");
+      }
+      return new JiraTracker(providerConfig.host, providerConfig.email, providerConfig.apiToken, providerConfig.statusMap);
+    }
     default:
       throw new Error(`Unknown tracker provider: ${providerConfig.type}`);
   }
