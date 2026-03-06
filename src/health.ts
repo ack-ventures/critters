@@ -16,7 +16,7 @@ export interface HealthStatus {
   activeCritterDetails: ActiveCritterDetail[];
 }
 
-let cachedSummary: { totalTasks: number; succeeded: number; failed: number } | null = null;
+let cachedSummary: { totalTasks: number; succeeded: number; failed: number; totalCost: number; avgCost: number } | null = null;
 let cachedAt = 0;
 const CACHE_TTL_MS = 30_000;
 
@@ -113,7 +113,7 @@ export function startHealthServer(
   };
 }
 
-function computeMetricsSummary(): { totalTasks: number; succeeded: number; failed: number } {
+function computeMetricsSummary(): { totalTasks: number; succeeded: number; failed: number; totalCost: number; avgCost: number } {
   const now = Date.now();
   if (cachedSummary && now - cachedAt < CACHE_TTL_MS) {
     return cachedSummary;
@@ -123,17 +123,27 @@ function computeMetricsSummary(): { totalTasks: number; succeeded: number; faile
   let totalTasks = 0;
   let succeeded = 0;
   let failed = 0;
+  let totalCost = 0;
   for (const m of all) {
     if (m.event === "task_completed") {
       totalTasks++;
       succeeded++;
+      totalCost += m.costUsd ?? 0;
     } else if (m.event === "task_failed") {
       totalTasks++;
       failed++;
+      totalCost += m.costUsd ?? 0;
+    } else if (m.event === "review_completed" || m.event === "review_failed") {
+      totalTasks++;
+      if (m.event === "review_completed") succeeded++;
+      else failed++;
+      totalCost += m.costUsd ?? 0;
     }
   }
 
-  cachedSummary = { totalTasks, succeeded, failed };
+  const avgCost = totalTasks > 0 ? totalCost / totalTasks : 0;
+
+  cachedSummary = { totalTasks, succeeded, failed, totalCost, avgCost };
   cachedAt = now;
   return cachedSummary;
 }
