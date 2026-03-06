@@ -32,6 +32,7 @@ TypeScript daemon that watches issue trackers (Linear and Jira) for issues label
    Required (for Linear): `LINEAR_API_KEY` — your Linear API key
    Required (for Jira): `JIRA_HOST`, `JIRA_EMAIL`, `JIRA_API_TOKEN`
    Optional: `SLACK_WEBHOOK_URL` — for Slack notifications
+   Optional: `SLACK_BOT_TOKEN` + `SLACK_CHANNEL` — for threaded Slack notifications
 3. Review `critters.config.yaml` and adjust settings as needed.
 4. Start a tmux session (name must match `tmuxSession` in config, defaults to "critters"):
    ```
@@ -456,6 +457,8 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 - `JIRA_EMAIL` — Jira user email, required when using `provider: jira`
 - `JIRA_API_TOKEN` — Jira API token (from https://id.atlassian.com), required when using `provider: jira`
 - `SLACK_WEBHOOK_URL` (optional) — for completion notifications
+- `SLACK_BOT_TOKEN` (optional) — Slack bot token (`xoxb-...`) for threaded notifications
+- `SLACK_CHANNEL` (optional, required with `SLACK_BOT_TOKEN`) — Slack channel ID for bot notifications
 
 Only the credentials for providers actually referenced by your `critterTypes` are required. A Linear-only config doesn't need Jira vars and vice versa.
 
@@ -546,7 +549,9 @@ Each hook receives environment variables: `CRITTER_ISSUE_ID`, `CRITTER_IDENTIFIE
 
 ## Slack Notifications
 
-Set `SLACK_WEBHOOK_URL` in `.env` to receive Slack messages. Notifications are sent for:
+Set `SLACK_WEBHOOK_URL` in `.env` to receive Slack messages. For **threaded notifications** (all updates for an issue grouped under one message), set `SLACK_BOT_TOKEN` and `SLACK_CHANNEL` instead. When a bot token is configured, the daemon uses the Slack Web API (`chat.postMessage`) and threads subsequent notifications under the initial message for each issue. If only `SLACK_WEBHOOK_URL` is set, notifications are sent as separate top-level messages (no threading).
+
+Notifications are sent for:
 
 - Task picked up (cloning started)
 - Planning complete
@@ -558,7 +563,7 @@ Set `SLACK_WEBHOOK_URL` in `.env` to receive Slack messages. Notifications are s
 - Review needs changes
 - Review failed
 
-Messages use Slack incoming webhook format (`{ text: "..." }`). Failed sends are retried up to 2 times with exponential backoff. Notification failures are logged but don't fail the task.
+Messages are retried up to 2 times with exponential backoff. Notification failures are logged but don't fail the task.
 
 ## Dashboard & Health Server
 

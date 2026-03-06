@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   formatFailure,
   formatPlanningComplete,
@@ -9,6 +9,7 @@ import {
   formatSuccess,
   formatTaskPickedUp,
   formatTimeoutWarning,
+  SlackNotifier,
 } from "../slack.js";
 
 describe("formatSuccess", () => {
@@ -113,5 +114,176 @@ describe("formatTimeoutWarning", () => {
     expect(msg).toContain("ACK-1");
     expect(msg).toContain("Add feature");
     expect(msg).toContain("24/30 minutes");
+  });
+});
+
+describe("SlackNotifier", () => {
+  let originalFetch: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  describe("isConfigured", () => {
+    test("returns true when botToken and channel are set", () => {
+      const notifier = new SlackNotifier({ botToken: "xoxb-test", channel: "C123" });
+      expect(notifier.isConfigured).toBe(true);
+    });
+
+    test("returns true when webhookUrl is set", () => {
+      const notifier = new SlackNotifier({ webhookUrl: "https://hooks.slack.com/test" });
+      expect(notifier.isConfigured).toBe(true);
+    });
+
+    test("returns false when nothing is set", () => {
+      const notifier = new SlackNotifier({});
+      expect(notifier.isConfigured).toBe(false);
+    });
+  });
+
+  describe("Web API (bot token)", () => {
+    test("first call sends without thread_ts and captures ts", async () => {
+      const calls: { url: string; body: Record<string, string> }[] = [];
+      globalThis.fetch = mock(async (url: string | URL | Request, init?: RequestInit) => {
+        const body = JSON.parse(init?.body as string);
+        calls.push({ url: url as string, body });
+        return new Response(JSON.stringify({ ok: true, ts: "1234.5678" }));
+      }) as unknown as typeof fetch;
+
+      const notifier = new SlackNotifier({ botToken: "xoxb-test", channel: "C123" });
+      await notifier.notify("issue-1", "Hello");
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0].url).toBe("https://slack.com/api/chat.postMessage");
+      expect(calls[0].body.channel).toBe("C123");
+      expect(calls[0].body.text).toBe("Hello");
+      expect(calls[0].body.thread_ts).toBeUndefined();
+    });
+
+    test("subsequent calls include thread_ts", async () => {
+      const calls: { body: Record<string, string> }[] = [];
+      globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+        calls.push({ body: JSON.parse(init?.body as string) });
+        return new Response(JSON.stringify({ ok: true, ts: "1234.5678" }));
+      }) as unknown as typeof fetch;
+
+      const notifier = new SlackNotifier({ botToken: "xoxb-test", channel: "C123" });
+      await notifier.notify("issue-1", "First");
+      await notifier.notify("issue-1", "Second");
+
+      expect(calls).toHaveLength(2);
+      expect(calls[0].body.thread_ts).toBeUndefined();
+      expect(calls[1].body.thread_ts).toBe("1234.5678");
+    });
+
+    test("different issues get separate threads", async () => {
+      const calls: { body: Record<string, string> }[] = [];
+      globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+        const body = JSON.parse(init?.body as string);
+        calls.push({ body });
+        const ts = body.text === "A1" ? "111.111" : "222.222";
+        return new Response(JSON.stringify({ ok: true, ts }));
+      }) as unknown as typeof fetch;
+
+      const notifier = new SlackNotifier({ botToken: "xoxb-test", channel: "C123" });
+      await notifier.notify("issue-a", "A1");
+      await notifier.notify("issue-b", "B1");
+      await notifier.notify("issue-a", "A2");
+      await notifier.notify("issue-b", "B2");
+
+      expect(calls[0].body.thread_ts).toBeUndefined();
+      expect(calls[1].body.thread_ts).toBeUndefined();
+      expect(calls[2].body.thread_ts).toBe("111.111");
+      expect(calls[3].body.thread_ts).toBe("222.222");
+    });
+
+    test("clearThread removes entry so next call creates new top-level message", async () => {
+      const calls: { body: Record<string, string> }[] = [];
+      globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+        calls.push({ body: JSON.parse(init?.body as string) });
+        return new Response(JSON.stringify({ ok: true, ts: "999.999" }));
+      }) as unknown as typeof fetch;
+
+      const notifier = new SlackNotifier({ botToken: "xoxb-test", channel: "C123" });
+      await notifier.notify("issue-1", "First");
+      notifier.clearThread("issue-1");
+      await notifier.notify("issue-1", "After clear");
+
+      expect(calls[0].body.thread_ts).toBeUndefined();
+      expect(calls[1].body.thread_ts).toBeUndefined();
+    });
+
+    test("does not throw when Slack API returns ok: false", async () => {
+      globalThis.fetch = mock(async () => {
+        return new Response(JSON.stringify({ ok: false, error: "channel_not_found" }));
+      }) as unknown as typeof fetch;
+
+      const notifier = new SlackNotifier({ botToken: "xoxb-test", channel: "C123" });
+      // Should not throw
+      await notifier.notify("issue-1", "Hello");
+    });
+
+    test("does not throw when fetch rejects", async () => {
+      globalThis.fetch = mock(async () => {
+        throw new Error("network error");
+      }) as unknown as typeof fetch;
+
+      const notifier = new SlackNotifier({ botToken: "xoxb-test", channel: "C123" });
+      // Should not throw
+      await notifier.notify("issue-1", "Hello");
+    });
+
+    test("sends Authorization header with bot token", async () => {
+      let capturedHeaders: Record<string, string> = {};
+      globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+        capturedHeaders = Object.fromEntries(
+          Object.entries(init?.headers as Record<string, string>),
+        );
+        return new Response(JSON.stringify({ ok: true, ts: "1234.5678" }));
+      }) as unknown as typeof fetch;
+
+      const notifier = new SlackNotifier({ botToken: "xoxb-my-token", channel: "C123" });
+      await notifier.notify("issue-1", "Hello");
+
+      expect(capturedHeaders.Authorization).toBe("Bearer xoxb-my-token");
+    });
+  });
+
+  describe("Webhook fallback", () => {
+    test("sends to webhook without thread_ts", async () => {
+      const calls: { url: string; body: Record<string, string> }[] = [];
+      globalThis.fetch = mock(async (url: string | URL | Request, init?: RequestInit) => {
+        calls.push({ url: url as string, body: JSON.parse(init?.body as string) });
+        return new Response("ok", { status: 200 });
+      }) as unknown as typeof fetch;
+
+      const notifier = new SlackNotifier({ webhookUrl: "https://hooks.slack.com/test" });
+      await notifier.notify("issue-1", "Hello");
+      await notifier.notify("issue-1", "World");
+
+      expect(calls).toHaveLength(2);
+      expect(calls[0].url).toBe("https://hooks.slack.com/test");
+      expect(calls[0].body).toEqual({ text: "Hello" });
+      expect(calls[1].body).toEqual({ text: "World" });
+    });
+  });
+
+  describe("no config", () => {
+    test("notify does nothing when not configured", async () => {
+      let fetchCalled = false;
+      globalThis.fetch = mock(async () => {
+        fetchCalled = true;
+        return new Response("ok");
+      }) as unknown as typeof fetch;
+
+      const notifier = new SlackNotifier({});
+      await notifier.notify("issue-1", "Hello");
+
+      expect(fetchCalled).toBe(false);
+    });
   });
 });

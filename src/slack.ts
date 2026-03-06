@@ -1,6 +1,110 @@
 import { logError } from "./logger.js";
 import { withRetry } from "./retry.js";
 
+export interface SlackNotifierConfig {
+  webhookUrl?: string;
+  botToken?: string;
+  channel?: string;
+}
+
+export class SlackNotifier {
+  private botToken: string | undefined;
+  private channel: string | undefined;
+  private webhookUrl: string | undefined;
+  private threadMap = new Map<string, string>();
+
+  constructor(config: SlackNotifierConfig) {
+    this.botToken = config.botToken;
+    this.channel = config.channel;
+    this.webhookUrl = config.webhookUrl;
+  }
+
+  get isConfigured(): boolean {
+    return !!(this.botToken && this.channel) || !!this.webhookUrl;
+  }
+
+  async notify(issueId: string, message: string): Promise<void> {
+    try {
+      if (this.botToken && this.channel) {
+        await this.sendViaWebApi(issueId, message);
+      } else if (this.webhookUrl) {
+        await this.sendViaWebhook(message);
+      }
+    } catch (err) {
+      logError(`Slack notification failed: ${err}`);
+    }
+  }
+
+  clearThread(issueId: string): void {
+    this.threadMap.delete(issueId);
+  }
+
+  private async sendViaWebApi(issueId: string, message: string): Promise<void> {
+    const channel = this.channel as string;
+    await withRetry(
+      async () => {
+        const threadTs = this.threadMap.get(issueId);
+        const payload: Record<string, string> = {
+          channel,
+          text: message,
+        };
+        if (threadTs) {
+          payload.thread_ts = threadTs;
+        }
+
+        const response = await fetch("https://slack.com/api/chat.postMessage", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.botToken}`,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const body = await response.json() as { ok: boolean; ts?: string; error?: string };
+        if (!body.ok) {
+          throw new Error(`Slack API error: ${body.error ?? "unknown"}`);
+        }
+
+        if (!threadTs && body.ts) {
+          this.threadMap.set(issueId, body.ts);
+        }
+      },
+      {
+        maxRetries: 2,
+        baseDelayMs: 1000,
+        onRetry: (_error, attempt, delayMs) => {
+          logError(`Slack notification failed, retrying in ${Math.round(delayMs)}ms... (attempt ${attempt + 1}/2)`);
+        },
+      },
+    );
+  }
+
+  private async sendViaWebhook(message: string): Promise<void> {
+    const webhookUrl = this.webhookUrl as string;
+    await withRetry(
+      async () => {
+        const response = await fetch(webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: message }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Slack webhook returned ${response.status}`);
+        }
+      },
+      {
+        maxRetries: 2,
+        baseDelayMs: 1000,
+        onRetry: (_error, attempt, delayMs) => {
+          logError(`Slack notification failed, retrying in ${Math.round(delayMs)}ms... (attempt ${attempt + 1}/2)`);
+        },
+      },
+    );
+  }
+}
+
 export async function sendSlackNotification(
   webhookUrl: string | undefined,
   message: string,

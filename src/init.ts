@@ -195,9 +195,25 @@ export async function runInit(): Promise<void> {
   process.stdout.write("SLACK_WEBHOOK_URL (optional, press Enter to skip): ");
   const slackUrl = await readLine();
 
+  // Prompt for Slack Bot Token (enables threaded notifications)
+  process.stdout.write("SLACK_BOT_TOKEN (optional, enables threaded notifications, press Enter to skip): ");
+  const slackBotToken = await readLine();
+
+  let slackChannel = "";
+  if (slackBotToken) {
+    process.stdout.write("SLACK_CHANNEL (required with bot token, e.g. C0123456789): ");
+    slackChannel = await readLine();
+  }
+
   let envContent = `LINEAR_API_KEY=${linearKey}\n`;
   if (slackUrl) {
     envContent += `SLACK_WEBHOOK_URL=${slackUrl}\n`;
+  }
+  if (slackBotToken) {
+    envContent += `SLACK_BOT_TOKEN=${slackBotToken}\n`;
+    if (slackChannel) {
+      envContent += `SLACK_CHANNEL=${slackChannel}\n`;
+    }
   }
 
   writeFileSync(ENV_PATH, envContent, { mode: 0o600 });
