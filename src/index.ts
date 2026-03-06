@@ -3,7 +3,8 @@
 import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { loadConfig } from "./config.js";
+import { loadConfig, resolveConfigPath } from "./config.js";
+import { ConfigWatcher, diffConfigs } from "./config-watcher.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import { loadEnvFallback } from "./env.js";
 import { startHealthServer } from "./health.js";
@@ -174,7 +175,7 @@ async function main() {
   const configPath = configIdx !== -1 && Bun.argv[configIdx + 1]
     ? Bun.argv[configIdx + 1]
     : undefined;
-  const config = loadConfig(configPath);
+  let config = loadConfig(configPath);
   config.noTmux = noTmux || dryRun;
 
   // Fetch latest version for dev builds (non-blocking, cached for session)
@@ -205,7 +206,7 @@ async function main() {
   }
 
   // Create issue trackers (one per unique provider)
-  const trackers = createTrackers(config);
+  let trackers = createTrackers(config);
 
   if (dryRun) {
     log(`Critters ${getDisplayVersion()} — dry run${typeFilter ? ` (type: ${typeFilter})` : ""}`);
@@ -316,9 +317,64 @@ async function main() {
     log(`Type "${ct.name}": concurrency=${ct.concurrency}, timeout=${ct.timeoutMinutes}min, phases=${ct.phases.map((p) => p.name).join("→")}`);
   }
 
+  // Config hot-reload watcher
+  const immutableFields = ["workDir", "healthPort", "tmuxSession"] as const;
+  const resolvedPath = resolveConfigPath(configPath);
+  const configWatcher = new ConfigWatcher(resolvedPath, (newConfig) => {
+    // Preserve runtime flag
+    newConfig.noTmux = config.noTmux;
+
+    // Override immutable fields with current values, warn if changed
+    for (const field of immutableFields) {
+      if (newConfig[field] !== config[field]) {
+        log(`Warning: '${field}' cannot be changed at runtime (ignoring ${JSON.stringify(config[field])} → ${JSON.stringify(newConfig[field])})`);
+        (newConfig as unknown as Record<string, unknown>)[field] = config[field];
+      }
+    }
+
+    // Check if new providers are needed
+    const neededProviders = new Set<string>();
+    for (const ct of newConfig.critterTypes) {
+      neededProviders.add(ct.provider ?? newConfig.provider);
+    }
+    const newTrackers = new Map(trackers);
+    const trackersToInit: IssueTracker[] = [];
+    for (const provider of neededProviders) {
+      if (!newTrackers.has(provider)) {
+        const tracker = createTracker(
+          provider === "jira"
+            ? { type: "jira", host: newConfig.jiraHost, email: newConfig.jiraEmail, apiToken: newConfig.jiraApiToken, statusMap: newConfig.jiraStatusMap }
+            : { type: "linear", apiKey: newConfig.linearApiKey },
+        );
+        newTrackers.set(provider, tracker);
+        trackersToInit.push(tracker);
+      }
+    }
+
+    // Compute diff before applying
+    const summary = diffConfigs(config, newConfig);
+
+    // Init new trackers and apply config
+    (async () => {
+      for (const tracker of trackersToInit) {
+        await tracker.init();
+      }
+      watcher.updateConfig(newConfig, newTrackers);
+      spawner.updateConfig(newConfig, newTrackers);
+      trackers = newTrackers;
+      config = newConfig;
+      await ensureLabelsAndStatuses(config, trackers);
+      log(summary);
+    })().catch((err) => {
+      logError(`Config reload apply failed: ${err}`);
+    });
+  });
+  configWatcher.start();
+
   // Signal handlers
   const shutdown = () => {
     log("Shutting down...");
+    configWatcher.stop();
     if (titleInterval) clearInterval(titleInterval);
     healthServer?.stop();
     watcher.stop();

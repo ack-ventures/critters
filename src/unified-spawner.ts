@@ -10,7 +10,7 @@ import {
   shallowClone,
 } from "./git.js";
 import { triggerHook } from "./hooks.js";
-import { logTask, logTaskError } from "./logger.js";
+import { log, logTask, logTaskError } from "./logger.js";
 import { recordMetric } from "./metrics.js";
 import { loadRepoConfig } from "./repo-config.js";
 import { getPhaseRunner } from "./runner/index.js";
@@ -60,6 +60,25 @@ export class UnifiedSpawner {
   constructor(config: Config, trackers: Map<string, IssueTracker>) {
     this.config = config;
     this.trackers = trackers;
+  }
+
+  updateConfig(config: Config, trackers: Map<string, IssueTracker>): void {
+    this.config = config;
+    this.trackers = trackers;
+    this.drainRemovedTypeQueues(config);
+  }
+
+  private drainRemovedTypeQueues(config: Config): void {
+    const activeTypeNames = new Set(config.critterTypes.map((ct) => ct.name));
+    for (const [typeName, queue] of this.queues.entries()) {
+      if (!activeTypeNames.has(typeName) && queue.length > 0) {
+        log(`Draining ${queue.length} queued tasks for removed type "${typeName}"`);
+        for (const item of queue) {
+          item.resolve({ success: false, error: `Critter type "${typeName}" was removed from config` });
+        }
+        this.queues.delete(typeName);
+      }
+    }
   }
 
   private getTracker(critterType: CritterTypeConfig): IssueTracker {
