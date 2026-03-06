@@ -205,7 +205,7 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="refresh" content="30;url=${typeFilter ? `/dashboard?type=${encodeURIComponent(typeFilter)}` : `/dashboard`}">
+  <noscript><meta http-equiv="refresh" content="30;url=${typeFilter ? `/dashboard?type=${encodeURIComponent(typeFilter)}` : `/dashboard`}"></noscript>
   <title>Critters Dashboard</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F41B;</text></svg>">
   <style>
@@ -429,6 +429,9 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
       border-color: #5dade2;
       color: #fff;
     }
+    th[data-sortable] { cursor: pointer; user-select: none; }
+    th[data-sortable]:hover { color: var(--text); }
+    .sort-arrow { font-size: 0.65rem; margin-left: 4px; }
     a { color: #5dade2; text-decoration: none; }
     a:hover { text-decoration: underline; }
 
@@ -453,6 +456,10 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
       <span class="meta">Uptime: ${fmtDuration(uptime)}</span>
       <span class="meta-sep">|</span>
       <span class="meta">Last poll: ${status.lastPollAt ? formatDate(status.lastPollAt) : "never"}</span>
+      <span class="meta-sep">|</span>
+      <button id="poll-btn" style="background:var(--accent);border:1px solid var(--border);color:var(--text);padding:4px 12px;border-radius:4px;cursor:pointer;font-size:0.85rem;">Poll Now</button>
+      <span class="meta-sep">|</span>
+      <span id="refresh-countdown" class="meta">Refreshing in 30s</span>
     </div>
   </div>
 
@@ -738,17 +745,18 @@ ${totalTasks > 0 ? (() => {
 
   <div class="table-section">
     <h2>Recent Activity</h2>
+    <input type="text" id="activity-filter" placeholder="Filter by issue, type, or status..." style="background:var(--card-bg);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;width:100%;margin-bottom:12px;font-size:0.85rem;">
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>Issue</th>
-            <th>Type</th>
-            <th>Status</th>
-            <th>Duration</th>
-            <th>Cost</th>
+            <th data-sortable="string">Issue</th>
+            <th data-sortable="string">Type</th>
+            <th data-sortable="string">Status</th>
+            <th data-sortable="duration">Duration</th>
+            <th data-sortable="cost">Cost</th>
             <th>PR</th>
-            <th>When</th>
+            <th data-sortable="date">When</th>
           </tr>
         </thead>
         <tbody>
@@ -774,10 +782,10 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="7" class="empty-stat
             <td>${id}</td>
             <td>${typeName}</td>
             <td><span class="${badgeClass}">${statusText}</span></td>
-            <td>${dur}</td>
-            <td>${cost}</td>
+            <td data-sort-value="${m.duration ?? -1}">${dur}</td>
+            <td data-sort-value="${m.costUsd ?? -1}">${cost}</td>
             <td>${pr}</td>
-            <td>${when}</td>
+            <td data-sort-value="${m.timestamp}">${when}</td>
           </tr>`;
   })
   .join("\n")}
@@ -785,6 +793,160 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="7" class="empty-stat
       </table>
     </div>
   </div>
+<script>
+(function() {
+  var table = document.querySelector('.table-section table');
+  if (!table) return;
+  var thead = table.querySelector('thead');
+  var tbody = table.querySelector('tbody');
+  var headers = thead.querySelectorAll('th[data-sortable]');
+  var currentSort = { col: -1, asc: true };
+
+  headers.forEach(function(th) {
+    var colIdx = Array.from(thead.querySelectorAll('th')).indexOf(th);
+    th.addEventListener('click', function() {
+      var asc = currentSort.col === colIdx ? !currentSort.asc : true;
+      currentSort = { col: colIdx, asc: asc };
+
+      headers.forEach(function(h) {
+        var arrow = h.querySelector('.sort-arrow');
+        if (arrow) arrow.remove();
+      });
+
+      var arrow = document.createElement('span');
+      arrow.className = 'sort-arrow';
+      arrow.textContent = asc ? '\\u25B2' : '\\u25BC';
+      th.appendChild(arrow);
+
+      var rows = Array.from(tbody.querySelectorAll('tr'));
+      var sortType = th.getAttribute('data-sortable');
+
+      rows.sort(function(a, b) {
+        var cellA = a.cells[colIdx];
+        var cellB = b.cells[colIdx];
+        var valA, valB;
+
+        if (sortType === 'duration' || sortType === 'cost' || sortType === 'date') {
+          valA = cellA.getAttribute('data-sort-value') || '';
+          valB = cellB.getAttribute('data-sort-value') || '';
+          if (sortType === 'date') {
+            valA = new Date(valA).getTime() || 0;
+            valB = new Date(valB).getTime() || 0;
+          } else {
+            valA = parseFloat(valA) || -1;
+            valB = parseFloat(valB) || -1;
+          }
+        } else {
+          valA = (cellA.textContent || '').toLowerCase();
+          valB = (cellB.textContent || '').toLowerCase();
+        }
+
+        if (valA < valB) return asc ? -1 : 1;
+        if (valA > valB) return asc ? 1 : -1;
+        return 0;
+      });
+
+      rows.forEach(function(row) { tbody.appendChild(row); });
+    });
+  });
+})();
+
+(function() {
+  var input = document.getElementById('activity-filter');
+  var table = document.querySelector('.table-section table');
+  if (!input || !table) return;
+  var tbody = table.querySelector('tbody');
+
+  input.addEventListener('input', function() {
+    var query = input.value.toLowerCase();
+    var rows = tbody.querySelectorAll('tr');
+    rows.forEach(function(row) {
+      var text = row.textContent.toLowerCase();
+      row.style.display = text.includes(query) ? '' : 'none';
+    });
+  });
+})();
+
+(function() {
+  var btn = document.getElementById('poll-btn');
+  if (!btn) return;
+
+  btn.addEventListener('click', function() {
+    btn.disabled = true;
+    btn.textContent = 'Polling...';
+    fetch('/poll', { method: 'POST' })
+      .then(function(res) { return res.json(); })
+      .then(function() {
+        btn.textContent = 'Triggered!';
+        setTimeout(function() {
+          btn.textContent = 'Poll Now';
+          btn.disabled = false;
+        }, 2000);
+      })
+      .catch(function() {
+        btn.textContent = 'Failed';
+        setTimeout(function() {
+          btn.textContent = 'Poll Now';
+          btn.disabled = false;
+        }, 2000);
+      });
+  });
+})();
+
+(function() {
+  var INTERVAL = 30;
+  var remaining = INTERVAL;
+  var countdownEl = document.getElementById('refresh-countdown');
+  var paused = false;
+
+  var filterInput = document.getElementById('activity-filter');
+  if (filterInput) {
+    filterInput.addEventListener('focus', function() { paused = true; });
+    filterInput.addEventListener('blur', function() { paused = false; });
+  }
+
+  function updateCountdown() {
+    if (countdownEl) {
+      countdownEl.textContent = 'Refreshing in ' + remaining + 's';
+    }
+  }
+
+  function doRefresh() {
+    var url = '/dashboard' + window.location.search;
+    fetch(url)
+      .then(function(res) { return res.text(); })
+      .then(function(html) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(html, 'text/html');
+        var newBody = doc.querySelector('body');
+        if (newBody) {
+          document.body.innerHTML = newBody.innerHTML;
+          var scripts = document.body.querySelectorAll('script');
+          scripts.forEach(function(s) {
+            var ns = document.createElement('script');
+            ns.textContent = s.textContent;
+            s.parentNode.replaceChild(ns, s);
+          });
+        }
+      })
+      .catch(function() {
+        window.location.reload();
+      });
+  }
+
+  setInterval(function() {
+    if (paused) return;
+    remaining--;
+    if (remaining <= 0) {
+      remaining = INTERVAL;
+      doRefresh();
+    }
+    updateCountdown();
+  }, 1000);
+
+  updateCountdown();
+})();
+</script>
 </body>
 </html>`;
 }
