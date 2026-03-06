@@ -1,4 +1,6 @@
-import { renderDashboard } from "./dashboard.js";
+import { statSync } from "node:fs";
+import { renderDashboard, renderLogPage } from "./dashboard.js";
+import { readLogTail, resolveLogFile, resolveWorkDirForIdentifier, stripAnsi } from "./log-resolver.js";
 import { log } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
 import type { ActiveCritterDetail } from "./types.js";
@@ -33,6 +35,7 @@ export function startHealthServer(
     triggerPoll?: () => Promise<number>;
     triggerReviewPoll?: () => Promise<number>;
   },
+  workDir?: string,
 ): { stop: () => void } {
   const startTime = Date.now();
 
@@ -106,6 +109,159 @@ export function startHealthServer(
         }
         const issuesFound = await triggers.triggerReviewPoll();
         return Response.json({ triggered: true, issuesFound });
+      }
+
+      // API: GET /api/logs/<identifier> — returns processed log tail as plain text
+      if (url.pathname.startsWith("/api/logs/")) {
+        const parts = url.pathname.split("/").filter(Boolean); // ["api", "logs", identifier, ..."stream"]
+        const identifier = parts[2];
+        if (!identifier) {
+          return new Response("Missing identifier", { status: 400 });
+        }
+
+        const isStream = parts[3] === "stream";
+        const phase = url.searchParams.get("phase") ?? undefined;
+        const tailCount = parseInt(url.searchParams.get("tail") ?? "50", 10);
+
+        // Find work directory: check active critters first, then scan filesystem
+        let targetDir: string | null = null;
+        const status = getStatus();
+        const activeDetail = status.activeCritterDetails.find((d) => d.identifier === identifier);
+        if (activeDetail?.workDir) {
+          targetDir = activeDetail.workDir;
+        } else if (workDir) {
+          targetDir = resolveWorkDirForIdentifier(workDir, identifier);
+        }
+
+        if (!targetDir) {
+          return Response.json({ error: "No work directory found for identifier" }, { status: 404 });
+        }
+
+        const logFile = resolveLogFile(targetDir, phase);
+        if (!logFile) {
+          return Response.json({ error: "No log file found" }, { status: 404 });
+        }
+
+        if (isStream) {
+          // SSE endpoint
+          let closed = false;
+          let fileOffset = 0;
+          try {
+            fileOffset = statSync(logFile).size;
+          } catch {}
+
+          const stream = new ReadableStream({
+            start(controller) {
+              const encoder = new TextEncoder();
+              const send = (data: string) => {
+                if (!closed) {
+                  try {
+                    controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+                  } catch {}
+                }
+              };
+
+              // Send existing content first
+              const existing = readLogTail(logFile, tailCount);
+              if (existing) {
+                for (const line of existing.split("\n")) {
+                  send(line);
+                }
+              }
+
+              const pollTimer = setInterval(() => {
+                if (closed) {
+                  clearInterval(pollTimer);
+                  return;
+                }
+
+                try {
+                  const currentSize = statSync(logFile).size;
+                  if (currentSize > fileOffset) {
+                    const fd = Bun.file(logFile);
+                    const slice = fd.slice(fileOffset, currentSize);
+                    slice.text().then((newContent) => {
+                      fileOffset = currentSize;
+                      const lines = newContent.split("\n").filter((l) => l.trim());
+                      for (const line of lines) {
+                        try {
+                          const obj = JSON.parse(line);
+                          if (obj.type === "assistant" && obj.message?.content) {
+                            for (const block of obj.message.content) {
+                              if (block.type === "text" && block.text) {
+                                send(stripAnsi(block.text));
+                              } else if (block.type === "tool_use") {
+                                send(stripAnsi(`[Tool: ${block.name}]`));
+                              }
+                            }
+                          } else if (obj.type === "result") {
+                            send(`[Result: cost=$${(obj.cost_usd ?? 0).toFixed(2)}, turns=${obj.num_turns ?? "?"}]`);
+                          }
+                        } catch {
+                          send(stripAnsi(line));
+                        }
+                      }
+                    }).catch(() => {});
+                  }
+                } catch {}
+
+                // Check if critter is still active
+                const currentStatus = getStatus();
+                const stillActive = currentStatus.activeCritterDetails.some((d) => d.identifier === identifier);
+                if (!stillActive) {
+                  send(JSON.stringify({ event: "done" }));
+                  clearInterval(pollTimer);
+                  try { controller.close(); } catch {}
+                }
+              }, 500);
+
+              // Heartbeat
+              const heartbeatTimer = setInterval(() => {
+                if (closed) {
+                  clearInterval(heartbeatTimer);
+                  return;
+                }
+                send(JSON.stringify({ event: "heartbeat" }));
+              }, 15_000);
+
+              // Cleanup ref
+              (controller as unknown as Record<string, unknown>)._cleanup = () => {
+                clearInterval(pollTimer);
+                clearInterval(heartbeatTimer);
+              };
+            },
+            cancel() {
+              closed = true;
+            },
+          });
+
+          return new Response(stream, {
+            headers: {
+              "Content-Type": "text/event-stream",
+              "Cache-Control": "no-cache",
+              "Connection": "keep-alive",
+            },
+          });
+        }
+
+        // Non-stream: return log tail as plain text
+        const content = readLogTail(logFile, tailCount);
+        return new Response(content, {
+          headers: { "Content-Type": "text/plain; charset=utf-8" },
+        });
+      }
+
+      // GET /logs/<identifier> — dedicated log page
+      if (url.pathname.startsWith("/logs/")) {
+        const identifier = url.pathname.split("/").filter(Boolean)[1];
+        if (!identifier) {
+          return new Response("Missing identifier", { status: 400 });
+        }
+        const status = getStatus();
+        const html = renderLogPage(identifier, status, workDir ?? "/tmp/critters-work");
+        return new Response(html, {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
       }
 
       return new Response("Not Found", { status: 404 });

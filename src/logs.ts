@@ -1,18 +1,13 @@
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { LinearClient } from "@linear/sdk";
 import { loadWorkDir } from "./config.js";
 import { STREAM_FILTER } from "./jq-filter.js";
+import { findWorkDirs, phaseFileTag } from "./log-resolver.js";
 
 const IDENTIFIER_RE = /^[A-Z]+-\d+$/;
 const FILTER_TMP_PATH = "/tmp/critters-logs-filter.jq";
 
 type Phase = "planning" | "execution" | "review";
-
-const PHASE_FILE_MAP: Record<Phase, string> = {
-  planning: ".critter-output-plan.json",
-  execution: ".critter-output-exec.json",
-  review: ".critter-output-review.json",
-};
 
 const LINEAR_PHASE_TITLES: Record<Phase, string[]> = {
   planning: ["-plan-output.txt"],
@@ -62,22 +57,6 @@ function parseArgs(args: string[]): ParsedArgs {
   }
 
   return { identifier, phase, follow, configPath };
-}
-
-function findWorkDir(workDir: string, identifier: string): { critterDirs: string[]; reviewDirs: string[] } {
-  if (!existsSync(workDir)) {
-    return { critterDirs: [], reviewDirs: [] };
-  }
-
-  const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const critterDirPattern = new RegExp(`^${escaped}-\\d+$`);
-  const reviewDirPattern = new RegExp(`^review-${escaped}-\\d+$`);
-
-  const entries = readdirSync(workDir);
-  const critterDirs = entries.filter((e) => critterDirPattern.test(e));
-  const reviewDirs = entries.filter((e) => reviewDirPattern.test(e));
-
-  return { critterDirs, reviewDirs };
 }
 
 function extractTimestamp(dirName: string): number {
@@ -151,7 +130,7 @@ async function followLogs(logFile: string): Promise<void> {
 }
 
 async function showLocalLogs(workDir: string, identifier: string, phase: Phase | undefined, follow: boolean): Promise<boolean> {
-  const { critterDirs, reviewDirs } = findWorkDir(workDir, identifier);
+  const { critterDirs, reviewDirs } = findWorkDirs(workDir, identifier);
 
   if (critterDirs.length === 0 && reviewDirs.length === 0) {
     return false;
@@ -159,7 +138,7 @@ async function showLocalLogs(workDir: string, identifier: string, phase: Phase |
 
   // If phase is explicitly set, find the right directory and file
   if (phase) {
-    const logFileName = PHASE_FILE_MAP[phase];
+    const logFileName = `.critter-output-${phaseFileTag(phase)}.json`;
     let targetDir: string | undefined;
 
     if (phase === "review") {
@@ -200,7 +179,7 @@ async function showLocalLogs(workDir: string, identifier: string, phase: Phase |
   // Check review dirs first
   if (reviewDirs.length > 0) {
     const dir = `${workDir}/${newestDir(reviewDirs)}`;
-    const logFile = `${dir}/${PHASE_FILE_MAP.review}`;
+    const logFile = `${dir}/.critter-output-review.json`;
     if (existsSync(logFile) && statSync(logFile).size > 0) {
       if (follow) {
         await followLogs(logFile);
@@ -215,7 +194,7 @@ async function showLocalLogs(workDir: string, identifier: string, phase: Phase |
   if (critterDirs.length > 0) {
     const dir = `${workDir}/${newestDir(critterDirs)}`;
     for (const phase of ["execution", "planning"] as Phase[]) {
-      const logFile = `${dir}/${PHASE_FILE_MAP[phase]}`;
+      const logFile = `${dir}/.critter-output-${phaseFileTag(phase)}.json`;
       if (existsSync(logFile) && statSync(logFile).size > 0) {
         if (follow) {
           await followLogs(logFile);

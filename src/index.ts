@@ -333,7 +333,7 @@ async function main() {
     }), metricsPath, {
       triggerPoll: () => watcher.triggerPoll(),
       triggerReviewPoll: () => watcher.triggerPoll(), // unified watcher handles both
-    });
+    }, config.workDir);
   }
 
   // Periodic main pane title update with uptime + active count
