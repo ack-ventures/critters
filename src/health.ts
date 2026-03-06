@@ -77,7 +77,8 @@ export function startHealthServer(
       if (url.pathname === "/" || url.pathname === "/dashboard") {
         const status = getStatus();
         const uptime = Date.now() - startTime;
-        const html = renderDashboard(metricsPath ?? "", status, uptime);
+        const typeFilter = url.searchParams.get("type") || undefined;
+        const html = renderDashboard(metricsPath ?? "", status, uptime, typeFilter);
         return new Response(html, {
           headers: { "Content-Type": "text/html; charset=utf-8" },
         });

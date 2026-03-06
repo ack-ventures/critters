@@ -90,7 +90,7 @@ function formatCostLabel(v: number): string {
   return `$${parseFloat(v.toFixed(2))}`;
 }
 
-type DayStat = { date: string; completed: number; failed: number; cost: number; avgDuration: number };
+type DayStat = { date: string; completed: number; failed: number; cost: number; avgDuration: number; perType: Record<string, { completed: number; failed: number }> };
 
 function computeDailyStats(metrics: MetricEvent[], days: number): DayStat[] {
   const now = new Date();
@@ -102,7 +102,7 @@ function computeDailyStats(metrics: MetricEvent[], days: number): DayStat[] {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
     const key = d.toISOString().slice(0, 10);
-    dateMap.set(key, { date: key, completed: 0, failed: 0, cost: 0, avgDuration: 0 });
+    dateMap.set(key, { date: key, completed: 0, failed: 0, cost: 0, avgDuration: 0, perType: {} });
     durAccum.set(key, { totalDur: 0, durCount: 0 });
   }
 
@@ -112,9 +112,14 @@ function computeDailyStats(metrics: MetricEvent[], days: number): DayStat[] {
     const key = getDateKey(m.timestamp);
     const stat = dateMap.get(key);
     if (!stat) continue;
-    if (m.event === "task_completed" || m.event === "review_completed") stat.completed++;
+    const isOk = m.event === "task_completed" || m.event === "review_completed";
+    if (isOk) stat.completed++;
     else stat.failed++;
     stat.cost += m.costUsd ?? 0;
+    const typeName = m.critterType ?? (m.event.startsWith("review_") ? "review" : "create");
+    if (!stat.perType[typeName]) stat.perType[typeName] = { completed: 0, failed: 0 };
+    if (isOk) stat.perType[typeName].completed++;
+    else stat.perType[typeName].failed++;
     if (m.duration != null && !Number.isNaN(m.duration)) {
       const acc = durAccum.get(key);
       if (acc) {
@@ -148,9 +153,22 @@ function niceMax(value: number, isCost: boolean): number {
   return Math.ceil(value / magnitude) * magnitude;
 }
 
-export function renderDashboard(metricsPath: string, status: HealthStatus, uptime: number): string {
+function inferType(m: MetricEvent): string {
+  return m.critterType ?? (m.event.startsWith("review_") ? "review" : "create");
+}
+
+export function renderDashboard(metricsPath: string, status: HealthStatus, uptime: number, typeFilter?: string): string {
   const allMetrics = getRecentMetrics(10000);
-  const taskMetrics = allMetrics.filter(
+
+  // Extract unique types for filter buttons
+  const allTypes = [...new Set(allMetrics.map(m => inferType(m)).filter(Boolean))].sort();
+
+  // Apply type filter
+  const filteredMetrics = typeFilter
+    ? allMetrics.filter(m => inferType(m) === typeFilter)
+    : allMetrics;
+
+  const taskMetrics = filteredMetrics.filter(
     (m) => m.event === "task_completed" || m.event === "task_failed" ||
            m.event === "review_completed" || m.event === "review_failed",
   );
@@ -169,7 +187,7 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
   const recentActivity = taskMetrics.slice(-50).reverse();
 
   // Chart data
-  const dailyStats = computeDailyStats(allMetrics, 14);
+  const dailyStats = computeDailyStats(filteredMetrics, 14);
   const rawMaxTasks = Math.max(1, ...dailyStats.map((d) => d.completed + d.failed));
   const maxTasksPerDay = niceMax(rawMaxTasks, false);
   const rawMaxCost = Math.max(0.01, ...dailyStats.map((d) => d.cost));
@@ -187,7 +205,7 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="refresh" content="30">
+  <meta http-equiv="refresh" content="30;url=${typeFilter ? `/dashboard?type=${encodeURIComponent(typeFilter)}` : `/dashboard`}">
   <title>Critters Dashboard</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F41B;</text></svg>">
   <style>
@@ -384,6 +402,33 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
       margin-bottom: 8px;
       display: block;
     }
+    .type-filters {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .filter-btn {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 16px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      text-decoration: none;
+      transition: all 0.15s;
+    }
+    .filter-btn:hover {
+      border-color: var(--text-dim);
+      color: var(--text);
+      text-decoration: none;
+    }
+    .filter-btn.active {
+      background: #5dade2;
+      border-color: #5dade2;
+      color: #fff;
+    }
     a { color: #5dade2; text-decoration: none; }
     a:hover { text-decoration: underline; }
 
@@ -410,6 +455,11 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
       <span class="meta">Last poll: ${status.lastPollAt ? formatDate(status.lastPollAt) : "never"}</span>
     </div>
   </div>
+
+${allTypes.length >= 2 ? `  <div class="type-filters">
+    <a href="/dashboard" class="filter-btn${!typeFilter ? " active" : ""}">All</a>
+${allTypes.map(t => `    <a href="/dashboard?type=${encodeURIComponent(t)}" class="filter-btn${typeFilter === t ? " active" : ""}">${escapeHtml(t)}</a>`).join("\n")}
+  </div>` : ""}
 
   <div class="summary">
     <div class="card card-blue">
@@ -552,23 +602,65 @@ ${status.activeCritterDetails.map((d) => {
           <span class="y-label">0</span>
         </div>
         <div class="bar-chart">
-${dailyStats
-  .map((d, i) => {
-    const successH = Math.round(((d.completed) / maxTasksPerDay) * 100);
-    const failH = Math.round(((d.failed) / maxTasksPerDay) * 100);
-    const shortDate = formatShortDate(d.date);
-    const label = chartDateLabel(d.date, i > 0 ? dailyStats[i - 1].date : null);
-    return `          <div class="bar-group" data-tooltip="${shortDate}: ${d.completed} completed, ${d.failed} failed">
+${(() => {
+  const typeColors: Record<string, string> = { create: "var(--success)", review: "#5dade2" };
+  const extraColors = ["#8B5CF6", "#e2b93d", "#e9607a", "#3dd8e2", "#a3e23d"];
+  let colorIdx = 0;
+  const chartTypes = [...new Set(dailyStats.flatMap(d => Object.keys(d.perType)))].sort();
+  for (const t of chartTypes) {
+    if (!typeColors[t]) { typeColors[t] = extraColors[colorIdx % extraColors.length]; colorIdx++; }
+  }
+  return dailyStats
+    .map((d, i) => {
+      const shortDate = formatShortDate(d.date);
+      const label = chartDateLabel(d.date, i > 0 ? dailyStats[i - 1].date : null);
+      if (!typeFilter && chartTypes.length >= 2) {
+        // Stacked bars per type
+        const total = d.completed + d.failed;
+        const bars = chartTypes.map(t => {
+          const tc = d.perType[t];
+          if (!tc) return "";
+          const count = tc.completed + tc.failed;
+          const h = Math.round((count / maxTasksPerDay) * 100);
+          if (h === 0) return "";
+          return `              <div class="bar" style="height:${h}%;background:${typeColors[t]};border-radius:0" data-tooltip="${t}: ${count}"></div>`;
+        }).filter(Boolean).join("\n");
+        return `          <div class="bar-group" data-tooltip="${shortDate}: ${total} tasks (${chartTypes.map(t => `${t}: ${(d.perType[t]?.completed ?? 0) + (d.perType[t]?.failed ?? 0)}`).join(", ")})">
+            <div class="bar-stack">
+${bars}
+            </div>
+            <div class="bar-label">${escapeHtml(label)}</div>
+          </div>`;
+      }
+      // Single type or filtered: success/failure bars
+      const successH = Math.round(((d.completed) / maxTasksPerDay) * 100);
+      const failH = Math.round(((d.failed) / maxTasksPerDay) * 100);
+      return `          <div class="bar-group" data-tooltip="${shortDate}: ${d.completed} completed, ${d.failed} failed">
             <div class="bar-stack">
               <div class="bar failure" style="height:${failH}%"${failH > 0 ? ` data-tooltip="${d.failed} failed"` : ""}></div>
               <div class="bar success" style="height:${successH}%"${successH > 0 ? ` data-tooltip="${d.completed} completed"` : ""}></div>
             </div>
             <div class="bar-label">${escapeHtml(label)}</div>
           </div>`;
-  })
-  .join("\n")}
+    })
+    .join("\n");
+})()}
         </div>
       </div>
+${(() => {
+  if (typeFilter) return "";
+  const typeColors: Record<string, string> = { create: "var(--success)", review: "#5dade2" };
+  const extraColors = ["#8B5CF6", "#e2b93d", "#e9607a", "#3dd8e2", "#a3e23d"];
+  let colorIdx = 0;
+  const chartTypes = [...new Set(dailyStats.flatMap(d => Object.keys(d.perType)))].sort();
+  if (chartTypes.length < 2) return "";
+  for (const t of chartTypes) {
+    if (!typeColors[t]) { typeColors[t] = extraColors[colorIdx % extraColors.length]; colorIdx++; }
+  }
+  return `      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:0.75rem;color:var(--text-dim)">
+${chartTypes.map(t => `        <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${typeColors[t]};margin-right:4px;vertical-align:middle"></span>${escapeHtml(t)}</span>`).join("\n")}
+      </div>`;
+})()}
     </div>
     <div class="chart-card">
       <h3>Cost per Day (Last 14 Days)</h3>
