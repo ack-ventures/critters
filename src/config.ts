@@ -133,6 +133,7 @@ export function loadConfig(configPath?: string): Config {
     maxReviewTurns: (yaml.maxReviewTurns as number) ?? 30,
     maxLogSizeMb: (yaml.maxLogSizeMb as number) ?? 10,
     healthPort: (yaml.healthPort as number) ?? 3847,
+    metricsRetentionDays: (yaml.metricsRetentionDays as number) ?? 90,
     repos,
     teamRepos,
     linearApiKey,
@@ -270,6 +271,9 @@ function validateConfig(config: Config): void {
   }
   if (config.maxLogSizeMb <= 0) {
     throw new Error(`Invalid config: maxLogSizeMb must be > 0, got ${config.maxLogSizeMb}`);
+  }
+  if (config.metricsRetentionDays < 1) {
+    throw new Error(`Invalid config: metricsRetentionDays must be >= 1, got ${config.metricsRetentionDays}`);
   }
   if (config.healthPort !== 0 && (config.healthPort < 1024 || config.healthPort > 65535)) {
     throw new Error(`Invalid config: healthPort must be 0 (disabled) or 1024-65535, got ${config.healthPort}`);

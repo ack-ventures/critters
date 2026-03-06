@@ -455,6 +455,7 @@ describe("src/prompt.ts", () => {
       maxReviewTurns: 30,
       maxLogSizeMb: 10,
       healthPort: 3847,
+      metricsRetentionDays: 90,
       linearApiKey: "test",
       provider: "linear",
       critterTypes: [],

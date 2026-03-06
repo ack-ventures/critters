@@ -42,6 +42,7 @@ function makeConfig(hooks?: Config["hooks"]): Config {
     maxReviewTurns: 30,
     maxLogSizeMb: 10,
     healthPort: 0,
+    metricsRetentionDays: 90,
     linearApiKey: "test-key",
     hooks,
     provider: "linear",

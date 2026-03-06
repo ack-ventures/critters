@@ -11,7 +11,7 @@ import { startHealthServer } from "./health.js";
 import { runInit } from "./init.js";
 import { runInitRepo } from "./init-repo.js";
 import { enableJsonLogs, initFileLogging, log, logError } from "./logger.js";
-import { initMetrics } from "./metrics.js";
+import { initMetrics, pruneMetrics } from "./metrics.js";
 import { checkPrerequisites } from "./prerequisites.js";
 import { runStatus } from "./status.js";
 import { createTracker } from "./tracker/index.js";
@@ -281,6 +281,7 @@ async function main() {
   const typesSummary = config.critterTypes.map((ct) => `${ct.name}(${ct.concurrency})`).join(", ");
   log(`Config loaded: types=[${typesSummary}], poll=${config.pollIntervalSeconds}s, noTmux=${noTmux}`);
   initMetrics();
+  pruneMetrics(config.metricsRetentionDays);
 
   // Init all trackers
   for (const tracker of trackers.values()) {
