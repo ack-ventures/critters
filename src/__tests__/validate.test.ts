@@ -50,10 +50,11 @@ defaultAllowedTools:
 `;
 
 describe("validateConfigFile", () => {
-  test("valid config returns no errors and a summary", () => {
+  test("valid config returns no errors, no warnings, and a summary", () => {
     const path = writeYaml(validYaml);
     const result = validateConfigFile(path);
     expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
     expect(result.summary).toContain("Config valid");
     expect(result.summary).toContain("2 critter type(s)");
     expect(result.summary).toContain("provider: linear");
@@ -164,5 +165,155 @@ critterTypes: {}
 `);
     const result = validateConfigFile(path);
     expect(result.errors.some((e) => e.includes("critterTypes is defined but empty"))).toBe(true);
+  });
+
+  test("high concurrency warns", () => {
+    const path = writeYaml(`
+concurrency: 8
+defaultAllowedTools:
+  - "Read"
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes("High concurrency (8)"))).toBe(true);
+  });
+
+  test("timeout over 60 warns", () => {
+    const path = writeYaml(`
+timeoutMinutes: 90
+defaultAllowedTools:
+  - "Read"
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes("Timeout over 60 minutes (90)"))).toBe(true);
+  });
+
+  test("short poll interval warns", () => {
+    const path = writeYaml(`
+pollIntervalSeconds: 10
+defaultAllowedTools:
+  - "Read"
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes("Very short poll interval (10s)"))).toBe(true);
+  });
+
+  test("high planning turns warns", () => {
+    const path = writeYaml(`
+maxPlanningTurns: 150
+defaultAllowedTools:
+  - "Read"
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes("High turn count (150) for maxPlanningTurns"))).toBe(true);
+  });
+
+  test("high execution turns warns", () => {
+    const path = writeYaml(`
+maxExecutionTurns: 200
+defaultAllowedTools:
+  - "Read"
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes("High turn count (200) for maxExecutionTurns"))).toBe(true);
+  });
+
+  test("health port 0 warns", () => {
+    const path = writeYaml(`
+healthPort: 0
+defaultAllowedTools:
+  - "Read"
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes("Health server disabled"))).toBe(true);
+  });
+
+  test("haiku model in phase warns", () => {
+    const path = writeYaml(`
+defaultAllowedTools:
+  - "Read"
+critterTypes:
+  audit:
+    trigger: { label: "Audit", status: "Todo" }
+    phases:
+      - name: scan
+        prompt: scan.md
+        model: haiku
+        maxTurns: 10
+    outcomes:
+      success: { status: "Done" }
+      failure: { status: "Failed" }
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes("Haiku model in phase 'scan'") && w.includes("type 'audit'"))).toBe(true);
+  });
+
+  test("low maxTurns in phase warns", () => {
+    const path = writeYaml(`
+defaultAllowedTools:
+  - "Read"
+critterTypes:
+  quick:
+    trigger: { label: "Quick", status: "Todo" }
+    phases:
+      - name: run
+        prompt: run.md
+        model: sonnet
+        maxTurns: 3
+    outcomes:
+      success: { status: "Done" }
+      failure: { status: "Failed" }
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes("Low maxTurns (3)") && w.includes("phase 'run'"))).toBe(true);
+  });
+
+  test("warnings don't cause errors and summary includes warning count", () => {
+    const path = writeYaml(`
+concurrency: 8
+timeoutMinutes: 90
+defaultAllowedTools:
+  - "Read"
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.summary).toContain("Config valid");
+    expect(result.summary).toContain("warning(s)");
+  });
+
+  test("multiple warnings accumulate", () => {
+    const path = writeYaml(`
+concurrency: 8
+timeoutMinutes: 90
+pollIntervalSeconds: 10
+healthPort: 0
+maxPlanningTurns: 150
+defaultAllowedTools:
+  - "Read"
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.length).toBeGreaterThanOrEqual(5);
+  });
+
+  test("reviewConcurrency and reviewTimeoutMinutes warn", () => {
+    const path = writeYaml(`
+reviewConcurrency: 8
+reviewTimeoutMinutes: 90
+defaultAllowedTools:
+  - "Read"
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes("reviewConcurrency"))).toBe(true);
+    expect(result.warnings.some((w) => w.includes("reviewTimeoutMinutes"))).toBe(true);
   });
 });

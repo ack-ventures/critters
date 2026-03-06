@@ -5,8 +5,9 @@ import { type CritterTypeConfig, parseCritterTypes, synthesizeDefaultTypes } fro
 import { loadEnvFallback } from "./env.js";
 import type { Config, RepoConfig } from "./types.js";
 
-export function validateConfigFile(configPath?: string): { errors: string[]; summary?: string } {
+export function validateConfigFile(configPath?: string): { errors: string[]; warnings: string[]; summary?: string } {
   const errors: string[] = [];
+  const warnings: string[] = [];
 
   // Load env fallback so env var checks are accurate
   loadEnvFallback();
@@ -31,35 +32,56 @@ export function validateConfigFile(configPath?: string): { errors: string[]; sum
   if (typeof yaml.concurrency === "number" && concurrency < 1) {
     errors.push(`Invalid config: concurrency must be >= 1, got ${concurrency}`);
   }
+  if (concurrency > 5) {
+    warnings.push(`High concurrency (${concurrency}) — ensure you have sufficient API quota`);
+  }
 
   const timeoutMinutes = (yaml.timeoutMinutes as number) ?? 30;
   if (typeof yaml.timeoutMinutes === "number" && timeoutMinutes <= 0) {
     errors.push(`Invalid config: timeoutMinutes must be > 0, got ${timeoutMinutes}`);
+  }
+  if (timeoutMinutes > 60) {
+    warnings.push(`Timeout over 60 minutes (${timeoutMinutes}) may indicate a misconfiguration`);
   }
 
   const pollIntervalSeconds = (yaml.pollIntervalSeconds as number) ?? 30;
   if (typeof yaml.pollIntervalSeconds === "number" && pollIntervalSeconds < 5) {
     errors.push(`Invalid config: pollIntervalSeconds must be >= 5, got ${pollIntervalSeconds}`);
   }
+  if (pollIntervalSeconds < 30) {
+    warnings.push(`Very short poll interval (${pollIntervalSeconds}s) may hit API rate limits`);
+  }
 
   const maxPlanningTurns = (yaml.maxPlanningTurns as number) ?? 50;
   if (typeof yaml.maxPlanningTurns === "number" && maxPlanningTurns <= 0) {
     errors.push(`Invalid config: maxPlanningTurns must be > 0, got ${maxPlanningTurns}`);
+  }
+  if (maxPlanningTurns > 100) {
+    warnings.push(`High turn count (${maxPlanningTurns}) for maxPlanningTurns may lead to expensive runs`);
   }
 
   const maxExecutionTurns = (yaml.maxExecutionTurns as number) ?? 75;
   if (typeof yaml.maxExecutionTurns === "number" && maxExecutionTurns <= 0) {
     errors.push(`Invalid config: maxExecutionTurns must be > 0, got ${maxExecutionTurns}`);
   }
+  if (maxExecutionTurns > 100) {
+    warnings.push(`High turn count (${maxExecutionTurns}) for maxExecutionTurns may lead to expensive runs`);
+  }
 
   const reviewConcurrency = (yaml.reviewConcurrency as number) ?? 2;
   if (typeof yaml.reviewConcurrency === "number" && reviewConcurrency < 1) {
     errors.push(`Invalid config: reviewConcurrency must be >= 1, got ${reviewConcurrency}`);
   }
+  if (reviewConcurrency > 5) {
+    warnings.push(`High concurrency (${reviewConcurrency}) for reviewConcurrency — ensure you have sufficient API quota`);
+  }
 
   const reviewTimeoutMinutes = (yaml.reviewTimeoutMinutes as number) ?? 15;
   if (typeof yaml.reviewTimeoutMinutes === "number" && reviewTimeoutMinutes <= 0) {
     errors.push(`Invalid config: reviewTimeoutMinutes must be > 0, got ${reviewTimeoutMinutes}`);
+  }
+  if (reviewTimeoutMinutes > 60) {
+    warnings.push(`Timeout over 60 minutes (${reviewTimeoutMinutes}) for reviewTimeoutMinutes may indicate a misconfiguration`);
   }
 
   const maxReviewTurns = (yaml.maxReviewTurns as number) ?? 30;
@@ -75,6 +97,9 @@ export function validateConfigFile(configPath?: string): { errors: string[]; sum
   const healthPort = (yaml.healthPort as number) ?? 3847;
   if (typeof yaml.healthPort === "number" && healthPort !== 0 && (healthPort < 1024 || healthPort > 65535)) {
     errors.push(`Invalid config: healthPort must be 0 (disabled) or 1024-65535, got ${healthPort}`);
+  }
+  if (healthPort === 0) {
+    warnings.push("Health server disabled — dashboard and kickoff will not work");
   }
 
   // Validate defaultAllowedTools
@@ -146,6 +171,19 @@ export function validateConfigFile(configPath?: string): { errors: string[]; sum
     }
   }
 
+  // Phase-level warnings
+  for (const ct of critterTypes) {
+    const typeName = ct.name;
+    for (const phase of ct.phases) {
+      if (phase.model === "haiku") {
+        warnings.push(`Haiku model in phase '${phase.name}' (type '${typeName}') may produce unreliable results (see docs)`);
+      }
+      if (phase.maxTurns < 5) {
+        warnings.push(`Low maxTurns (${phase.maxTurns}) in phase '${phase.name}' (type '${typeName}') may not give Claude enough room to work`);
+      }
+    }
+  }
+
   // Check provider credentials
   const provider = (yaml.provider as string) ?? "linear";
   const credErrors = checkProviderCredentials(critterTypes, provider, {
@@ -157,26 +195,36 @@ export function validateConfigFile(configPath?: string): { errors: string[]; sum
   errors.push(...credErrors);
 
   const summary = errors.length === 0
-    ? `Config valid: ${critterTypes.length} critter type(s), provider: ${provider}`
+    ? `Config valid: ${critterTypes.length} critter type(s), provider: ${provider}${warnings.length > 0 ? ` (${warnings.length} warning(s))` : ""}`
     : undefined;
 
-  return { errors, summary };
+  return { errors, warnings, summary };
 }
 
 export async function runValidate(configPath?: string): Promise<void> {
   try {
     const result = validateConfigFile(configPath);
-    if (result.errors.length === 0) {
-      console.log(result.summary);
-    } else {
-      console.error(`Found ${result.errors.length} error(s):\n`);
+
+    if (result.warnings.length > 0) {
+      console.log(`\n\x1b[33m${result.warnings.length} warning(s):\x1b[0m\n`);
+      for (let i = 0; i < result.warnings.length; i++) {
+        console.log(`  \x1b[33mWARN:\x1b[0m ${result.warnings[i]}`);
+      }
+    }
+
+    if (result.errors.length > 0) {
+      console.error(`\n\x1b[31m${result.errors.length} error(s):\x1b[0m\n`);
       for (let i = 0; i < result.errors.length; i++) {
-        console.error(`  ${i + 1}. ${result.errors[i]}`);
+        console.error(`  \x1b[31mERROR:\x1b[0m ${result.errors[i]}`);
       }
       process.exit(1);
     }
+
+    if (result.summary) {
+      console.log(result.summary);
+    }
   } catch (e) {
-    console.error(`Error: ${(e as Error).message}`);
+    console.error(`\x1b[31mERROR:\x1b[0m ${(e as Error).message}`);
     process.exit(1);
   }
 }
