@@ -4,7 +4,7 @@ import { parse as parseYaml } from "yaml";
 import { type CritterTypeConfig, parseCritterTypes as parseCritterTypesFromYaml, synthesizeDefaultTypes, validateCritterType } from "./critter-type.js";
 import type { Config, RepoConfig } from "./types.js";
 
-function validateWorkDir(workDir: string): void {
+export function validateWorkDir(workDir: string): void {
   const resolved = workDir.startsWith("/") ? workDir : `${process.cwd()}/${workDir}`;
   // Normalize: remove trailing slashes, collapse double slashes
   const normalized = resolved.replace(/\/+/g, "/").replace(/\/$/, "");
@@ -51,7 +51,7 @@ function validateWorkDir(workDir: string): void {
   }
 }
 
-function resolveConfigPath(configPath?: string): string {
+export function resolveConfigPath(configPath?: string): string {
   if (configPath) return configPath;
 
   const candidates = [
@@ -197,39 +197,45 @@ function parseCritterTypes(yaml: Record<string, unknown>, config: Config): Critt
 
 const GIT_URL_RE = /^(git@[\w.-]+:[\w./-]+\.git|https?:\/\/[\w.-]+\/[\w./-]+\.git)$/;
 
-function validateRepoUrls(config: Config): void {
-  for (const [key, repo] of Object.entries(config.repos)) {
+export function validateRepoUrls(repos: Record<string, { url: string }>, teamRepos: Record<string, string>): void {
+  for (const [key, repo] of Object.entries(repos)) {
     if (!GIT_URL_RE.test(repo.url)) {
       throw new Error(`Invalid git URL for repo '${key}': ${repo.url}`);
     }
   }
-  for (const [key, url] of Object.entries(config.teamRepos)) {
+  for (const [key, url] of Object.entries(teamRepos)) {
     if (!GIT_URL_RE.test(url)) {
       throw new Error(`Invalid git URL for teamRepo '${key}': ${url}`);
     }
   }
 }
 
-function validateProviderCredentials(config: Config): void {
-  // Collect which providers are actually needed
+export function checkProviderCredentials(
+  critterTypes: CritterTypeConfig[],
+  defaultProvider: string,
+  env: { linearApiKey?: string; jiraHost?: string; jiraEmail?: string; jiraApiToken?: string },
+): string[] {
+  const errors: string[] = [];
   const neededProviders = new Set<string>();
-  for (const ct of config.critterTypes) {
-    neededProviders.add(ct.provider ?? config.provider);
+  for (const ct of critterTypes) {
+    neededProviders.add(ct.provider ?? defaultProvider);
   }
 
-  if (neededProviders.has("linear") && !config.linearApiKey) {
-    throw new Error("LINEAR_API_KEY not set in environment or .env (required by at least one critter type using the Linear provider)");
+  if (neededProviders.has("linear") && !env.linearApiKey) {
+    errors.push("LINEAR_API_KEY not set in environment or .env (required by at least one critter type using the Linear provider)");
   }
 
   if (neededProviders.has("jira")) {
     const missing: string[] = [];
-    if (!config.jiraHost) missing.push("JIRA_HOST");
-    if (!config.jiraEmail) missing.push("JIRA_EMAIL");
-    if (!config.jiraApiToken) missing.push("JIRA_API_TOKEN");
+    if (!env.jiraHost) missing.push("JIRA_HOST");
+    if (!env.jiraEmail) missing.push("JIRA_EMAIL");
+    if (!env.jiraApiToken) missing.push("JIRA_API_TOKEN");
     if (missing.length > 0) {
-      throw new Error(`${missing.join(", ")} not set in environment or .env (required by at least one critter type using the Jira provider)`);
+      errors.push(`${missing.join(", ")} not set in environment or .env (required by at least one critter type using the Jira provider)`);
     }
   }
+
+  return errors;
 }
 
 function validateConfig(config: Config): void {
@@ -266,6 +272,14 @@ function validateConfig(config: Config): void {
   if (!Array.isArray(config.defaultAllowedTools) || config.defaultAllowedTools.length === 0) {
     throw new Error("Invalid config: defaultAllowedTools must be a non-empty array of tool patterns");
   }
-  validateRepoUrls(config);
-  validateProviderCredentials(config);
+  validateRepoUrls(config.repos, config.teamRepos);
+  const credErrors = checkProviderCredentials(config.critterTypes, config.provider, {
+    linearApiKey: config.linearApiKey,
+    jiraHost: config.jiraHost,
+    jiraEmail: config.jiraEmail,
+    jiraApiToken: config.jiraApiToken,
+  });
+  if (credErrors.length > 0) {
+    throw new Error(credErrors[0]);
+  }
 }

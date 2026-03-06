@@ -1,0 +1,168 @@
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
+import { validateConfigFile } from "../validate.js";
+import { createTempDir } from "./helpers.js";
+
+let tempDir: string;
+let cleanup: () => void;
+
+// Save and restore env vars
+const envKeys = ["LINEAR_API_KEY", "SLACK_WEBHOOK_URL", "JIRA_HOST", "JIRA_EMAIL", "JIRA_API_TOKEN"];
+let savedEnv: Record<string, string | undefined>;
+
+beforeEach(() => {
+  const tmp = createTempDir();
+  tempDir = tmp.path;
+  cleanup = tmp.cleanup;
+
+  savedEnv = {};
+  for (const key of envKeys) {
+    savedEnv[key] = process.env[key];
+  }
+  process.env.LINEAR_API_KEY = "test-key";
+  delete process.env.SLACK_WEBHOOK_URL;
+  delete process.env.JIRA_HOST;
+  delete process.env.JIRA_EMAIL;
+  delete process.env.JIRA_API_TOKEN;
+});
+
+afterEach(() => {
+  cleanup();
+  for (const key of envKeys) {
+    if (savedEnv[key] !== undefined) {
+      process.env[key] = savedEnv[key];
+    } else {
+      delete process.env[key];
+    }
+  }
+});
+
+function writeYaml(content: string): string {
+  const path = `${tempDir}/config.yaml`;
+  writeFileSync(path, content, "utf-8");
+  return path;
+}
+
+const validYaml = `
+defaultAllowedTools:
+  - "Read"
+  - "Write"
+`;
+
+describe("validateConfigFile", () => {
+  test("valid config returns no errors and a summary", () => {
+    const path = writeYaml(validYaml);
+    const result = validateConfigFile(path);
+    expect(result.errors).toHaveLength(0);
+    expect(result.summary).toContain("Config valid");
+    expect(result.summary).toContain("2 critter type(s)");
+    expect(result.summary).toContain("provider: linear");
+  });
+
+  test("invalid YAML syntax throws fatal error", () => {
+    const path = writeYaml("{ invalid yaml: [unclosed");
+    expect(() => validateConfigFile(path)).toThrow();
+  });
+
+  test("missing defaultAllowedTools collects error", () => {
+    const path = writeYaml("concurrency: 2\n");
+    const result = validateConfigFile(path);
+    expect(result.errors.some((e) => e.includes("defaultAllowedTools"))).toBe(true);
+  });
+
+  test("invalid critter type collects error", () => {
+    const path = writeYaml(`
+defaultAllowedTools:
+  - "Read"
+critterTypes:
+  broken:
+    trigger: {}
+    phases:
+      - name: test
+        prompt: test.md
+        model: opus
+        maxTurns: 10
+    outcomes:
+      success: { status: "Done" }
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors.some((e) => e.includes("trigger must have label and status"))).toBe(true);
+  });
+
+  test("missing LINEAR_API_KEY collects error", () => {
+    delete process.env.LINEAR_API_KEY;
+    const path = writeYaml(validYaml);
+    const result = validateConfigFile(path);
+    expect(result.errors.some((e) => e.includes("LINEAR_API_KEY"))).toBe(true);
+  });
+
+  test("multiple errors are all reported", () => {
+    delete process.env.LINEAR_API_KEY;
+    const path = writeYaml(`
+concurrency: 0
+healthPort: 80
+`);
+    const result = validateConfigFile(path);
+    // Should have at least: concurrency, healthPort, defaultAllowedTools, LINEAR_API_KEY
+    expect(result.errors.length).toBeGreaterThanOrEqual(4);
+    expect(result.errors.some((e) => e.includes("concurrency"))).toBe(true);
+    expect(result.errors.some((e) => e.includes("healthPort"))).toBe(true);
+    expect(result.errors.some((e) => e.includes("defaultAllowedTools"))).toBe(true);
+    expect(result.errors.some((e) => e.includes("LINEAR_API_KEY"))).toBe(true);
+  });
+
+  test("jira provider checks all three env vars", () => {
+    delete process.env.LINEAR_API_KEY;
+    const path = writeYaml(`
+provider: jira
+defaultAllowedTools:
+  - "Read"
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors.some((e) => e.includes("JIRA_HOST"))).toBe(true);
+    expect(result.errors.some((e) => e.includes("JIRA_EMAIL"))).toBe(true);
+    expect(result.errors.some((e) => e.includes("JIRA_API_TOKEN"))).toBe(true);
+    // Should NOT complain about LINEAR_API_KEY since provider is jira
+    expect(result.errors.some((e) => e.includes("LINEAR_API_KEY"))).toBe(false);
+  });
+
+  test("invalid workDir collects error", () => {
+    const path = writeYaml(`
+workDir: /etc/bad
+defaultAllowedTools:
+  - "Read"
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors.some((e) => e.includes("Unsafe workDir"))).toBe(true);
+  });
+
+  test("invalid repo URL collects error", () => {
+    const path = writeYaml(`
+defaultAllowedTools:
+  - "Read"
+repos:
+  "proj-1":
+    url: "not-a-git-url"
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors.some((e) => e.includes("Invalid git URL"))).toBe(true);
+  });
+
+  test("custom --config path works", () => {
+    const customPath = `${tempDir}/custom-config.yaml`;
+    writeFileSync(customPath, validYaml, "utf-8");
+    const result = validateConfigFile(customPath);
+    expect(result.errors).toHaveLength(0);
+    expect(result.summary).toContain("Config valid");
+  });
+
+  test("empty critterTypes object collects error", () => {
+    const path = writeYaml(`
+defaultAllowedTools:
+  - "Read"
+critterTypes: {}
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors.some((e) => e.includes("critterTypes is defined but empty"))).toBe(true);
+  });
+});
