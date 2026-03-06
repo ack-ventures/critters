@@ -219,6 +219,26 @@ describe("parseCritterType", () => {
     expect(ct.phases[1].tools).toBe("default");
   });
 
+  test("preserves trigger.assignee", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y", assignee: "alice@company.com" },
+      phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5 }],
+      outcomes: { success: { status: "Done" } },
+    };
+    const ct = parseCritterType("test", raw);
+    expect(ct.trigger.assignee).toBe("alice@company.com");
+  });
+
+  test("trigger.assignee defaults to undefined", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5 }],
+      outcomes: { success: { status: "Done" } },
+    };
+    const ct = parseCritterType("test", raw);
+    expect(ct.trigger.assignee).toBeUndefined();
+  });
+
   test("preserves enrichment field", () => {
     const raw = {
       trigger: { label: "X", status: "Y" },

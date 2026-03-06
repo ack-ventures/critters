@@ -4,6 +4,7 @@ export interface TriggerConfig {
   label: string;
   status: string;
   statusType?: string;
+  assignee?: string;
 }
 
 export interface PhaseConfig {
@@ -162,6 +163,7 @@ export function parseCritterType(name: string, raw: Record<string, unknown>): Cr
       label: trigger.label as string,
       status: trigger.status as string,
       statusType: trigger.statusType as string | undefined,
+      assignee: trigger.assignee as string | undefined,
     },
     repo: {
       clone: (repoRaw.clone as boolean) ?? true,

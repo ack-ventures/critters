@@ -33,7 +33,11 @@ export class JiraTracker implements IssueTracker {
     return withRetry(
       async () => {
         const statusName = this.mapStatusName(trigger.status);
-        const jql = `labels = "${trigger.label}" AND status = "${statusName}"`;
+        let jql = `labels = "${trigger.label}" AND status = "${statusName}"`;
+        if (trigger.assignee) {
+          const assigneeValue = trigger.assignee === "me" ? "currentUser()" : `"${trigger.assignee}"`;
+          jql += ` AND assignee = ${assigneeValue}`;
+        }
         const resp = await this.request(
           `/search?jql=${encodeURIComponent(jql)}&expand=renderedFields&fields=summary,description,labels,project,issuelinks`,
         );

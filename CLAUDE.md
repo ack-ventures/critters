@@ -148,6 +148,7 @@ critterTypes:
 | `trigger.label` | yes | — | Label that triggers this type |
 | `trigger.status` | yes | — | Status name to match (e.g., "Todo", "In Review") |
 | `trigger.statusType` | no | — | Linear status type to match (e.g., "unstarted"). More reliable than matching by name. Linear-only |
+| `trigger.assignee` | no | — | Only pick up issues assigned to this user. Email address, or `"me"` for the authenticated user |
 | `repo.clone` | no | true | Whether to shallow clone the repo |
 | `repo.branch` | no | — | Whether to create a feature branch (needed for PR-creating types) |
 | `phases` | yes | — | Array of phases to run sequentially (at least one) |

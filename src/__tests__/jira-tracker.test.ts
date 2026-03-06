@@ -91,6 +91,36 @@ describe("JiraTracker", () => {
       expect(tasks[0].description).toContain("repo: git@github.com:org/repo.git");
     });
 
+    test("includes assignee in JQL when set", async () => {
+      mockFetchFn.mockResolvedValueOnce(mockResponse({ issues: [], total: 0 }));
+
+      await tracker.findIssues({ label: "Critter", status: "To Do", assignee: "alice@company.com" });
+
+      const call = mockFetchFn.mock.calls[0] as [string, RequestInit];
+      const url = decodeURIComponent(call[0]);
+      expect(url).toContain('AND assignee = "alice@company.com"');
+    });
+
+    test("uses currentUser() for assignee 'me'", async () => {
+      mockFetchFn.mockResolvedValueOnce(mockResponse({ issues: [], total: 0 }));
+
+      await tracker.findIssues({ label: "Critter", status: "To Do", assignee: "me" });
+
+      const call = mockFetchFn.mock.calls[0] as [string, RequestInit];
+      const url = decodeURIComponent(call[0]);
+      expect(url).toContain("AND assignee = currentUser()");
+    });
+
+    test("omits assignee from JQL when not set", async () => {
+      mockFetchFn.mockResolvedValueOnce(mockResponse({ issues: [], total: 0 }));
+
+      await tracker.findIssues({ label: "Critter", status: "To Do" });
+
+      const call = mockFetchFn.mock.calls[0] as [string, RequestInit];
+      const url = decodeURIComponent(call[0]);
+      expect(url).not.toContain("assignee");
+    });
+
     test("detects blockers from issue links", async () => {
       mockFetchFn.mockResolvedValueOnce(
         mockResponse({

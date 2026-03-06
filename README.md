@@ -162,6 +162,8 @@ Custom types automatically:
 
 Prompt files support `{{identifier}}`, `{{title}}`, `{{description}}`, and other variables. See [CLAUDE.md](CLAUDE.md) for the full reference.
 
+**Assignee filtering:** Add `trigger.assignee` to only pick up issues assigned to a specific user. Use an email address (e.g., `"alice@company.com"`) or `"me"` for the authenticated user. Useful in shared projects where you don't want critters picking up every labeled issue.
+
 **Model guidance:** Use sonnet or opus for custom types. Haiku often ignores tool-use instructions and produces shallow output.
 
 If `critterTypes` is omitted from config, the daemon synthesizes the default `create` and `review` types from the flat config fields — fully backward compatible.

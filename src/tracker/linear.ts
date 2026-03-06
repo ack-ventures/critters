@@ -59,10 +59,17 @@ export class LinearTracker implements IssueTracker {
           ? { type: { eq: trigger.statusType } }
           : { name: { eq: trigger.status } };
 
+        const assigneeFilter = trigger.assignee
+          ? trigger.assignee === "me"
+            ? { assignee: { isMe: { eq: true } } }
+            : { assignee: { email: { eq: trigger.assignee } } }
+          : {};
+
         const issueConnection = await this.client.issues({
           filter: {
             labels: { some: { name: { eq: trigger.label } } },
             state: stateFilter,
+            ...assigneeFilter,
           },
         });
         const allIssues = await fetchAllNodes(issueConnection);
