@@ -44,6 +44,8 @@ export interface Config {
   jiraApiToken?: string;
   jiraStatusMap?: Record<string, string>;
   slackWebhookUrl?: string;
+  slackBotToken?: string;
+  slackChannel?: string;
   hooks?: {
     onTaskStarted?: string;
     onPrCreated?: string;

@@ -80,6 +80,8 @@ export function loadConfig(configPath?: string): Config {
   const jiraEmail = process.env.JIRA_EMAIL || undefined;
   const jiraApiToken = process.env.JIRA_API_TOKEN || undefined;
   const slackWebhookUrl = process.env.SLACK_WEBHOOK_URL || undefined;
+  const slackBotToken = process.env.SLACK_BOT_TOKEN || undefined;
+  const slackChannel = process.env.SLACK_CHANNEL || undefined;
 
   const repos: Record<string, RepoConfig> = {};
   if (yaml.repos && typeof yaml.repos === "object") {
@@ -138,6 +140,8 @@ export function loadConfig(configPath?: string): Config {
     jiraApiToken,
     jiraStatusMap: (yaml.jiraStatusMap as Record<string, string>) ?? undefined,
     slackWebhookUrl,
+    slackBotToken,
+    slackChannel,
     hooks,
     provider,
     critterTypes: [], // populated below
@@ -271,6 +275,9 @@ function validateConfig(config: Config): void {
   }
   if (!Array.isArray(config.defaultAllowedTools) || config.defaultAllowedTools.length === 0) {
     throw new Error("Invalid config: defaultAllowedTools must be a non-empty array of tool patterns");
+  }
+  if (config.slackBotToken && !config.slackChannel) {
+    throw new Error("SLACK_CHANNEL must be set when SLACK_BOT_TOKEN is configured");
   }
   validateRepoUrls(config.repos, config.teamRepos);
   const credErrors = checkProviderCredentials(config.critterTypes, config.provider, {

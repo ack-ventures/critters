@@ -25,7 +25,7 @@ import {
   formatSuccess,
   formatTaskPickedUp,
   formatTimeoutWarning,
-  sendSlackNotification,
+  SlackNotifier,
 } from "./slack.js";
 import type { IssueTracker, TrackerTask } from "./tracker/types.js";
 import type { ActiveCritterDetail, Config, SpawnResult } from "./types.js";
@@ -56,10 +56,16 @@ export class UnifiedSpawner {
   private cleanupInterval: Timer | null = null;
   private activeWorkDirs = new Set<string>();
   private activeCritterMap = new Map<string, ActiveCritterDetail>();
+  private slackNotifier: SlackNotifier;
 
   constructor(config: Config, trackers: Map<string, IssueTracker>) {
     this.config = config;
     this.trackers = trackers;
+    this.slackNotifier = new SlackNotifier({
+      webhookUrl: config.slackWebhookUrl,
+      botToken: config.slackBotToken,
+      channel: config.slackChannel,
+    });
   }
 
   updateConfig(config: Config, trackers: Map<string, IssueTracker>): void {
@@ -224,8 +230,8 @@ export class UnifiedSpawner {
     if (!isReviewType) {
       warningTimeout = setTimeout(async () => {
         const elapsedMinutes = Math.round(critterType.timeoutMinutes * 0.8);
-        await sendSlackNotification(
-          this.config.slackWebhookUrl,
+        await this.slackNotifier.notify(
+          task.id,
           formatTimeoutWarning(task.identifier, task.title, elapsedMinutes, critterType.timeoutMinutes),
         );
       }, critterType.timeoutMinutes * 0.8 * 60 * 1000);
@@ -284,8 +290,8 @@ export class UnifiedSpawner {
 
       // Notify and trigger hooks
       if (critterType.name === "create") {
-        await sendSlackNotification(
-          this.config.slackWebhookUrl,
+        await this.slackNotifier.notify(
+          task.id,
           formatTaskPickedUp(task.identifier, task.title, task.repoUrl),
         );
         triggerHook(this.config, "onTaskStarted", {
@@ -296,8 +302,8 @@ export class UnifiedSpawner {
           CRITTER_BRANCH: branch,
         }, task.identifier);
       } else if (isReviewType) {
-        await sendSlackNotification(
-          this.config.slackWebhookUrl,
+        await this.slackNotifier.notify(
+          task.id,
           formatReviewStarted(task.identifier, task.title, task.prUrl ?? ""),
         );
         triggerHook(this.config, "onReviewStarted", {
@@ -371,8 +377,8 @@ export class UnifiedSpawner {
 
         // Slack notification and hook for planning completion
         if (phase.name === "planning" && critterType.name === "create") {
-          await sendSlackNotification(
-            this.config.slackWebhookUrl,
+          await this.slackNotifier.notify(
+            task.id,
             formatPlanningComplete(task.identifier, task.title, phaseResult.spawn.numTurns, phaseResult.spawn.costUsd),
           );
           triggerHook(this.config, "onPlanningCompleted", {
@@ -514,13 +520,13 @@ export class UnifiedSpawner {
 
       // Slack notification
       if (isReviewType) {
-        await sendSlackNotification(
-          this.config.slackWebhookUrl,
+        await this.slackNotifier.notify(
+          task.id,
           formatReviewFailure(task.identifier, task.title, error, totalDuration),
         );
       } else {
-        await sendSlackNotification(
-          this.config.slackWebhookUrl,
+        await this.slackNotifier.notify(
+          task.id,
           formatFailure(task.identifier, task.title, error, totalDuration),
         );
       }
@@ -557,6 +563,7 @@ export class UnifiedSpawner {
       this.activeProcesses.delete(abortController);
       this.activeWorkDirs.delete(workDir);
       this.activeCritterMap.delete(task.id);
+      this.slackNotifier.clearThread(task.id);
       cleanupWorkDir(workDir);
       logTask(task.identifier, "Cleaned up work directory");
     }
@@ -579,8 +586,8 @@ export class UnifiedSpawner {
     const totalDuration = formatDuration(Date.now() - taskStart);
     logTask(task.identifier, `Completed in ${totalDuration}`);
     await tracker.comment(task.id, `PR created: ${prUrl} (completed in ${totalDuration})`);
-    await sendSlackNotification(
-      this.config.slackWebhookUrl,
+    await this.slackNotifier.notify(
+      task.id,
       formatSuccess(task.identifier, task.title, prUrl, totalDuration),
     );
     logTask(task.identifier, `Success — PR: ${prUrl}`);
@@ -641,8 +648,8 @@ export class UnifiedSpawner {
         logTask(task.identifier, "Review complete — PR was already merged");
       } else {
         await tracker.comment(task.id, `PR merged by review critter (${totalDuration})`);
-        await sendSlackNotification(
-          this.config.slackWebhookUrl,
+        await this.slackNotifier.notify(
+          task.id,
           formatReviewMerged(task.identifier, task.title, task.prUrl ?? "", totalDuration),
         );
         logTask(task.identifier, `Review complete — PR merged`);
@@ -680,8 +687,8 @@ export class UnifiedSpawner {
         await tracker.updateStatus(task.id, needsChangesOutcome.status, task.groupId);
       }
       await tracker.comment(task.id, `Review critter requested changes: ${reason}`);
-      await sendSlackNotification(
-        this.config.slackWebhookUrl,
+      await this.slackNotifier.notify(
+        task.id,
         formatReviewNeedsChanges(task.identifier, task.title, reason ?? "No reason provided", totalDuration),
       );
       logTask(task.identifier, `Review complete — needs changes: ${reason}`);
