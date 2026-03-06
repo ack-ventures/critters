@@ -183,6 +183,152 @@ bun run src/index.ts --config test-configs/custom-types.yaml --dry-run --type co
 
 A sample config with multiple custom types lives at `test-configs/custom-types.yaml`. A multi-provider example is at `test-configs/multi-provider.yaml`. Prompt templates for testing are at `~/.critters/prompts/`.
 
+## Use Cases
+
+Critters is a general-purpose agent orchestrator. The built-in `create` and `review` types are just defaults — any workflow matching "watch for trigger → run Claude with a prompt → produce an outcome" can be built with custom critter types, no code changes needed.
+
+### Issue triage bot
+
+Automatically reads new issues, adds labels, sets priority, and posts a triage summary comment. Uses read-only tools and sonnet for fast, cheap analysis.
+
+```yaml
+critterTypes:
+  triage:
+    trigger: { label: "Needs Triage", status: "Triage", statusType: "triage" }
+    repo: { clone: true }
+    phases:
+      - name: triage
+        prompt: ~/.critters/prompts/triage.md
+        model: sonnet
+        maxTurns: 10
+        tools: [Read, Glob, Grep, "Bash(git:*)", "Bash(ls:*)"]
+    outcomes:
+      success: { status: "Todo", comment: true }
+      failure: { status: "Critter Failed", comment: true }
+    concurrency: 5
+    timeoutMinutes: 5
+```
+
+Sonnet is the right choice here — triage is pattern matching and classification, not multi-step reasoning.
+
+### Documentation writer
+
+Watches for issues labeled "Docs Needed", reads the relevant code, and generates or updates markdown documentation. Creates a PR with the changes.
+
+```yaml
+critterTypes:
+  docs:
+    trigger: { label: "Docs Needed", status: "Todo", statusType: "unstarted" }
+    repo: { clone: true, branch: true }
+    phases:
+      - name: docs
+        prompt: ~/.critters/prompts/docs-writer.md
+        model: opus
+        maxTurns: 40
+        tools: default
+    outcomes:
+      success: { status: "In Review" }
+      failure: { status: "Critter Failed", comment: true }
+    concurrency: 2
+    timeoutMinutes: 20
+```
+
+Opus is recommended — writing good documentation requires understanding code structure and producing clear, well-organized prose.
+
+### Security auditor
+
+Scans a repo for OWASP top 10 vulnerabilities, dependency issues, and hardcoded secrets. Produces a `.critter-report.md` with findings and severity ratings.
+
+```yaml
+critterTypes:
+  security-audit:
+    trigger: { label: "Security Audit", status: "Todo", statusType: "unstarted" }
+    repo: { clone: true }
+    phases:
+      - name: audit
+        prompt: ~/.critters/prompts/security-audit.md
+        model: sonnet
+        maxTurns: 25
+        tools: [Read, Glob, Grep, "Bash(git:*)", "Bash(ls:*)", "Bash(cat:*)"]
+    outcomes:
+      success: { status: "Done", comment: true }
+      failure: { status: "Critter Failed", comment: true }
+    concurrency: 3
+    timeoutMinutes: 15
+```
+
+Sonnet provides a good cost/quality tradeoff for analysis tasks. The report is automatically uploaded as an attachment and posted as a comment.
+
+### Test generator
+
+Picks up issues labeled "Needs Tests", reads the implementation, and writes missing test cases. Creates a PR with the new tests.
+
+```yaml
+critterTypes:
+  test-gen:
+    trigger: { label: "Needs Tests", status: "Todo", statusType: "unstarted" }
+    repo: { clone: true, branch: true }
+    phases:
+      - name: generate-tests
+        prompt: ~/.critters/prompts/test-generator.md
+        model: opus
+        maxTurns: 50
+        tools: default
+    outcomes:
+      success: { status: "In Review" }
+      failure: { status: "Critter Failed", comment: true }
+    concurrency: 2
+    timeoutMinutes: 25
+```
+
+Opus is recommended for code generation — writing correct, meaningful tests requires understanding the code under test and producing valid assertions.
+
+### Multi-step workflow (chaining critter types)
+
+You can chain critter types using Linear/Jira blocking relationships. For example, a "plan" critter creates an implementation plan and spawns sub-tickets, then "implement" critters pick up each sub-ticket independently.
+
+```yaml
+critterTypes:
+  plan:
+    trigger: { label: "Critter Plan", status: "Todo", statusType: "unstarted" }
+    repo: { clone: true }
+    phases:
+      - name: plan
+        prompt: ~/.critters/prompts/plan-and-split.md
+        model: opus
+        maxTurns: 30
+        tools: [Read, Glob, Grep, "Bash(git:*)", "Bash(ls:*)"]
+    outcomes:
+      success: { status: "Done", comment: true }
+      failure: { status: "Critter Failed", comment: true }
+    concurrency: 2
+    timeoutMinutes: 15
+
+  implement:
+    trigger: { label: "Critter", status: "Todo", statusType: "unstarted" }
+    repo: { clone: true, branch: true }
+    phases:
+      - name: planning
+        prompt: builtin:planning
+        model: opus
+        maxTurns: 50
+        tools: readonly
+      - name: execution
+        prompt: builtin:execution
+        model: opus
+        maxTurns: 75
+        tools: default
+    outcomes:
+      success: { status: "In Review" }
+      failure: { status: "Critter Failed" }
+    concurrency: 3
+    timeoutMinutes: 30
+```
+
+The "plan" critter's prompt instructs Claude to create sub-issues (via the Linear/Jira API tools or `gh`) with `blocks`/`blockedBy` relationships. The daemon won't pick up blocked issues until their blockers are resolved, so ordering is enforced automatically.
+
+See [Critter type config reference](#critter-type-config-reference) for the full list of configuration fields.
+
 ## Multi-Provider Support
 
 A single daemon can poll both Linear and Jira simultaneously. Each critter type specifies which provider(s) to use via the `provider` field.
