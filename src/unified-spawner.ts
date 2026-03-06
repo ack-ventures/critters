@@ -188,6 +188,7 @@ export class UnifiedSpawner {
         startedAt: Date.now(),
         prUrl: item.task.prUrl,
         timeoutMinutes: item.critterType.timeoutMinutes,
+        critterType: typeName,
       });
 
       const metricEvent = typeName === "review" ? "review_started" : "task_started";
@@ -219,6 +220,8 @@ export class UnifiedSpawner {
       : "";
     const workDir = `${this.config.workDir}/${workDirPrefix}${task.identifier}-${Date.now()}`;
     this.activeWorkDirs.add(workDir);
+    const detail = this.activeCritterMap.get(task.id);
+    if (detail) detail.workDir = workDir;
     const abortController = new AbortController();
     this.activeProcesses.add(abortController);
     const taskStart = Date.now();
