@@ -33,19 +33,19 @@ afterEach(() => {
 
 describe("renderDashboard", () => {
   test("returns valid HTML with DOCTYPE", () => {
-    const html = renderDashboard("", defaultStatus());
+    const html = renderDashboard("", defaultStatus(), 0);
     expect(html).toStartWith("<!DOCTYPE html>");
     expect(html).toContain("<html");
     expect(html).toContain("</html>");
   });
 
   test("contains auto-refresh meta tag", () => {
-    const html = renderDashboard("", defaultStatus());
+    const html = renderDashboard("", defaultStatus(), 0);
     expect(html).toContain('<meta http-equiv="refresh" content="30">');
   });
 
   test("contains viewport meta tag", () => {
-    const html = renderDashboard("", defaultStatus());
+    const html = renderDashboard("", defaultStatus(), 0);
     expect(html).toContain('<meta name="viewport"');
   });
 
@@ -56,7 +56,7 @@ describe("renderDashboard", () => {
     recordMetric({ timestamp: now, event: "task_completed", identifier: "TST-3", costUsd: 0.5, duration: 300000 });
     recordMetric({ timestamp: now, event: "task_failed", identifier: "TST-4", costUsd: 1.0, duration: 900000 });
 
-    const html = renderDashboard("", defaultStatus());
+    const html = renderDashboard("", defaultStatus(), 0);
     // Total tasks = 4
     expect(html).toContain(">4<");
     // Success rate = 75%
@@ -70,7 +70,7 @@ describe("renderDashboard", () => {
     recordMetric({ timestamp: now, event: "task_completed", identifier: "ACK-42" });
     recordMetric({ timestamp: now, event: "task_failed", identifier: "ACK-99" });
 
-    const html = renderDashboard("", defaultStatus());
+    const html = renderDashboard("", defaultStatus(), 0);
     expect(html).toContain("ACK-42");
     expect(html).toContain("ACK-99");
     expect(html).toContain("Completed");
@@ -87,7 +87,7 @@ describe("renderDashboard", () => {
       lastPollAt: null,
       activeCritterDetails: [],
     };
-    const html = renderDashboard("", status);
+    const html = renderDashboard("", status, 0);
     expect(html).toContain(">2<");
     expect(html).toContain(">1<");
     expect(html).toContain(">3<");
@@ -107,13 +107,13 @@ describe("renderDashboard", () => {
       lastPollAt: null,
       activeCritterDetails: [],
     };
-    const html = renderDashboard("", status);
+    const html = renderDashboard("", status, 0);
     expect(html).toContain("Active Tasks");
     expect(html).toContain("Queued Tasks");
   });
 
   test("handles empty metrics gracefully", () => {
-    const html = renderDashboard("", defaultStatus());
+    const html = renderDashboard("", defaultStatus(), 0);
     expect(html).toStartWith("<!DOCTYPE html>");
     // Should show 0 total tasks
     expect(html).toContain(">0<");
@@ -128,7 +128,7 @@ describe("renderDashboard", () => {
     recordMetric({ timestamp: now, event: "task_completed", identifier: "X-1" });
     recordMetric({ timestamp: now, event: "task_failed", identifier: "X-2" });
 
-    const html = renderDashboard("", defaultStatus());
+    const html = renderDashboard("", defaultStatus(), 0);
     // Should not contain NaN
     expect(html).not.toContain("NaN");
     // Should still render valid HTML
@@ -141,13 +141,13 @@ describe("renderDashboard", () => {
     const now = new Date().toISOString();
     recordMetric({ timestamp: now, event: "task_completed", identifier: '<script>alert("xss")</script>' });
 
-    const html = renderDashboard("", defaultStatus());
+    const html = renderDashboard("", defaultStatus(), 0);
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");
   });
 
   test("contains chart sections", () => {
-    const html = renderDashboard("", defaultStatus());
+    const html = renderDashboard("", defaultStatus(), 0);
     expect(html).toContain("Tasks per Day");
     expect(html).toContain("Cost per Day");
     expect(html).toContain("Success vs Failure");
@@ -158,7 +158,7 @@ describe("renderDashboard", () => {
     const now = new Date().toISOString();
     recordMetric({ timestamp: now, event: "task_completed", identifier: "PR-1", prUrl: "https://github.com/org/repo/pull/42" });
 
-    const html = renderDashboard("", defaultStatus());
+    const html = renderDashboard("", defaultStatus(), 0);
     expect(html).toContain('href="https://github.com/org/repo/pull/42"');
     expect(html).toContain("PR</a>");
   });
@@ -167,7 +167,7 @@ describe("renderDashboard", () => {
     const now = new Date().toISOString();
     recordMetric({ timestamp: now, event: "task_completed", identifier: "DUR-1", duration: 480000 });
 
-    const html = renderDashboard("", defaultStatus());
+    const html = renderDashboard("", defaultStatus(), 0);
     expect(html).toContain("8m");
     expect(html).not.toContain("480000");
   });
@@ -176,7 +176,7 @@ describe("renderDashboard", () => {
     const now = new Date().toISOString();
     recordMetric({ timestamp: now, event: "task_completed", identifier: "DUR-2", duration: 45000 });
 
-    const html = renderDashboard("", defaultStatus());
+    const html = renderDashboard("", defaultStatus(), 0);
     expect(html).toContain("45s");
   });
 
@@ -187,7 +187,7 @@ describe("renderDashboard", () => {
     recordMetric({ timestamp: now, event: "review_completed", identifier: "R-1", costUsd: 0.3 });
     recordMetric({ timestamp: now, event: "review_failed", identifier: "R-2", costUsd: 0.2 });
 
-    const html = renderDashboard("", defaultStatus());
+    const html = renderDashboard("", defaultStatus(), 0);
     // Total tasks = 4 (includes reviews)
     expect(html).toContain(">4<");
     // Total cost includes review costs: 1.0 + 0.5 + 0.3 + 0.2 = $2.00
@@ -201,13 +201,13 @@ describe("renderDashboard", () => {
     const now = new Date().toISOString();
     recordMetric({ timestamp: now, event: "review_completed", identifier: "R-3", costUsd: 0.5 });
 
-    const html = renderDashboard("", defaultStatus());
+    const html = renderDashboard("", defaultStatus(), 0);
     // The chart should have a non-zero success bar (100% since it's the only event)
     expect(html).toContain('class="bar success" style="height:100%"');
   });
 
   test("bar stack has height 100%", () => {
-    const html = renderDashboard("", defaultStatus());
+    const html = renderDashboard("", defaultStatus(), 0);
     expect(html).toContain("height: 100%;");
     // Specifically check .bar-stack has height: 100%
     expect(html).toContain(".bar-stack { display: flex; flex-direction: column-reverse; width: 100%; align-items: center; height: 100%; }");
@@ -224,7 +224,7 @@ describe("renderDashboard", () => {
       branch: "critter/ACK-100-test-task",
       startedAt: Date.now() - 120000,
     }];
-    const html = renderDashboard("", status);
+    const html = renderDashboard("", status, 0);
     expect(html).toContain("ACK-100");
     expect(html).toContain("Planning");
     expect(html).toContain("org/repo");
