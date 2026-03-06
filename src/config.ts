@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { parse as parseYaml } from "yaml";
 import { type CritterTypeConfig, parseCritterTypes as parseCritterTypesFromYaml, synthesizeDefaultTypes, validateCritterType } from "./critter-type.js";
-import type { Config, RepoConfig } from "./types.js";
+import type { AutoRetryConfig, Config, RepoConfig } from "./types.js";
 
 export function validateWorkDir(workDir: string): void {
   const resolved = workDir.startsWith("/") ? workDir : `${process.cwd()}/${workDir}`;
@@ -103,6 +103,15 @@ export function loadConfig(configPath?: string): Config {
 
   const hooks = yaml.hooks as Config["hooks"] | undefined;
 
+  const autoRetryRaw = yaml.autoRetry as Record<string, unknown> | undefined;
+  const autoRetry: AutoRetryConfig | undefined = autoRetryRaw
+    ? {
+        maxRetries: (autoRetryRaw.maxRetries as number) ?? 1,
+        baseDelaySeconds: (autoRetryRaw.baseDelaySeconds as number) ?? 60,
+        maxDelaySeconds: (autoRetryRaw.maxDelaySeconds as number) ?? 300,
+      }
+    : undefined;
+
   const workDir = (yaml.workDir as string) ?? "/tmp/critters-work";
   validateWorkDir(workDir);
 
@@ -146,6 +155,7 @@ export function loadConfig(configPath?: string): Config {
     slackChannel,
     costAlertThreshold: (yaml.costAlertThreshold as number) ?? undefined,
     hooks,
+    autoRetry,
     provider,
     critterTypes: [], // populated below
   };
@@ -287,6 +297,17 @@ function validateConfig(config: Config): void {
   }
   if (config.costAlertThreshold != null && config.costAlertThreshold <= 0) {
     throw new Error(`Invalid config: costAlertThreshold must be > 0, got ${config.costAlertThreshold}`);
+  }
+  if (config.autoRetry) {
+    if (config.autoRetry.maxRetries < 1) {
+      throw new Error(`Invalid config: autoRetry.maxRetries must be >= 1, got ${config.autoRetry.maxRetries}`);
+    }
+    if (config.autoRetry.baseDelaySeconds <= 0) {
+      throw new Error(`Invalid config: autoRetry.baseDelaySeconds must be > 0, got ${config.autoRetry.baseDelaySeconds}`);
+    }
+    if (config.autoRetry.maxDelaySeconds < config.autoRetry.baseDelaySeconds) {
+      throw new Error(`Invalid config: autoRetry.maxDelaySeconds must be >= baseDelaySeconds, got ${config.autoRetry.maxDelaySeconds}`);
+    }
   }
   if (config.slackBotToken && !config.slackChannel) {
     throw new Error("SLACK_CHANNEL must be set when SLACK_BOT_TOKEN is configured");
