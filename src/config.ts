@@ -122,6 +122,7 @@ export function loadConfig(configPath?: string): Config {
     maxExecutionTurns: (yaml.maxExecutionTurns as number) ?? 75,
     defaultAllowedTools: (yaml.defaultAllowedTools as string[]) ?? [],
     tmuxSession: (yaml.tmuxSession as string) ?? "critters",
+    branchPrefix: (yaml.branchPrefix as string) ?? "critter",
     noTmux: false,
     planningModel: (yaml.planningModel as string) ?? "opus",
     executionModel: (yaml.executionModel as string) ?? "opus",
@@ -275,6 +276,9 @@ function validateConfig(config: Config): void {
   }
   if (!Array.isArray(config.defaultAllowedTools) || config.defaultAllowedTools.length === 0) {
     throw new Error("Invalid config: defaultAllowedTools must be a non-empty array of tool patterns");
+  }
+  if (!/^[a-zA-Z0-9._-]+$/.test(config.branchPrefix)) {
+    throw new Error(`Invalid config: branchPrefix must match /^[a-zA-Z0-9._-]+$/, got "${config.branchPrefix}"`);
   }
   if (config.slackBotToken && !config.slackChannel) {
     throw new Error("SLACK_CHANNEL must be set when SLACK_BOT_TOKEN is configured");

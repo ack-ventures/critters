@@ -373,6 +373,7 @@ critterTypes:
 | `defaultAllowedTools` | see file | Tools critters can use |
 | `repos` | {} | Project ID → repo URL + extra tools |
 | `tmuxSession` | "critters" | Name of the tmux session to use |
+| `branchPrefix` | "critter" | Prefix for feature branch names (`<prefix>/<ID>-<slug>`) |
 | `teamRepos` | {} | Team ID → fallback repo URL |
 | `planningModel` | "opus" | Claude model for planning phase |
 | `executionModel` | "opus" | Claude model for execution phase |

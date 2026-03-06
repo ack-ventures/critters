@@ -31,6 +31,7 @@ function makeConfig(hooks?: Config["hooks"]): Config {
     repos: {},
     teamRepos: {},
     tmuxSession: "critters",
+    branchPrefix: "critter",
     noTmux: false,
     planningModel: "opus",
     executionModel: "opus",

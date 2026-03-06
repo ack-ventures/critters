@@ -96,6 +96,7 @@ teamRepos:
     expect(config.maxPlanningTurns).toBe(50);
     expect(config.maxExecutionTurns).toBe(75);
     expect(config.tmuxSession).toBe("critters");
+    expect(config.branchPrefix).toBe("critter");
     expect(config.noTmux).toBe(false);
     expect(config.repos).toEqual({});
     expect(config.teamRepos).toEqual({});

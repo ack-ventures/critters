@@ -177,13 +177,13 @@ export class UnifiedSpawner {
       if (!item) break;
       this.running.set(typeName, runningNow + 1);
       logTask(item.task.identifier, `Task started [${typeName}] (queue: ${queue.length}, running: ${(this.running.get(typeName) ?? 0)})`);
-      logTask(item.task.identifier, `Repo: ${shortRepoName(item.task.repoUrl)} | Branch: ${branchName(item.task.identifier, item.task.title)}`);
+      logTask(item.task.identifier, `Repo: ${shortRepoName(item.task.repoUrl)} | Branch: ${branchName(item.task.identifier, item.task.title, this.config.branchPrefix)}`);
       this.activeCritterMap.set(item.task.id, {
         identifier: item.task.identifier,
         title: item.task.title,
         phase: item.critterType.phases[0]?.name ?? typeName,
         repo: shortRepoName(item.task.repoUrl),
-        branch: item.task.prBranch ?? branchName(item.task.identifier, item.task.title),
+        branch: item.task.prBranch ?? branchName(item.task.identifier, item.task.title, this.config.branchPrefix),
         startedAt: Date.now(),
         prUrl: item.task.prUrl,
       });
@@ -213,7 +213,7 @@ export class UnifiedSpawner {
     const isReviewType = critterType.name === "review";
     const workDirPrefix = isReviewType ? "review-" : "";
     const branch = critterType.repo.branch
-      ? branchName(task.identifier, task.title)
+      ? branchName(task.identifier, task.title, this.config.branchPrefix)
       : "";
     const workDir = `${this.config.workDir}/${workDirPrefix}${task.identifier}-${Date.now()}`;
     this.activeWorkDirs.add(workDir);

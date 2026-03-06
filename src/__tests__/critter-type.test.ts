@@ -21,6 +21,7 @@ function baseConfig(overrides?: Partial<Config>): Config {
     repos: {},
     teamRepos: {},
     tmuxSession: "critters",
+    branchPrefix: "critter",
     noTmux: false,
     planningModel: "opus",
     executionModel: "opus",

@@ -28,6 +28,7 @@ export interface Config {
   repos: Record<string, RepoConfig>;
   teamRepos: Record<string, string>;
   tmuxSession: string;
+  branchPrefix: string;
   noTmux: boolean;
   planningModel: string;
   executionModel: string;

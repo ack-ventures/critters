@@ -85,6 +85,14 @@ describe("src/utils.ts", () => {
     test("empty title", () => {
       expect(branchName("ACK-3", "")).toBe("critter/ACK-3-");
     });
+
+    test("custom prefix", () => {
+      expect(branchName("ACK-1", "My Feature", "auto")).toBe("auto/ACK-1-my-feature");
+    });
+
+    test("default prefix is critter", () => {
+      expect(branchName("ACK-1", "My Feature")).toBe("critter/ACK-1-my-feature");
+    });
   });
 
   describe("formatDuration", () => {
@@ -436,6 +444,7 @@ describe("src/prompt.ts", () => {
       repos: {},
       teamRepos: {},
       tmuxSession: "critters",
+      branchPrefix: "critter",
       noTmux: false,
       planningModel: "opus",
       executionModel: "opus",
