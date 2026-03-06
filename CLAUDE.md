@@ -177,6 +177,7 @@ Use `--dry-run` to verify the daemon picks up the right issues for each type wit
 
 ```
 bun run src/index.ts --config test-configs/custom-types.yaml --dry-run
+bun run src/index.ts --config test-configs/custom-types.yaml --dry-run --type code-audit
 ```
 
 A sample config with multiple custom types lives at `test-configs/custom-types.yaml`. A multi-provider example is at `test-configs/multi-provider.yaml`. Prompt templates for testing are at `~/.critters/prompts/`.
@@ -491,6 +492,7 @@ Usage: `critters [command] [flags]`
 | `--no-tmux` | Run without tmux (log to file) |
 | `--skip-update` | Skip auto-update check on startup |
 | `--config PATH` | Use a custom config file |
+| `--type NAME` | Filter dry-run to a specific critter type |
 
 ## Release / Versioning
 
