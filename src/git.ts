@@ -124,6 +124,13 @@ export function cleanupWorkDir(dir: string): void {
   }
 }
 
+export async function deleteRemoteBranch(repoUrl: string, branch: string): Promise<void> {
+  const { code, stderr } = await runCommand("git", ["push", repoUrl, "--delete", branch]);
+  if (code !== 0) {
+    throw new Error(`Failed to delete remote branch ${branch}: ${stderr}`);
+  }
+}
+
 export function cleanupStaleWorkDirs(baseDir: string, activeWorkDirs?: Set<string>, maxAgeMinutes = 60): void {
   if (!existsSync(baseDir)) return;
   const entries = readdirSync(baseDir, { encoding: "utf-8" });

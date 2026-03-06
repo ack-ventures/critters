@@ -51,7 +51,7 @@ Commands:
   logs        Show logs for a critter run
   init-repo   Scaffold .critters.yaml in current repo
   prompt-help Launch Claude to help design critter types and prompts
-  clean       Clean up stale work directories
+  clean       Clean up stale work directories (--branches for remote branches)
   validate    Validate config file without starting daemon
   help        Show this help
 
@@ -62,6 +62,11 @@ Flags:
   --config PATH   Use a custom config file
   --type NAME     Filter to a specific critter type (use with --dry-run)
   --json-logs     Output structured JSON logs (one object per line)
+
+Clean flags:
+  --branches   Clean up stale critter branches from remotes
+  --all        Remove all work directories (not just stale ones)
+  --dry-run    Show what would be deleted without deleting
 
 Logs flags:
   --phase planning|execution|review  Show specific phase (default: most recent)
