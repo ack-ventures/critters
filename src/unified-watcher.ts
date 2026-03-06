@@ -73,6 +73,11 @@ export class UnifiedWatcher {
     }
   }
 
+  updateConfig(config: Config, trackers: Map<string, IssueTracker>): void {
+    this.config = config;
+    this.trackers = trackers;
+  }
+
   stop(): void {
     this.stopped = true;
     this.spawner?.stop();

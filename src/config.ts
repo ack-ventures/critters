@@ -51,7 +51,7 @@ function validateWorkDir(workDir: string): void {
   }
 }
 
-function resolveConfigPath(configPath?: string): string {
+export function resolveConfigPath(configPath?: string): string {
   if (configPath) return configPath;
 
   const candidates = [
