@@ -9,7 +9,7 @@ import type { CritterTypeConfig } from "./critter-type.js";
 import { startHealthServer } from "./health.js";
 import { runInit } from "./init.js";
 import { runInitRepo } from "./init-repo.js";
-import { initFileLogging, log, logError } from "./logger.js";
+import { enableJsonLogs, initFileLogging, log, logError } from "./logger.js";
 import { initMetrics } from "./metrics.js";
 import { checkPrerequisites } from "./prerequisites.js";
 import { runStatus } from "./status.js";
@@ -57,6 +57,7 @@ Flags:
   --skip-update   Skip auto-update check on startup
   --config PATH   Use a custom config file
   --type NAME     Filter to a specific critter type (use with --dry-run)
+  --json-logs     Output structured JSON logs (one object per line)
 
 Logs flags:
   --phase planning|execution|review  Show specific phase (default: most recent)
@@ -127,6 +128,11 @@ async function main() {
   const noTmux = Bun.argv.includes("--no-tmux");
   const skipUpdate = Bun.argv.includes("--skip-update");
   const dryRun = Bun.argv.includes("--dry-run");
+  const jsonLogs = Bun.argv.includes("--json-logs");
+
+  if (jsonLogs) {
+    enableJsonLogs();
+  }
   const typeFilter = (() => {
     const idx = Bun.argv.indexOf("--type");
     return idx !== -1 && Bun.argv[idx + 1] ? Bun.argv[idx + 1] : undefined;

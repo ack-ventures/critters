@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { initFileLogging, resetFileLogging, rotateFileIfNeeded } from "../logger.js";
+import { formatJsonLogEntry, initFileLogging, resetFileLogging, rotateFileIfNeeded } from "../logger.js";
 import { createTempDir } from "./helpers.js";
 
 let tempDir: string;
@@ -107,5 +107,59 @@ describe("initFileLogging", () => {
 
     expect(existsSync(`${logPath}.1`)).toBe(true);
     expect(readFileSync(`${logPath}.1`, "utf-8")).toBe(content);
+  });
+});
+
+describe("formatJsonLogEntry", () => {
+  test("info level with plain message", () => {
+    const line = formatJsonLogEntry("", "hello world", []);
+    const parsed = JSON.parse(line);
+    expect(parsed.level).toBe("info");
+    expect(parsed.message).toBe("hello world");
+    expect(parsed.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(parsed.identifier).toBeUndefined();
+  });
+
+  test("error level from ERROR prefix", () => {
+    const line = formatJsonLogEntry("ERROR: ", "something failed", []);
+    const parsed = JSON.parse(line);
+    expect(parsed.level).toBe("error");
+    expect(parsed.message).toBe("something failed");
+  });
+
+  test("task identifier extracted from level prefix", () => {
+    const line = formatJsonLogEntry("[ACK-1] ", "doing work", []);
+    const parsed = JSON.parse(line);
+    expect(parsed.level).toBe("info");
+    expect(parsed.message).toBe("doing work");
+    expect(parsed.identifier).toBe("ACK-1");
+  });
+
+  test("task warn level with identifier", () => {
+    const line = formatJsonLogEntry("[ACK-2] WARN: ", "something odd", []);
+    const parsed = JSON.parse(line);
+    expect(parsed.level).toBe("warn");
+    expect(parsed.message).toBe("something odd");
+    expect(parsed.identifier).toBe("ACK-2");
+  });
+
+  test("task error level with identifier", () => {
+    const line = formatJsonLogEntry("[ACK-3] ERROR: ", "task broke", []);
+    const parsed = JSON.parse(line);
+    expect(parsed.level).toBe("error");
+    expect(parsed.message).toBe("task broke");
+    expect(parsed.identifier).toBe("ACK-3");
+  });
+
+  test("extra args joined into message", () => {
+    const line = formatJsonLogEntry("", "count:", [42, "items"]);
+    const parsed = JSON.parse(line);
+    expect(parsed.message).toBe("count: 42 items");
+  });
+
+  test("output ends with newline for JSONL compatibility", () => {
+    const line = formatJsonLogEntry("", "test", []);
+    expect(line.endsWith("\n")).toBe(true);
+    expect(line.trim()).not.toBe("");
   });
 });
