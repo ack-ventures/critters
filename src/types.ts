@@ -16,6 +16,12 @@ export interface RepoConfig {
   extraAllowedTools?: string[];
 }
 
+export interface AutoRetryConfig {
+  maxRetries: number;
+  baseDelaySeconds: number;
+  maxDelaySeconds: number;
+}
+
 export interface Config {
   pollIntervalSeconds: number;
   concurrency: number;
@@ -59,6 +65,7 @@ export interface Config {
     onPlanningCompleted?: string;
     onExecutionStarted?: string;
   };
+  autoRetry?: AutoRetryConfig;
   provider: "linear" | "jira";
   critterTypes: CritterTypeConfig[];
 }

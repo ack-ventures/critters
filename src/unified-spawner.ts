@@ -58,6 +58,9 @@ export class UnifiedSpawner {
   private activeWorkDirs = new Set<string>();
   private activeCritterMap = new Map<string, ActiveCritterDetail>();
   private slackNotifier: SlackNotifier;
+  private retryCounts = new Map<string, number>();
+
+  private static TRANSIENT_ERROR_RE = /Could not resolve host|Connection refused|Connection timed out|Connection reset|fatal: unable to access|fatal: Could not read from remote|SSL_ERROR|TLS handshake|rate limit|429|500 Internal Server Error|502 Bad Gateway|503 Service|504 Gateway|ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|shallow file has changed/i;
 
   constructor(config: Config, trackers: Map<string, IssueTracker>) {
     this.config = config;
@@ -95,6 +98,20 @@ export class UnifiedSpawner {
       throw new Error(`No tracker configured for provider "${providerName}" (critter type "${critterType.name}")`);
     }
     return tracker;
+  }
+
+  isTransientError(error: string): boolean {
+    return UnifiedSpawner.TRANSIENT_ERROR_RE.test(error);
+  }
+
+  private shouldAutoRetry(taskId: string, error: string, timedOut: boolean): boolean {
+    const autoRetry = this.config.autoRetry;
+    if (!autoRetry) return false;
+    if (timedOut) return false;
+    if (this.stopped) return false;
+    const retryCount = this.retryCounts.get(taskId) ?? 0;
+    if (retryCount >= autoRetry.maxRetries) return false;
+    return this.isTransientError(error);
   }
 
   cleanupStale(): void {
@@ -201,7 +218,7 @@ export class UnifiedSpawner {
         critterType: typeName,
       });
 
-      this.runTask(item.task, item.critterType).then((result) => {
+      this.runTaskWithRetry(item.task, item.critterType).then((result) => {
         this.running.set(typeName, (this.running.get(typeName) ?? 1) - 1);
         logTask(item.task.identifier, `Task finished [${typeName}] (queue: ${queue.length}, running: ${this.running.get(typeName) ?? 0})`);
         item.resolve(result);
@@ -489,6 +506,15 @@ export class UnifiedSpawner {
         : (err instanceof Error ? err.message : String(err));
       logTaskError(task.identifier, error);
 
+      // Auto-retry: skip heavy failure handling if this will be retried
+      if (this.shouldAutoRetry(task.id, error, timedOut)) {
+        logTask(task.identifier, `Transient failure detected (will auto-retry): ${error}`);
+        try {
+          await tracker.comment(task.id, `Transient failure detected (will auto-retry): ${error}`);
+        } catch { /* best effort */ }
+        return { success: false, error };
+      }
+
       const totalDuration = formatDuration(Date.now() - taskStart);
 
       // Move to failure status
@@ -594,6 +620,7 @@ export class UnifiedSpawner {
         cacheReadTokens: totalCache || undefined,
         costUsd: totalCost || undefined,
         critterType: critterType.name,
+        retryAttempt: this.retryCounts.get(task.id) ?? undefined,
       });
 
       if (isReviewType) {
@@ -619,6 +646,44 @@ export class UnifiedSpawner {
       cleanupWorkDir(workDir);
       logTask(task.identifier, "Cleaned up work directory");
     }
+  }
+
+  private async runTaskWithRetry(task: TrackerTask, critterType: CritterTypeConfig): Promise<TaskResult> {
+    const autoRetry = this.config.autoRetry;
+    if (!autoRetry) {
+      return this.runTask(task, critterType);
+    }
+
+    let lastResult: TaskResult;
+    for (let attempt = 0; attempt <= autoRetry.maxRetries; attempt++) {
+      lastResult = await this.runTask(task, critterType);
+
+      // Success or non-retryable — done
+      if (lastResult.success || !lastResult.error) break;
+      if (lastResult.error.startsWith("Timed out after")) break;
+      if (!this.isTransientError(lastResult.error)) break;
+      if (attempt >= autoRetry.maxRetries) break;
+      if (this.stopped) break;
+
+      // Retryable transient failure — compute exponential backoff delay
+      const baseMs = autoRetry.baseDelaySeconds * 1000;
+      const maxMs = autoRetry.maxDelaySeconds * 1000;
+      let delayMs = Math.min(baseMs * (2 ** attempt), maxMs);
+      delayMs += Math.random() * 0.25 * delayMs; // jitter
+
+      this.retryCounts.set(task.id, attempt + 1);
+      const nextAttempt = attempt + 2;
+      const maxAttempts = autoRetry.maxRetries + 1;
+
+      logTask(task.identifier, `Auto-retrying (attempt ${nextAttempt}/${maxAttempts}) in ${Math.round(delayMs / 1000)}s after transient failure: ${lastResult.error}`);
+      const tracker = this.getTracker(critterType);
+      await tracker.comment(task.id, `Auto-retrying (attempt ${nextAttempt}/${maxAttempts}) in ${Math.round(delayMs / 1000)}s...\nError: ${lastResult.error}`).catch(() => {});
+
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+
+    this.retryCounts.delete(task.id);
+    return lastResult!;
   }
 
   private async handleCreateSuccess(

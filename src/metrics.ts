@@ -27,6 +27,7 @@ export type MetricEvent = {
   outcome?: string;
   error?: string;
   critterType?: string;
+  retryAttempt?: number;
 };
 
 let metricsFile: string | null = null;

@@ -77,6 +77,23 @@ export function validateConfigFile(configPath?: string): { errors: string[]; sum
     errors.push(`Invalid config: healthPort must be 0 (disabled) or 1024-65535, got ${healthPort}`);
   }
 
+  // Validate autoRetry
+  const autoRetryRaw = yaml.autoRetry as Record<string, unknown> | undefined;
+  if (autoRetryRaw) {
+    const maxRetries = (autoRetryRaw.maxRetries as number) ?? 1;
+    if (typeof autoRetryRaw.maxRetries === "number" && maxRetries < 1) {
+      errors.push(`Invalid config: autoRetry.maxRetries must be >= 1, got ${maxRetries}`);
+    }
+    const baseDelaySeconds = (autoRetryRaw.baseDelaySeconds as number) ?? 60;
+    if (typeof autoRetryRaw.baseDelaySeconds === "number" && baseDelaySeconds <= 0) {
+      errors.push(`Invalid config: autoRetry.baseDelaySeconds must be > 0, got ${baseDelaySeconds}`);
+    }
+    const maxDelaySeconds = (autoRetryRaw.maxDelaySeconds as number) ?? 300;
+    if (typeof autoRetryRaw.maxDelaySeconds === "number" && maxDelaySeconds < baseDelaySeconds) {
+      errors.push(`Invalid config: autoRetry.maxDelaySeconds must be >= baseDelaySeconds, got ${maxDelaySeconds}`);
+    }
+  }
+
   // Validate defaultAllowedTools
   const defaultAllowedTools = yaml.defaultAllowedTools as string[] | undefined;
   if (!Array.isArray(defaultAllowedTools) || defaultAllowedTools.length === 0) {
