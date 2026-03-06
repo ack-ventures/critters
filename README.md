@@ -36,6 +36,7 @@ This downloads the latest binary, installs it to your PATH, and walks you throug
 - `--skip-update` — skip auto-update check on startup
 - `--config PATH` — use a custom config file
 - `--type NAME` — filter dry-run to a specific critter type
+- `--json-logs` — output structured JSON logs (one object per line)
 
 ## Development quick start
 
@@ -49,7 +50,7 @@ bun install
 # Configure
 cp .env.example .env
 # Edit .env and set LINEAR_API_KEY (for Linear) and/or JIRA_HOST, JIRA_EMAIL, JIRA_API_TOKEN (for Jira)
-# Optionally set SLACK_WEBHOOK_URL for completion notifications
+# Optionally set SLACK_WEBHOOK_URL for notifications, or SLACK_BOT_TOKEN + SLACK_CHANNEL for threaded notifications
 
 # Optionally tweak critters.config.yaml
 
@@ -84,6 +85,7 @@ Settings live in `critters.config.yaml`:
 | `repos` | {} | Project ID &rarr; repo URL + extra tools |
 | `teamRepos` | {} | Team ID &rarr; fallback repo URL |
 | `tmuxSession` | "critters" | Name of the tmux session to use |
+| `branchPrefix` | "critter" | Prefix for feature branch names (`<prefix>/<ID>-<slug>`) |
 | `planningModel` | "opus" | Claude model for planning phase |
 | `executionModel` | "opus" | Claude model for execution phase |
 | `healthPort` | 3847 | HTTP server port for dashboard and health checks (0 to disable) |
@@ -226,7 +228,7 @@ See [CLAUDE.md](CLAUDE.md) for full multi-provider docs, Jira differences, and m
 
 - **Put a sentence or two of direction in the ticket description.** "Use the existing `AuthService` pattern" or "add tests in `__tests__/`" makes a real difference in PR quality. Vague tickets produce vague PRs.
 
-- **Set up a Slack webhook** to get notified when critters finish or fail, so you don't have to watch the tmux session.
+- **Set up Slack notifications** to get notified when critters finish or fail. Use `SLACK_WEBHOOK_URL` for simple notifications, or `SLACK_BOT_TOKEN` + `SLACK_CHANNEL` for threaded notifications (all updates for an issue grouped under one message).
 
 - **Plans are committed to `critters/plans/`** in the target repo's branch. You can review what the critter intended before looking at the code diff.
 
