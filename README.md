@@ -24,6 +24,7 @@ This downloads the latest binary, installs it to your PATH, and walks you throug
 - `critters kickoff` — trigger an immediate poll (instead of waiting for the next interval)
 - `critters list-types` — show configured critter types
 - `critters init-repo` — scaffold `.critters.yaml` in the current repo
+- `critters validate` — validate config file without starting daemon
 - `critters help` — show usage
 
 ### Flags

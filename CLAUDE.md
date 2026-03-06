@@ -441,6 +441,8 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 | `src/types.ts` | Shared TypeScript type definitions |
 | `src/utils.ts` | Shared utility functions |
 | `src/version.ts` | Version constant |
+| `src/validate.ts` | `critters validate` CLI command |
+| `src/env.ts` | Shared `.env` fallback loader |
 | `src/updater.ts` | Self-update check logic |
 | `src/prerequisites.ts` | Startup prerequisite checks |
 | `src/init.ts` | `critters init` CLI command |
@@ -480,6 +482,7 @@ Usage: `critters [command] [flags]`
 | `list-types` | Show configured critter types |
 | `init` | Interactive setup — creates `~/.critters/` with config, env, and prompt template files |
 | `init-repo` | Scaffold `.critters.yaml` in the current repo |
+| `validate` | Validate config file without starting daemon |
 | `update` | Check for and apply binary updates |
 | `version` | Print version |
 | `help` | Show help |

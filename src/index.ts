@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "./config.js";
 import type { CritterTypeConfig } from "./critter-type.js";
+import { loadEnvFallback } from "./env.js";
 import { startHealthServer } from "./health.js";
 import { runInit } from "./init.js";
 import { runInitRepo } from "./init-repo.js";
@@ -49,6 +49,7 @@ Commands:
   list-types  Show configured critter types
   logs        Show logs for a critter run
   init-repo   Scaffold .critters.yaml in current repo
+  validate    Validate config file without starting daemon
   help        Show this help
 
 Flags:
@@ -99,6 +100,16 @@ if (subcommand === "retry") {
 
 if (subcommand === "init-repo") {
   await runInitRepo();
+  process.exit(0);
+}
+
+if (subcommand === "validate") {
+  const configIdx = Bun.argv.indexOf("--config");
+  const configPath = configIdx !== -1 && Bun.argv[configIdx + 1]
+    ? Bun.argv[configIdx + 1]
+    : undefined;
+  const { runValidate } = await import("./validate.js");
+  await runValidate(configPath);
   process.exit(0);
 }
 
@@ -156,22 +167,7 @@ async function main() {
   }
 
   // Load ~/.critters/.env as fallback if CWD .env doesn't exist
-  const cwdEnv = "./.env";
-  const userEnv = `${homedir()}/.critters/.env`;
-  if (!existsSync(cwdEnv) && existsSync(userEnv)) {
-    const envContent = readFileSync(userEnv, "utf-8");
-    for (const line of envContent.split("\n")) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith("#")) continue;
-      const eqIdx = trimmed.indexOf("=");
-      if (eqIdx === -1) continue;
-      const key = trimmed.slice(0, eqIdx).trim();
-      const value = trimmed.slice(eqIdx + 1).trim();
-      if (!(key in process.env)) {
-        process.env[key] = value;
-      }
-    }
-  }
+  loadEnvFallback();
 
   // Load config (needed for both normal and dry-run modes)
   const configIdx = Bun.argv.indexOf("--config");
