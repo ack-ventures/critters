@@ -6,6 +6,15 @@ let logFile: string | null = null;
 let storedMaxLogSizeMb = 10;
 let writeCount = 0;
 let rotationTimer: ReturnType<typeof setInterval> | null = null;
+let jsonMode = false;
+
+export function enableJsonLogs(): void {
+  jsonMode = true;
+}
+
+export function disableJsonLogs(): void {
+  jsonMode = false;
+}
 
 export function rotateFileIfNeeded(filePath: string, maxSizeMb: number, maxFiles: number = 3): void {
   try {
@@ -115,7 +124,49 @@ function colorizeForConsole(level: string, message: string, args: unknown[]): st
   return result;
 }
 
+export function formatJsonLogEntry(level: string, message: string, args: unknown[]): string {
+  const suffix = args.length > 0 ? ` ${args.map(String).join(" ")}` : "";
+  const identifierMatch = level.match(/^\[([A-Z]+-\d+)\]/);
+  const identifier = identifierMatch ? identifierMatch[1] : undefined;
+  const logLevel = level.includes("ERROR") ? "error" : level.includes("WARN") ? "warn" : "info";
+  const entry: Record<string, string> = {
+    timestamp: timestamp(),
+    level: logLevel,
+    message: `${message}${suffix}`,
+  };
+  if (identifier) {
+    entry.identifier = identifier;
+  }
+  return JSON.stringify(entry) + "\n";
+}
+
+function writeJsonLog(level: string, message: string, args: unknown[]): void {
+  const line = formatJsonLogEntry(level, message, args);
+  const isError = level.includes("ERROR");
+
+  if (logFile) {
+    appendFileSync(logFile, line);
+    writeCount++;
+    if (writeCount % 1000 === 0) {
+      try {
+        rotateFileIfNeeded(logFile, storedMaxLogSizeMb, 3);
+      } catch (_) {
+        // never crash the daemon
+      }
+    }
+  } else if (isError) {
+    process.stderr.write(line);
+  } else {
+    process.stdout.write(line);
+  }
+}
+
 function writeLog(level: string, message: string, args: unknown[]): void {
+  if (jsonMode) {
+    writeJsonLog(level, message, args);
+    return;
+  }
+
   const suffix = args.length > 0 ? ` ${args.map(String).join(" ")}` : "";
   const formatted = `[${timestamp()}] ${level}${message}${suffix}`;
   if (logFile) {

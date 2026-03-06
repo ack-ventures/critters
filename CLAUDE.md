@@ -500,6 +500,17 @@ Usage: `critters [command] [flags]`
 | `--skip-update` | Skip auto-update check on startup |
 | `--config PATH` | Use a custom config file |
 | `--type NAME` | Filter dry-run to a specific critter type |
+| `--json-logs` | Output structured JSON logs (one object per line) |
+
+### JSON Log Format
+
+When `--json-logs` is enabled, each log line is a JSON object:
+
+```json
+{"timestamp":"2026-03-05T12:00:00.000Z","level":"info","message":"..."}
+```
+
+Fields: `timestamp` (ISO 8601), `level` (`"info"`, `"warn"`, or `"error"`), `message` (log text), and optionally `identifier` (e.g., `"ACK-123"` for task-scoped logs). Info/warn logs go to stdout; error logs go to stderr. Works with both stdout and file logging (`--no-tmux`).
 
 ## Release / Versioning
 
