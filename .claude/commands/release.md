@@ -11,8 +11,9 @@ Steps:
 7. Bump the `version` field in package.json to the new version. Do not change anything else in the file.
 8. Commit all changes (docs updates + version bump): `git commit -am "Bump version to v<new_version>"`
 9. Push and open a PR: `git push -u origin release/v<new_version>` then `gh pr create --title "Bump version to v<new_version>"`
-10. Tell the user to merge the PR once CI passes, then run these commands to tag and trigger the release build:
+10. Wait for CI to pass on the PR: `gh pr checks --watch`. Once CI is green, merge it: `gh pr merge --squash --delete-branch`.
+11. Checkout main, pull, tag, and push the tag to trigger the release build:
     ```
     git checkout main && git pull && git tag -a v<new_version> -m "v<new_version>" && git push origin v<new_version>
     ```
-    Then check the release build: `gh run list --workflow=release.yml --limit=1`
+12. Verify the release build started: `gh run list --workflow=release.yml --limit=1`
