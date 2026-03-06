@@ -191,3 +191,13 @@ export function formatTimeoutWarning(
 ): string {
   return `*${identifier}* — ${title}\n⚠️ Running for ${elapsedMinutes}/${timeoutMinutes} minutes`;
 }
+
+export function formatCostAlert(
+  identifier: string,
+  title: string,
+  costUsd: number,
+  threshold: number,
+  currentPhase: string,
+): string {
+  return `*${identifier}* — ${title}\n⚠️ Cost alert: spent *$${costUsd.toFixed(2)}* (threshold: $${threshold.toFixed(2)}) — currently in phase: ${currentPhase}`;
+}

@@ -143,6 +143,7 @@ export function loadConfig(configPath?: string): Config {
     slackWebhookUrl,
     slackBotToken,
     slackChannel,
+    costAlertThreshold: (yaml.costAlertThreshold as number) ?? undefined,
     hooks,
     provider,
     critterTypes: [], // populated below
@@ -279,6 +280,9 @@ function validateConfig(config: Config): void {
   }
   if (!/^[a-zA-Z0-9._-]+$/.test(config.branchPrefix)) {
     throw new Error(`Invalid config: branchPrefix must match /^[a-zA-Z0-9._-]+$/, got "${config.branchPrefix}"`);
+  }
+  if (config.costAlertThreshold != null && config.costAlertThreshold <= 0) {
+    throw new Error(`Invalid config: costAlertThreshold must be > 0, got ${config.costAlertThreshold}`);
   }
   if (config.slackBotToken && !config.slackChannel) {
     throw new Error("SLACK_CHANNEL must be set when SLACK_BOT_TOKEN is configured");

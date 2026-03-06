@@ -249,6 +249,30 @@ maxReviewTurns: 40
     });
   });
 
+  describe("costAlertThreshold config", () => {
+    test("reads costAlertThreshold from YAML", () => {
+      const yaml = `defaultAllowedTools:\n  - "Read"\ncostAlertThreshold: 5.00\n`;
+      const config = loadConfig(writeYaml(yaml));
+      expect(config.costAlertThreshold).toBe(5.0);
+    });
+
+    test("costAlertThreshold is undefined when omitted", () => {
+      const yaml = `defaultAllowedTools:\n  - "Read"\n`;
+      const config = loadConfig(writeYaml(yaml));
+      expect(config.costAlertThreshold).toBeUndefined();
+    });
+
+    test("throws when costAlertThreshold is negative", () => {
+      const yaml = `defaultAllowedTools:\n  - "Read"\ncostAlertThreshold: -1\n`;
+      expect(() => loadConfig(writeYaml(yaml))).toThrow("costAlertThreshold must be > 0");
+    });
+
+    test("throws when costAlertThreshold is zero", () => {
+      const yaml = `defaultAllowedTools:\n  - "Read"\ncostAlertThreshold: 0\n`;
+      expect(() => loadConfig(writeYaml(yaml))).toThrow("costAlertThreshold must be > 0");
+    });
+  });
+
   describe("environment variable handling", () => {
     test("reads LINEAR_API_KEY from environment", () => {
       process.env.LINEAR_API_KEY = "my-linear-key";

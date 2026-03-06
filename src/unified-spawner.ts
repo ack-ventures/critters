@@ -16,6 +16,7 @@ import { loadRepoConfig } from "./repo-config.js";
 import { getPhaseRunner } from "./runner/index.js";
 import type { PhaseContext } from "./runner/types.js";
 import {
+  formatCostAlert,
   formatFailure,
   formatPlanningComplete,
   formatReviewFailure,
@@ -338,6 +339,7 @@ export class UnifiedSpawner {
 
       // Run phases sequentially
       const phaseDataList: Record<string, unknown>[] = [];
+      let costAlertSent = false;
       for (const phase of critterType.phases) {
         if (critterType.name === "create") {
           await tracker.comment(task.id, `${phase.name === "planning" ? "Planning" : "Plan approved, executing"}...`);
@@ -393,6 +395,19 @@ export class UnifiedSpawner {
             CRITTER_REPO_URL: task.repoUrl,
             CRITTER_BRANCH: branch,
           }, task.identifier);
+        }
+
+        // Cost threshold check
+        if (!costAlertSent && this.config.costAlertThreshold != null) {
+          const accumulatedCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
+          if (accumulatedCost > this.config.costAlertThreshold) {
+            costAlertSent = true;
+            logTask(task.identifier, `Cost alert: ${task.identifier} has spent $${accumulatedCost.toFixed(2)} (threshold: $${this.config.costAlertThreshold.toFixed(2)})`);
+            await this.slackNotifier.notify(
+              task.id,
+              formatCostAlert(task.identifier, task.title, accumulatedCost, this.config.costAlertThreshold, phase.name),
+            );
+          }
         }
 
         // Handle review phase outcomes inline

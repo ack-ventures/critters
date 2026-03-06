@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
+  formatCostAlert,
   formatFailure,
   formatPlanningComplete,
   formatReviewFailure,
@@ -114,6 +115,24 @@ describe("formatTimeoutWarning", () => {
     expect(msg).toContain("ACK-1");
     expect(msg).toContain("Add feature");
     expect(msg).toContain("24/30 minutes");
+  });
+});
+
+describe("formatCostAlert", () => {
+  test("includes identifier, title, cost, threshold, and phase", () => {
+    const msg = formatCostAlert("ACK-123", "Add feature", 7.5, 5.0, "execution");
+    expect(msg).toContain("ACK-123");
+    expect(msg).toContain("Add feature");
+    expect(msg).toContain("$7.50");
+    expect(msg).toContain("$5.00");
+    expect(msg).toContain("execution");
+    expect(msg).toContain("Cost alert");
+  });
+
+  test("formats cost to two decimal places", () => {
+    const msg = formatCostAlert("ACK-1", "Test", 3.1, 2.0, "planning");
+    expect(msg).toContain("$3.10");
+    expect(msg).toContain("$2.00");
   });
 });
 
