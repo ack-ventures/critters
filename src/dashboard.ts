@@ -114,6 +114,7 @@ export function renderDashboard(metricsPath: string, status: HealthStatus): stri
   const failed = totalTasks - succeeded;
   const successRate = totalTasks > 0 ? Math.round((succeeded / totalTasks) * 100) : null;
   const totalCost = taskMetrics.reduce((sum, m) => sum + (m.costUsd ?? 0), 0);
+  const avgCost = totalTasks > 0 ? totalCost / totalTasks : null;
   const durations = taskMetrics.map((m) => m.duration).filter((d): d is number => d != null && !Number.isNaN(d));
   const avgDuration = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : null;
 
@@ -280,6 +281,11 @@ export function renderDashboard(metricsPath: string, status: HealthStatus): stri
     <div class="card">
       <div class="label">Total Cost</div>
       <div class="value">${formatCost(totalCost)}</div>
+    </div>
+    <div class="card">
+      <div class="label">Avg Cost</div>
+      <div class="value">${avgCost != null && totalTasks > 0 ? formatCost(avgCost) : "N/A"}</div>
+      <div class="sub">per critter</div>
     </div>
     <div class="card">
       <div class="label">Avg Duration</div>

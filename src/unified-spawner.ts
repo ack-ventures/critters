@@ -240,6 +240,8 @@ export class UnifiedSpawner {
       }, critterType.timeoutMinutes * 0.8 * 60 * 1000);
     }
 
+    const phaseResults: SpawnResult[] = [];
+
     try {
       // Ensure work dir base exists
       if (!existsSync(this.config.workDir)) {
@@ -334,7 +336,6 @@ export class UnifiedSpawner {
       }
 
       // Run phases sequentially
-      const phaseResults: SpawnResult[] = [];
       const phaseDataList: Record<string, unknown>[] = [];
       for (const phase of critterType.phases) {
         if (critterType.name === "create") {
@@ -447,6 +448,9 @@ export class UnifiedSpawner {
 
       const totalCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
       const totalTurns = phaseResults.reduce((sum, r) => sum + (r.numTurns ?? 0), 0);
+      const totalInput = phaseResults.reduce((sum, r) => sum + (r.inputTokens ?? 0), 0);
+      const totalOutput = phaseResults.reduce((sum, r) => sum + (r.outputTokens ?? 0), 0);
+      const totalCache = phaseResults.reduce((sum, r) => sum + (r.cacheReadTokens ?? 0), 0);
       recordMetric({
         timestamp: "",
         event: "task_completed",
@@ -455,6 +459,9 @@ export class UnifiedSpawner {
         repoUrl: task.repoUrl,
         duration: Date.now() - taskStart,
         numTurns: totalTurns,
+        inputTokens: totalInput,
+        outputTokens: totalOutput,
+        cacheReadTokens: totalCache,
         costUsd: totalCost,
         critterType: critterType.name,
       });
@@ -549,6 +556,12 @@ export class UnifiedSpawner {
         );
       }
 
+      const totalTurns = phaseResults.reduce((sum, r) => sum + (r.numTurns ?? 0), 0);
+      const totalInput = phaseResults.reduce((sum, r) => sum + (r.inputTokens ?? 0), 0);
+      const totalOutput = phaseResults.reduce((sum, r) => sum + (r.outputTokens ?? 0), 0);
+      const totalCache = phaseResults.reduce((sum, r) => sum + (r.cacheReadTokens ?? 0), 0);
+      const totalCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
+
       const metricEvent = isReviewType ? "review_failed" : "task_failed";
       recordMetric({
         timestamp: "",
@@ -559,6 +572,11 @@ export class UnifiedSpawner {
         ...(task.prUrl ? { prUrl: task.prUrl } : {}),
         duration: Date.now() - taskStart,
         error,
+        numTurns: totalTurns || undefined,
+        inputTokens: totalInput || undefined,
+        outputTokens: totalOutput || undefined,
+        cacheReadTokens: totalCache || undefined,
+        costUsd: totalCost || undefined,
         critterType: critterType.name,
       });
 

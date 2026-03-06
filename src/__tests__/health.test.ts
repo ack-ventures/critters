@@ -65,7 +65,7 @@ describe("GET /healthz", () => {
     expect(body.activeReviews).toBe(0);
     expect(body.queuedReviews).toBe(0);
     expect(body.lastPollAt).toBeNull();
-    expect(body.metrics).toEqual({ totalTasks: 0, succeeded: 0, failed: 0 });
+    expect(body.metrics).toEqual({ totalTasks: 0, succeeded: 0, failed: 0, totalCost: 0, avgCost: 0 });
     expect(typeof body.displayVersion).toBe("string");
   });
 
