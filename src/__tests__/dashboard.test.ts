@@ -41,7 +41,7 @@ describe("renderDashboard", () => {
 
   test("contains auto-refresh meta tag", () => {
     const html = renderDashboard("", defaultStatus(), 0);
-    expect(html).toContain('<meta http-equiv="refresh" content="30">');
+    expect(html).toContain('<meta http-equiv="refresh" content="30;url=/dashboard">');
   });
 
   test("contains viewport meta tag", () => {
