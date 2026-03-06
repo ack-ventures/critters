@@ -1,7 +1,7 @@
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { logError } from "./logger.js";
+import { log, logError } from "./logger.js";
 
 export type MetricEvent = {
   timestamp: string;
@@ -64,5 +64,53 @@ export function getRecentMetrics(n: number): MetricEvent[] {
     });
   } catch {
     return [];
+  }
+}
+
+export function pruneMetrics(retentionDays: number): void {
+  if (!metricsFile) return;
+  if (!existsSync(metricsFile)) return;
+
+  let content: string;
+  try {
+    content = readFileSync(metricsFile, "utf-8");
+  } catch {
+    return;
+  }
+
+  const lines = content.split("\n").filter(Boolean);
+  if (lines.length === 0) return;
+
+  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  let pruned = 0;
+
+  const surviving = lines.filter((line) => {
+    try {
+      const entry = JSON.parse(line) as MetricEvent;
+      if (new Date(entry.timestamp).getTime() < cutoff) {
+        pruned++;
+        return false;
+      }
+      return true;
+    } catch {
+      // Keep unparseable lines
+      return true;
+    }
+  });
+
+  if (pruned === 0) return;
+
+  const tmpFile = `${metricsFile}.tmp`;
+  try {
+    writeFileSync(tmpFile, surviving.length > 0 ? surviving.join("\n") + "\n" : "");
+    renameSync(tmpFile, metricsFile);
+    log(`Pruned ${pruned} metrics older than ${retentionDays} days (${surviving.length} remaining)`);
+  } catch (err) {
+    logError(`Failed to prune metrics: ${err}`);
+    try {
+      unlinkSync(tmpFile);
+    } catch {
+      // ignore cleanup failure
+    }
   }
 }

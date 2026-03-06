@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { getRecentMetrics, initMetrics, recordMetric } from "../metrics.js";
+import { getRecentMetrics, initMetrics, pruneMetrics, recordMetric } from "../metrics.js";
 import { createTempDir } from "./helpers.js";
 
 let tempDir: string;
@@ -132,5 +132,94 @@ describe("getRecentMetrics", () => {
     expect(recent).toHaveLength(2);
     expect(recent[0].issueId).toBe("Z-1");
     expect(recent[1].issueId).toBe("Z-2");
+  });
+});
+
+describe("pruneMetrics", () => {
+  function daysAgo(n: number): string {
+    return new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  test("removes entries older than retention period", () => {
+    const file = join(tempDir, "metrics.jsonl");
+    initMetrics(file);
+
+    const lines = [
+      JSON.stringify({ timestamp: daysAgo(60), event: "task_started", issueId: "OLD-1" }),
+      JSON.stringify({ timestamp: daysAgo(40), event: "task_started", issueId: "OLD-2" }),
+      JSON.stringify({ timestamp: daysAgo(10), event: "task_completed", issueId: "NEW-1" }),
+      JSON.stringify({ timestamp: daysAgo(5), event: "task_completed", issueId: "NEW-2" }),
+    ];
+    writeFileSync(file, lines.join("\n") + "\n");
+
+    pruneMetrics(30);
+
+    const remaining = readFileSync(file, "utf-8").split("\n").filter(Boolean);
+    expect(remaining).toHaveLength(2);
+    expect(JSON.parse(remaining[0]).issueId).toBe("NEW-1");
+    expect(JSON.parse(remaining[1]).issueId).toBe("NEW-2");
+  });
+
+  test("does not rewrite file when nothing to prune", () => {
+    const file = join(tempDir, "metrics.jsonl");
+    initMetrics(file);
+
+    const content = JSON.stringify({ timestamp: daysAgo(5), event: "task_started", issueId: "RECENT" }) + "\n";
+    writeFileSync(file, content);
+
+    pruneMetrics(30);
+
+    // File content should be unchanged
+    expect(readFileSync(file, "utf-8")).toBe(content);
+  });
+
+  test("handles empty file", () => {
+    const file = join(tempDir, "metrics.jsonl");
+    initMetrics(file);
+    writeFileSync(file, "");
+
+    // Should not throw
+    pruneMetrics(30);
+    expect(readFileSync(file, "utf-8")).toBe("");
+  });
+
+  test("handles missing file", () => {
+    initMetrics(join(tempDir, "nonexistent.jsonl"));
+    // Should not throw
+    expect(() => pruneMetrics(30)).not.toThrow();
+  });
+
+  test("handles all entries expired", () => {
+    const file = join(tempDir, "metrics.jsonl");
+    initMetrics(file);
+
+    const lines = [
+      JSON.stringify({ timestamp: daysAgo(100), event: "task_started", issueId: "OLD-1" }),
+      JSON.stringify({ timestamp: daysAgo(50), event: "task_started", issueId: "OLD-2" }),
+    ];
+    writeFileSync(file, lines.join("\n") + "\n");
+
+    pruneMetrics(30);
+
+    expect(readFileSync(file, "utf-8")).toBe("");
+  });
+
+  test("preserves corrupted lines", () => {
+    const file = join(tempDir, "metrics.jsonl");
+    initMetrics(file);
+
+    const lines = [
+      JSON.stringify({ timestamp: daysAgo(60), event: "task_started", issueId: "OLD" }),
+      "this is not valid json",
+      JSON.stringify({ timestamp: daysAgo(5), event: "task_completed", issueId: "NEW" }),
+    ];
+    writeFileSync(file, lines.join("\n") + "\n");
+
+    pruneMetrics(30);
+
+    const remaining = readFileSync(file, "utf-8").split("\n").filter(Boolean);
+    expect(remaining).toHaveLength(2);
+    expect(remaining[0]).toBe("this is not valid json");
+    expect(JSON.parse(remaining[1]).issueId).toBe("NEW");
   });
 });

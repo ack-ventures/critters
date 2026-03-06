@@ -32,6 +32,7 @@ function baseConfig(overrides?: Partial<Config>): Config {
     maxReviewTurns: 30,
     maxLogSizeMb: 10,
     healthPort: 3847,
+    metricsRetentionDays: 90,
     linearApiKey: "test-key",
     provider: "linear",
     critterTypes: [],

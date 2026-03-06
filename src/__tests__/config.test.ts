@@ -107,6 +107,7 @@ teamRepos:
     expect(config.maxReviewTurns).toBe(30);
     expect(config.maxLogSizeMb).toBe(10);
     expect(config.healthPort).toBe(3847);
+    expect(config.metricsRetentionDays).toBe(90);
   });
 
   test("throws when config file does not exist", () => {
@@ -216,6 +217,11 @@ maxReviewTurns: 40
     test("throws when maxLogSizeMb <= 0", () => {
       const yaml = `defaultAllowedTools:\n  - "Read"\nmaxLogSizeMb: 0\n`;
       expect(() => loadConfig(writeYaml(yaml))).toThrow("maxLogSizeMb must be > 0");
+    });
+
+    test("throws when metricsRetentionDays < 1", () => {
+      const yaml = `defaultAllowedTools:\n  - "Read"\nmetricsRetentionDays: 0\n`;
+      expect(() => loadConfig(writeYaml(yaml))).toThrow("metricsRetentionDays must be >= 1");
     });
   });
 
