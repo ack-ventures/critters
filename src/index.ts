@@ -51,6 +51,7 @@ Commands:
   logs        Show logs for a critter run
   init-repo   Scaffold .critters.yaml in current repo
   prompt-help Launch Claude to help design critter types and prompts
+  clean       Clean up stale work directories
   validate    Validate config file without starting daemon
   help        Show this help
 
@@ -133,6 +134,12 @@ if (subcommand === "list-types") {
   const configIdx = Bun.argv.indexOf("--config");
   const configPath = configIdx !== -1 && Bun.argv[configIdx + 1] ? Bun.argv[configIdx + 1] : undefined;
   await runListTypes(configPath);
+  process.exit(0);
+}
+
+if (subcommand === "clean") {
+  const { runClean } = await import("./cli-clean.js");
+  await runClean(Bun.argv.slice(3));
   process.exit(0);
 }
 

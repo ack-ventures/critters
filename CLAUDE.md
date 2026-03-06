@@ -437,6 +437,7 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 | `src/cli-retry.ts` | `critters retry` CLI command |
 | `src/logs.ts` | `critters logs` CLI command |
 | `src/cli-kickoff.ts` | `critters kickoff` CLI command |
+| `src/cli-clean.ts` | `critters clean` CLI command |
 | `src/init-repo.ts` | `critters init-repo` CLI command |
 | `src/repo-config.ts` | Per-repo `.critters.yaml` loader |
 | `src/types.ts` | Shared TypeScript type definitions |
@@ -486,6 +487,7 @@ Usage: `critters [command] [flags]`
 | `init` | Interactive setup — creates `~/.critters/` with config, env, and prompt template files |
 | `init-repo` | Scaffold `.critters.yaml` in the current repo |
 | `prompt-help` | Launch Claude to help configure critter types and prompts |
+| `clean` | Clean up stale work directories (`--all`, `--dry-run`) |
 | `validate` | Validate config file without starting daemon |
 | `update` | Check for and apply binary updates |
 | `version` | Print version |
