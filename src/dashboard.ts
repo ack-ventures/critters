@@ -311,8 +311,57 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
     th { text-align: left; padding: 8px 12px; border-bottom: 2px solid var(--border); color: var(--text-dim); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
     td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
     tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
-    .status-ok { color: var(--success); font-weight: 600; }
-    .status-fail { color: var(--failure); font-weight: 600; }
+    /* Status badge pills */
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-success {
+      background: rgba(78, 204, 163, 0.15);
+      color: var(--success);
+    }
+    .badge-failure {
+      background: rgba(233, 69, 96, 0.15);
+      color: var(--failure);
+    }
+    .badge-review {
+      background: rgba(93, 173, 226, 0.15);
+      color: #5dade2;
+    }
+    /* Phase badges */
+    .badge-planning {
+      background: rgba(93, 173, 226, 0.15);
+      color: #5dade2;
+    }
+    .badge-execution {
+      background: rgba(139, 92, 246, 0.15);
+      color: #8B5CF6;
+    }
+    .badge-review-phase {
+      background: rgba(226, 185, 61, 0.15);
+      color: #e2b93d;
+    }
+    /* Elapsed time color coding */
+    .elapsed-ok { color: var(--success); }
+    .elapsed-warn { color: #e2b93d; }
+    .elapsed-danger { color: var(--failure); }
+    /* Row hover */
+    tr:hover td { background: rgba(255,255,255,0.04); }
+    /* Empty states */
+    .empty-state {
+      text-align: center;
+      padding: 32px 16px;
+      color: var(--text-dim);
+      font-size: 0.9rem;
+    }
+    .empty-state-icon {
+      font-size: 1.5rem;
+      margin-bottom: 8px;
+      display: block;
+    }
     a { color: #5dade2; text-decoration: none; }
     a:hover { text-decoration: underline; }
 
@@ -378,9 +427,18 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
 
   <div class="active-section">
     <h2>Active Critters</h2>
-    <div class="active-grid">
-${Object.keys(status.perType).length > 0
-  ? Object.entries(status.perType)
+${(() => {
+  const allZero = Object.values(status.perType).every(c => c.active === 0 && c.queued === 0)
+    && status.activeCritters === 0 && status.queuedCritters === 0;
+  if (allZero) {
+    return `    <div class="empty-state">
+      <span class="empty-state-icon">&#x1F997;</span>
+      No active critters &mdash; all quiet
+    </div>`;
+  }
+  if (Object.keys(status.perType).length > 0) {
+    return `    <div class="active-grid">
+${Object.entries(status.perType)
       .map(([typeName, counts]) => {
         const label = escapeHtml(typeName);
         return `      <div class="active-card">
@@ -392,8 +450,11 @@ ${Object.keys(status.perType).length > 0
         <div class="label">Queued ${label}</div>
       </div>`;
       })
-      .join("\n")
-  : `      <div class="active-card">
+      .join("\n")}
+    </div>`;
+  }
+  return `    <div class="active-grid">
+      <div class="active-card">
         <div class="count">${status.activeCritters}</div>
         <div class="label">Active Tasks</div>
       </div>
@@ -408,8 +469,9 @@ ${Object.keys(status.perType).length > 0
       <div class="active-card">
         <div class="count">${status.queuedReviews}</div>
         <div class="label">Queued Reviews</div>
-      </div>`}
-    </div>
+      </div>
+    </div>`;
+})()}
 ${status.activeCritterDetails.length > 0 ? `
     <div class="table-wrap" style="margin-top: 12px;">
       <table>
@@ -425,18 +487,32 @@ ${status.activeCritterDetails.length > 0 ? `
         </thead>
         <tbody>
 ${status.activeCritterDetails.map((d) => {
-  const elapsed = fmtDuration(Date.now() - d.startedAt);
-  const phaseLabel = d.phase === "plan" ? "Planning" : d.phase === "exec" ? "Execution" : "Review";
+  const elapsedMs = Date.now() - d.startedAt;
+  const elapsed = fmtDuration(elapsedMs);
+  const timeout = d.timeoutMinutes ?? 30;
+  const timeoutMs = timeout * 60 * 1000;
+  const elapsedPct = elapsedMs / timeoutMs;
+  const elapsedClass = elapsedPct > 0.8 ? "elapsed-danger"
+    : elapsedPct > 0.5 ? "elapsed-warn"
+    : "elapsed-ok";
+  const phaseLabel = d.phase === "plan" || d.phase === "planning" ? "Planning"
+    : d.phase === "exec" || d.phase === "execution" ? "Execution"
+    : d.phase === "review" ? "Review"
+    : d.phase;
+  const phaseBadgeClass = d.phase === "plan" || d.phase === "planning" ? "badge badge-planning"
+    : d.phase === "exec" || d.phase === "execution" ? "badge badge-execution"
+    : d.phase === "review" ? "badge badge-review-phase"
+    : "badge";
   const prCell = d.prUrl
     ? `<a href="${escapeHtml(d.prUrl)}" target="_blank" rel="noopener">PR</a>`
     : "\u2014";
   return `          <tr>
             <td>${escapeHtml(d.identifier)}</td>
-            <td>${phaseLabel}</td>
+            <td><span class="${phaseBadgeClass}">${phaseLabel}</span></td>
             <td>${escapeHtml(d.repo)}</td>
             <td><code>${escapeHtml(d.branch)}</code></td>
             <td>${prCell}</td>
-            <td>${elapsed}</td>
+            <td class="${elapsedClass}">${elapsed}</td>
           </tr>`;
 }).join("\n")}
         </tbody>
@@ -559,13 +635,15 @@ ${totalTasks > 0 ? (() => {
           </tr>
         </thead>
         <tbody>
-${recentActivity.length === 0 ? '          <tr><td colspan="7" style="text-align:center;color:var(--text-dim);">No activity yet</td></tr>' : recentActivity
+${recentActivity.length === 0 ? '          <tr><td colspan="7" class="empty-state"><span class="empty-state-icon">&#x1F4CB;</span>No activity yet</td></tr>' : recentActivity
   .map((m) => {
     const id = escapeHtml(m.identifier ?? m.issueId ?? "\u2014");
     const typeName = escapeHtml(m.critterType ?? (m.event.startsWith("review_") ? "review" : "create"));
     const isReview = m.event === "review_completed" || m.event === "review_failed";
     const isOk = m.event === "task_completed" || m.event === "review_completed";
-    const statusClass = isOk ? "status-ok" : "status-fail";
+    const badgeClass = isReview
+      ? (isOk ? "badge badge-review" : "badge badge-failure")
+      : (isOk ? "badge badge-success" : "badge badge-failure");
     const statusText = isReview
       ? (isOk ? "Review Completed" : "Review Failed")
       : (isOk ? "Completed" : "Failed");
@@ -578,7 +656,7 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="7" style="text-align
     return `          <tr>
             <td>${id}</td>
             <td>${typeName}</td>
-            <td class="${statusClass}">${statusText}</td>
+            <td><span class="${badgeClass}">${statusText}</span></td>
             <td>${dur}</td>
             <td>${cost}</td>
             <td>${pr}</td>
