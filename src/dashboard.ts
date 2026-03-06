@@ -57,18 +57,31 @@ function formatShortDate(dateStr: string): string {
   return `${months[monthIdx] ?? parts[1]} ${day}`;
 }
 
-type DayStat = { date: string; completed: number; failed: number; cost: number };
+function formatDurationMinutes(ms: number): string {
+  if (ms <= 0) return "0m";
+  const mins = Math.round(ms / 60000);
+  return `${mins}m`;
+}
+
+function formatCostLabel(v: number): string {
+  if (Number.isInteger(v)) return `$${v}`;
+  return `$${parseFloat(v.toFixed(2))}`;
+}
+
+type DayStat = { date: string; completed: number; failed: number; cost: number; avgDuration: number };
 
 function computeDailyStats(metrics: MetricEvent[], days: number): DayStat[] {
   const now = new Date();
   const dateMap = new Map<string, DayStat>();
+  const durAccum = new Map<string, { totalDur: number; durCount: number }>();
 
   // Pre-fill last N days
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
     const key = d.toISOString().slice(0, 10);
-    dateMap.set(key, { date: key, completed: 0, failed: 0, cost: 0 });
+    dateMap.set(key, { date: key, completed: 0, failed: 0, cost: 0, avgDuration: 0 });
+    durAccum.set(key, { totalDur: 0, durCount: 0 });
   }
 
   for (const m of metrics) {
@@ -80,6 +93,18 @@ function computeDailyStats(metrics: MetricEvent[], days: number): DayStat[] {
     if (m.event === "task_completed" || m.event === "review_completed") stat.completed++;
     else stat.failed++;
     stat.cost += m.costUsd ?? 0;
+    if (m.duration != null && !Number.isNaN(m.duration)) {
+      const acc = durAccum.get(key);
+      if (acc) {
+        acc.totalDur += m.duration;
+        acc.durCount++;
+      }
+    }
+  }
+
+  for (const [key, stat] of dateMap) {
+    const acc = durAccum.get(key);
+    stat.avgDuration = acc && acc.durCount > 0 ? acc.totalDur / acc.durCount : 0;
   }
 
   return Array.from(dateMap.values());
@@ -127,6 +152,8 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
   const maxTasksPerDay = niceMax(rawMaxTasks, false);
   const rawMaxCost = Math.max(0.01, ...dailyStats.map((d) => d.cost));
   const maxCostPerDay = niceMax(rawMaxCost, true);
+  const rawMaxDuration = Math.max(0, ...dailyStats.map((d) => d.avgDuration));
+  const maxDurationPerDay = niceMax(rawMaxDuration / 60000, false) * 60000;
 
   const todayStat = dailyStats[dailyStats.length - 1];
   const todayCompleted = todayStat?.completed ?? 0;
@@ -219,6 +246,11 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
     .bar.success { background: var(--success); }
     .bar.failure { background: var(--failure); border-radius: 0; }
     .bar.cost { background: #e2b93d; }
+    .bar.duration { background: #8B5CF6; }
+    .donut-chart { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 120px; }
+    .donut-svg { width: 100px; height: 100px; }
+    .donut-text { font-family: inherit; font-size: 0.45rem; fill: var(--text); font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+    .donut-legend { font-size: 0.75rem; color: var(--text-dim); margin-top: 8px; text-align: center; }
     .bar-label { font-size: 0.6rem; color: var(--text-dim); margin-top: 4px; white-space: nowrap; }
     .bar[data-tooltip]:hover::after {
       content: attr(data-tooltip);
@@ -426,14 +458,13 @@ ${dailyStats
   .map((d) => {
     const successH = Math.round(((d.completed) / maxTasksPerDay) * 100);
     const failH = Math.round(((d.failed) / maxTasksPerDay) * 100);
-    const label = d.date.slice(5);
     const shortDate = formatShortDate(d.date);
     return `          <div class="bar-group" data-tooltip="${shortDate}: ${d.completed} completed, ${d.failed} failed">
             <div class="bar-stack">
               <div class="bar failure" style="height:${failH}%"${failH > 0 ? ` data-tooltip="${d.failed} failed"` : ""}></div>
               <div class="bar success" style="height:${successH}%"${successH > 0 ? ` data-tooltip="${d.completed} completed"` : ""}></div>
             </div>
-            <div class="bar-label">${escapeHtml(label)}</div>
+            <div class="bar-label">${escapeHtml(shortDate)}</div>
           </div>`;
   })
   .join("\n")}
@@ -444,21 +475,44 @@ ${dailyStats
       <h3>Cost per Day (Last 14 Days)</h3>
       <div class="chart-with-axis">
         <div class="y-axis">
-          <span class="y-label">$${maxCostPerDay.toFixed(2)}</span>
-          <span class="y-label">$${(maxCostPerDay / 2).toFixed(2)}</span>
+          <span class="y-label">${formatCostLabel(maxCostPerDay)}</span>
+          <span class="y-label">${formatCostLabel(maxCostPerDay / 2)}</span>
           <span class="y-label">$0</span>
         </div>
         <div class="bar-chart">
 ${dailyStats
   .map((d) => {
     const h = Math.round((d.cost / maxCostPerDay) * 100);
-    const label = d.date.slice(5);
     const shortDate = formatShortDate(d.date);
     return `          <div class="bar-group" data-tooltip="${shortDate}: $${d.cost.toFixed(2)}">
             <div class="bar-stack">
               <div class="bar cost" style="height:${h}%"${h > 0 ? ` data-tooltip="$${d.cost.toFixed(2)}"` : ""}></div>
             </div>
-            <div class="bar-label">${escapeHtml(label)}</div>
+            <div class="bar-label">${escapeHtml(shortDate)}</div>
+          </div>`;
+  })
+  .join("\n")}
+        </div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <h3>Avg Duration per Day (Last 14 Days)</h3>
+      <div class="chart-with-axis">
+        <div class="y-axis">
+          <span class="y-label">${formatDurationMinutes(maxDurationPerDay)}</span>
+          <span class="y-label">${formatDurationMinutes(maxDurationPerDay / 2)}</span>
+          <span class="y-label">0m</span>
+        </div>
+        <div class="bar-chart">
+${dailyStats
+  .map((d) => {
+    const h = maxDurationPerDay > 0 ? Math.round((d.avgDuration / maxDurationPerDay) * 100) : 0;
+    const shortDate = formatShortDate(d.date);
+    return `          <div class="bar-group" data-tooltip="${shortDate}: ${fmtDuration(d.avgDuration)}">
+            <div class="bar-stack">
+              <div class="bar duration" style="height:${h}%"${h > 0 ? ` data-tooltip="${fmtDuration(d.avgDuration)}"` : ""}></div>
+            </div>
+            <div class="bar-label">${escapeHtml(shortDate)}</div>
           </div>`;
   })
   .join("\n")}
@@ -467,19 +521,24 @@ ${dailyStats
     </div>
     <div class="chart-card">
       <h3>Success vs Failure</h3>
-      <div class="bar-chart" style="justify-content:center;gap:32px;">
-        <div class="bar-group" style="max-width:80px;">
-          <div class="bar-stack">
-            <div class="bar success" style="height:${totalTasks > 0 ? Math.round((succeeded / totalTasks) * 100) : 0}%" data-tooltip="${succeeded} succeeded"></div>
-          </div>
-          <div class="bar-label">Pass (${succeeded})</div>
-        </div>
-        <div class="bar-group" style="max-width:80px;">
-          <div class="bar-stack">
-            <div class="bar failure" style="height:${totalTasks > 0 ? Math.round((failed / totalTasks) * 100) : 0}%" data-tooltip="${failed} failed"></div>
-          </div>
-          <div class="bar-label">Fail (${failed})</div>
-        </div>
+      <div class="donut-chart">
+${totalTasks > 0 ? (() => {
+  const successPct = Math.round((succeeded / totalTasks) * 100);
+  const failPct = 100 - successPct;
+  return `        <svg viewBox="0 0 36 36" class="donut-svg">
+          <circle cx="18" cy="18" r="15.9155" fill="none" stroke="var(--border)" stroke-width="2.5"/>
+          <circle cx="18" cy="18" r="15.9155" fill="none" stroke="var(--success)" stroke-width="2.5"
+            stroke-dasharray="${successPct}, 100" stroke-dashoffset="25" stroke-linecap="round"/>
+          <circle cx="18" cy="18" r="15.9155" fill="none" stroke="var(--failure)" stroke-width="2.5"
+            stroke-dasharray="${failPct}, 100" stroke-dashoffset="${25 - successPct}" stroke-linecap="round"/>
+          <text x="18" y="18" class="donut-text">${successPct}%</text>
+        </svg>
+        <div class="donut-legend">${succeeded} passed &middot; ${failed} failed</div>`;
+})() : `        <svg viewBox="0 0 36 36" class="donut-svg">
+          <circle cx="18" cy="18" r="15.9155" fill="none" stroke="var(--border)" stroke-width="2.5"/>
+          <text x="18" y="18" class="donut-text">N/A</text>
+        </svg>
+        <div class="donut-legend">No data</div>`}
       </div>
     </div>
   </div>
