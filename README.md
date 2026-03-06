@@ -22,6 +22,7 @@ This downloads the latest binary, installs it to your PATH, and walks you throug
 - `critters retry <ID>` — retry a failed critter (reset to Todo)
 - `critters logs <ID>` — show logs for a critter run
 - `critters kickoff` — trigger an immediate poll (instead of waiting for the next interval)
+- `critters list-types` — show configured critter types
 - `critters init-repo` — scaffold `.critters.yaml` in the current repo
 - `critters help` — show usage
 
