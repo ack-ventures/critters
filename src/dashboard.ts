@@ -101,7 +101,7 @@ function niceMax(value: number, isCost: boolean): number {
   return Math.ceil(value / magnitude) * magnitude;
 }
 
-export function renderDashboard(metricsPath: string, status: HealthStatus): string {
+export function renderDashboard(metricsPath: string, status: HealthStatus, uptime: number): string {
   const allMetrics = getRecentMetrics(10000);
   const taskMetrics = allMetrics.filter(
     (m) => m.event === "task_completed" || m.event === "task_failed" ||
@@ -128,6 +128,11 @@ export function renderDashboard(metricsPath: string, status: HealthStatus): stri
   const rawMaxCost = Math.max(0.01, ...dailyStats.map((d) => d.cost));
   const maxCostPerDay = niceMax(rawMaxCost, true);
 
+  const todayStat = dailyStats[dailyStats.length - 1];
+  const todayCompleted = todayStat?.completed ?? 0;
+  const todayFailed = todayStat?.failed ?? 0;
+  const todayCost = todayStat?.cost ?? 0;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -135,6 +140,7 @@ export function renderDashboard(metricsPath: string, status: HealthStatus): stri
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="refresh" content="30">
   <title>Critters Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F41B;</text></svg>">
   <style>
     :root {
       --bg: #1a1a2e;
@@ -156,7 +162,35 @@ export function renderDashboard(metricsPath: string, status: HealthStatus): stri
     }
     h1 { font-size: 1.5rem; margin-bottom: 4px; }
     .header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; flex-wrap: wrap; gap: 8px; }
-    .header .version { color: var(--text-dim); font-size: 0.85rem; }
+    .header-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .meta { color: var(--text-dim); font-size: 0.85rem; }
+    .meta-sep { color: var(--text-dim); opacity: 0.3; }
+    .card-blue { border-left: 3px solid #5dade2; }
+    .card-green { border-left: 3px solid #4ecca3; }
+    .card-gold { border-left: 3px solid #e2b93d; }
+    .card-purple { border-left: 3px solid #8B5CF6; }
+    .today-stats { margin-bottom: 24px; }
+    .today-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .today-label {
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      letter-spacing: 0.05em;
+    }
+    .today-value { color: var(--text); }
+    .today-fail { color: var(--failure); }
+    .today-sep { color: var(--text-dim); opacity: 0.4; }
     .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
     .card {
       background: var(--card-bg);
@@ -265,31 +299,48 @@ export function renderDashboard(metricsPath: string, status: HealthStatus): stri
 <body>
   <div class="header">
     <h1>Critters Dashboard</h1>
-    <span class="version">${escapeHtml(getDisplayVersion())}</span>
+    <div class="header-meta">
+      <span class="meta">${escapeHtml(getDisplayVersion())}</span>
+      <span class="meta-sep">|</span>
+      <span class="meta">Uptime: ${fmtDuration(uptime)}</span>
+      <span class="meta-sep">|</span>
+      <span class="meta">Last poll: ${status.lastPollAt ? formatDate(status.lastPollAt) : "never"}</span>
+    </div>
   </div>
 
   <div class="summary">
-    <div class="card">
+    <div class="card card-blue">
       <div class="label">Total Tasks</div>
       <div class="value">${totalTasks}</div>
       <div class="sub">${succeeded} succeeded, ${failed} failed</div>
     </div>
-    <div class="card">
+    <div class="card card-green">
       <div class="label">Success Rate</div>
       <div class="value">${successRate != null ? `${successRate}%` : "N/A"}</div>
     </div>
-    <div class="card">
+    <div class="card card-gold">
       <div class="label">Total Cost</div>
       <div class="value">${formatCost(totalCost)}</div>
     </div>
-    <div class="card">
+    <div class="card card-gold">
       <div class="label">Avg Cost</div>
       <div class="value">${avgCost != null && totalTasks > 0 ? formatCost(avgCost) : "N/A"}</div>
       <div class="sub">per critter</div>
     </div>
-    <div class="card">
+    <div class="card card-purple">
       <div class="label">Avg Duration</div>
       <div class="value">${avgDuration != null ? fmtDuration(avgDuration) : "N/A"}</div>
+    </div>
+  </div>
+
+  <div class="today-stats">
+    <div class="today-card">
+      <span class="today-label">Today</span>
+      <span class="today-value">${todayCompleted} completed</span>
+      <span class="today-sep">|</span>
+      <span class="today-value today-fail">${todayFailed} failed</span>
+      <span class="today-sep">|</span>
+      <span class="today-value">${formatCost(todayCost)} spent</span>
     </div>
   </div>
 
