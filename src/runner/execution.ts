@@ -4,7 +4,7 @@ import { autoCommit, hasCommitsOnBranch, hasUncommittedChanges } from "../git.js
 import { logTask, logTaskError } from "../logger.js";
 import { buildExecutionPrompt, getExecutionAllowedTools } from "../prompt.js";
 import { withRetry } from "../retry.js";
-import { runCommand, tailLines } from "../utils.js";
+import { formatDuration, runCommand, tailLines } from "../utils.js";
 import type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
 
 export class ExecutionPhaseRunner implements PhaseRunner {
@@ -68,11 +68,6 @@ export class ExecutionPhaseRunner implements PhaseRunner {
     // Detect PR
     const prUrl = await detectPr(workDir, branch, task.identifier);
 
-    // Include plan in PR body
-    if (prUrl) {
-      await updatePrWithPlan(workDir, prUrl, task.identifier);
-    }
-
     return { spawn, data: { prUrl } };
   }
 }
@@ -130,24 +125,61 @@ async function detectPr(
   }
 }
 
-async function updatePrWithPlan(
+function formatStatsSection(stats: { name: string; durationMs: number; costUsd?: number }[]): string {
+  const lines: string[] = ["## Critter Stats"];
+  let totalMs = 0;
+  let totalCost = 0;
+  let hasCost = false;
+
+  for (const phase of stats) {
+    totalMs += phase.durationMs;
+    if (phase.costUsd != null) {
+      totalCost += phase.costUsd;
+      hasCost = true;
+    }
+    const duration = formatDuration(phase.durationMs);
+    const capitalizedName = phase.name.charAt(0).toUpperCase() + phase.name.slice(1);
+    if (phase.costUsd != null) {
+      lines.push(`- **${capitalizedName}**: ${duration} · $${phase.costUsd.toFixed(2)}`);
+    } else {
+      lines.push(`- **${capitalizedName}**: ${duration}`);
+    }
+  }
+
+  // Total line (only if more than one phase)
+  if (stats.length > 1) {
+    const totalDuration = formatDuration(totalMs);
+    if (hasCost) {
+      lines.push(`- **Total**: ${totalDuration} · $${totalCost.toFixed(2)}`);
+    } else {
+      lines.push(`- **Total**: ${totalDuration}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+export async function updatePrWithPlan(
   workDir: string,
   prUrl: string,
   identifier: string,
+  phaseStats?: { name: string; durationMs: number; costUsd?: number }[],
 ): Promise<void> {
   const planFile = `${workDir}/critters/plans/${identifier}.md`;
-  if (!existsSync(planFile)) {
-    logTask(identifier, "No plan file found, skipping PR body update");
-    return;
+  let planContent = "";
+  if (existsSync(planFile)) {
+    planContent = readFileSync(planFile, "utf-8").trim();
+
+    // Truncate very long plans to keep PR body manageable
+    const MAX_PLAN_LENGTH = 10000;
+    if (planContent.length > MAX_PLAN_LENGTH) {
+      planContent = planContent.slice(0, MAX_PLAN_LENGTH) + "\n\n*(plan truncated)*";
+    }
   }
 
-  let planContent = readFileSync(planFile, "utf-8").trim();
-  if (!planContent) return;
-
-  // Truncate very long plans to keep PR body manageable
-  const MAX_PLAN_LENGTH = 10000;
-  if (planContent.length > MAX_PLAN_LENGTH) {
-    planContent = planContent.slice(0, MAX_PLAN_LENGTH) + "\n\n*(plan truncated)*";
+  if (!planContent && (!phaseStats || phaseStats.length === 0)) {
+    logTask(identifier, "No plan file or stats found, skipping PR body update");
+    return;
   }
 
   // Get current PR body
@@ -168,7 +200,13 @@ async function updatePrWithPlan(
     // Best effort
   }
 
-  const newBody = currentBody + "\n\n## Plan\n\n" + planContent;
+  let newBody = currentBody;
+  if (phaseStats && phaseStats.length > 0) {
+    newBody += "\n\n" + formatStatsSection(phaseStats);
+  }
+  if (planContent) {
+    newBody += "\n\n## Plan\n\n" + planContent;
+  }
 
   const { code } = await runCommand(
     "gh",
@@ -178,6 +216,6 @@ async function updatePrWithPlan(
   if (code !== 0) {
     logTask(identifier, "Failed to update PR body with plan (non-fatal)");
   } else {
-    logTask(identifier, "Updated PR body with implementation plan");
+    logTask(identifier, "Updated PR body with implementation plan and stats");
   }
 }
