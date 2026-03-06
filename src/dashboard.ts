@@ -1,4 +1,5 @@
 import type { HealthStatus } from "./health.js";
+import { resolveAllPhases, resolveWorkDirForIdentifier } from "./log-resolver.js";
 import { getRecentMetrics, type MetricEvent } from "./metrics.js";
 import { getDisplayVersion } from "./updater.js";
 import { formatDuration } from "./utils.js";
@@ -434,6 +435,20 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
     .sort-arrow { font-size: 0.65rem; margin-left: 4px; }
     a { color: #5dade2; text-decoration: none; }
     a:hover { text-decoration: underline; }
+    .log-preview-row td { background: #0d1117 !important; }
+    .log-preview-content {
+      background: #0d1117;
+      font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+      font-size: 0.75rem;
+      padding: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #c9d1d9;
+      line-height: 1.5;
+    }
+    .log-preview-link { font-size: 0.8rem; }
 
     @media (max-width: 768px) {
       body { padding: 12px; }
@@ -585,13 +600,19 @@ ${status.activeCritterDetails.map((d) => {
   const prCell = d.prUrl
     ? `<a href="${escapeHtml(d.prUrl)}" target="_blank" rel="noopener">PR</a>`
     : "\u2014";
-  return `          <tr>
-            <td>${escapeHtml(d.identifier)}</td>
+  return `          <tr onclick="toggleLogPreview('${escapeHtml(d.identifier)}', this)" style="cursor:pointer" title="Click to view logs">
+            <td><a href="/logs/${encodeURIComponent(d.identifier)}">${escapeHtml(d.identifier)}</a></td>
             <td><span class="${phaseBadgeClass}">${phaseLabel}</span></td>
             <td>${escapeHtml(d.repo)}</td>
             <td><code>${escapeHtml(d.branch)}</code></td>
             <td>${prCell}</td>
             <td class="${elapsedClass}">${elapsed}</td>
+          </tr>
+          <tr class="log-preview-row" id="log-preview-${escapeHtml(d.identifier)}" style="display:none">
+            <td colspan="6" style="padding:0">
+              <div class="log-preview-content" id="log-content-${escapeHtml(d.identifier)}"></div>
+              <div style="padding:4px 12px 8px;text-align:right"><a href="/logs/${encodeURIComponent(d.identifier)}" class="log-preview-link">View full logs &rarr;</a></div>
+            </td>
           </tr>`;
 }).join("\n")}
         </tbody>
@@ -778,8 +799,10 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="7" class="empty-stat
       ? `<a href="${escapeHtml(m.prUrl)}" target="_blank" rel="noopener">PR</a>`
       : "\u2014";
     const when = formatDate(m.timestamp);
+    const rawId = m.identifier ?? m.issueId ?? "";
+    const idLink = rawId ? `<a href="/logs/${encodeURIComponent(rawId)}">${id}</a>` : id;
     return `          <tr>
-            <td>${id}</td>
+            <td>${idLink}</td>
             <td>${typeName}</td>
             <td><span class="${badgeClass}">${statusText}</span></td>
             <td data-sort-value="${m.duration ?? -1}">${dur}</td>
@@ -946,6 +969,300 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="7" class="empty-stat
   }, 1000);
 
   updateCountdown();
+})();
+
+// Log preview toggle for active critters
+var _logPollers = {};
+function toggleLogPreview(identifier, row) {
+  // Don't toggle if clicking a link
+  if (event && event.target && event.target.tagName === 'A') return;
+  var previewRow = document.getElementById('log-preview-' + identifier);
+  if (!previewRow) return;
+
+  if (previewRow.style.display === 'none') {
+    previewRow.style.display = '';
+    fetchLogPreview(identifier);
+    _logPollers[identifier] = setInterval(function() {
+      fetchLogPreview(identifier);
+    }, 3000);
+  } else {
+    previewRow.style.display = 'none';
+    if (_logPollers[identifier]) {
+      clearInterval(_logPollers[identifier]);
+      delete _logPollers[identifier];
+    }
+  }
+}
+
+function fetchLogPreview(identifier) {
+  var contentEl = document.getElementById('log-content-' + identifier);
+  if (!contentEl) return;
+  fetch('/api/logs/' + encodeURIComponent(identifier) + '?tail=50')
+    .then(function(res) {
+      if (!res.ok) throw new Error('Not found');
+      return res.text();
+    })
+    .then(function(text) {
+      contentEl.textContent = text || 'Waiting for logs...';
+      contentEl.scrollTop = contentEl.scrollHeight;
+    })
+    .catch(function() {
+      contentEl.textContent = 'Waiting for logs...';
+    });
+}
+</script>
+</body>
+</html>`;
+}
+
+export function renderLogPage(identifier: string, status: HealthStatus, workDir: string): string {
+  const safeId = escapeHtml(identifier);
+  // Check if critter is currently active
+  const activeDetail = status.activeCritterDetails.find((d) => d.identifier === identifier);
+  const isActive = !!activeDetail;
+
+  // Find work directory
+  let targetDir: string | null = null;
+  if (activeDetail?.workDir) {
+    targetDir = activeDetail.workDir;
+  } else {
+    targetDir = resolveWorkDirForIdentifier(workDir, identifier);
+  }
+
+  // Get available phases
+  const phases = targetDir ? resolveAllPhases(targetDir) : [];
+  // Phase display info
+  const phaseLabel = activeDetail?.phase === "plan" || activeDetail?.phase === "planning" ? "Planning"
+    : activeDetail?.phase === "exec" || activeDetail?.phase === "execution" ? "Execution"
+    : activeDetail?.phase === "review" ? "Review"
+    : activeDetail?.phase ?? "";
+
+  const elapsedStr = activeDetail ? fmtDuration(Date.now() - activeDetail.startedAt) : "";
+
+  const noLogs = !targetDir || phases.length === 0;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Logs: ${safeId} - Critters</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F41B;</text></svg>">
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --card-bg: #16213e;
+      --accent: #0f3460;
+      --success: #4ecca3;
+      --failure: #e94560;
+      --text: #eee;
+      --text-dim: #8892a4;
+      --border: #2a2a4a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      background: var(--bg);
+      color: var(--text);
+      padding: 20px;
+      min-height: 100vh;
+    }
+    a { color: #5dade2; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .header { margin-bottom: 20px; }
+    .header-top { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+    .header-top h1 { font-size: 1.3rem; }
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-live {
+      background: rgba(78, 204, 163, 0.2);
+      color: var(--success);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    .badge-done {
+      background: rgba(136, 146, 164, 0.2);
+      color: var(--text-dim);
+    }
+    .badge-phase {
+      background: rgba(93, 173, 226, 0.15);
+      color: #5dade2;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .meta { color: var(--text-dim); font-size: 0.85rem; }
+    .phase-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .phase-tab {
+      padding: 6px 16px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+    .phase-tab:hover { border-color: var(--text-dim); color: var(--text); }
+    .phase-tab.active { background: #5dade2; border-color: #5dade2; color: #fff; }
+    #log-content {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+      font-size: 0.8rem;
+      padding: 16px;
+      min-height: 400px;
+      max-height: calc(100vh - 220px);
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #c9d1d9;
+      line-height: 1.6;
+    }
+    .empty-msg {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-dim);
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-top">
+      <a href="/dashboard">&larr; Dashboard</a>
+      <h1>${safeId}</h1>
+      ${isActive ? `<span class="badge badge-live">Live</span>` : `<span class="badge badge-done">Completed</span>`}
+      ${isActive && phaseLabel ? `<span class="badge badge-phase">${escapeHtml(phaseLabel)}</span>` : ""}
+    </div>
+    <div class="meta">
+      ${isActive && activeDetail ? `${escapeHtml(activeDetail.repo)} &middot; <code>${escapeHtml(activeDetail.branch)}</code> &middot; ${elapsedStr}` : ""}
+      ${activeDetail?.prUrl ? ` &middot; <a href="${escapeHtml(activeDetail.prUrl)}" target="_blank">PR</a>` : ""}
+    </div>
+  </div>
+
+${noLogs && !isActive ? `  <div class="empty-msg">Logs are no longer available for this critter.<br>The work directory may have been cleaned up.</div>` : `
+  ${phases.length > 1 ? `<div class="phase-tabs">
+${phases.map((p) => `    <button class="phase-tab${p.phase === (phases[phases.length - 1]?.phase) ? " active" : ""}" data-phase="${escapeHtml(p.phase)}">${escapeHtml(p.phase.charAt(0).toUpperCase() + p.phase.slice(1))}</button>`).join("\n")}
+  </div>` : ""}
+
+  <pre id="log-content">Loading...</pre>
+`}
+
+<script>
+(function() {
+  var identifier = ${JSON.stringify(identifier)};
+  var isActive = ${isActive};
+  var phases = ${JSON.stringify(phases.map((p) => p.phase))};
+  var currentPhase = phases.length > 0 ? phases[phases.length - 1] : null;
+  var logEl = document.getElementById('log-content');
+  if (!logEl) return;
+
+  var eventSource = null;
+
+  function loadPhase(phase) {
+    currentPhase = phase;
+    logEl.textContent = 'Loading...';
+
+    // Update tab active state
+    var tabs = document.querySelectorAll('.phase-tab');
+    tabs.forEach(function(tab) {
+      tab.classList.toggle('active', tab.getAttribute('data-phase') === phase);
+    });
+
+    // Close existing SSE
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+
+    // Fetch existing content
+    var url = '/api/logs/' + encodeURIComponent(identifier) + '?tail=500';
+    if (phase) url += '&phase=' + encodeURIComponent(phase);
+
+    fetch(url)
+      .then(function(res) {
+        if (!res.ok) throw new Error('No logs');
+        return res.text();
+      })
+      .then(function(text) {
+        logEl.textContent = text || 'Waiting for logs...';
+        logEl.scrollTop = logEl.scrollHeight;
+
+        // Start SSE for live updates if active
+        if (isActive) {
+          startSSE(phase);
+        }
+      })
+      .catch(function() {
+        logEl.textContent = isActive ? 'Waiting for logs...' : 'No logs available for this phase.';
+        if (isActive) {
+          // Retry after delay
+          setTimeout(function() { loadPhase(phase); }, 3000);
+        }
+      });
+  }
+
+  function startSSE(phase) {
+    var sseUrl = '/api/logs/' + encodeURIComponent(identifier) + '/stream';
+    if (phase) sseUrl += '?phase=' + encodeURIComponent(phase);
+
+    eventSource = new EventSource(sseUrl);
+    eventSource.onmessage = function(e) {
+      var data = e.data;
+      // Check for control events
+      try {
+        var obj = JSON.parse(data);
+        if (obj.event === 'done') {
+          eventSource.close();
+          eventSource = null;
+          isActive = false;
+          // Update badge
+          var badge = document.querySelector('.badge-live');
+          if (badge) {
+            badge.className = 'badge badge-done';
+            badge.textContent = 'Completed';
+          }
+          return;
+        }
+        if (obj.event === 'heartbeat') return;
+      } catch(ex) {}
+
+      logEl.textContent += data + '\\n';
+      logEl.scrollTop = logEl.scrollHeight;
+    };
+    eventSource.onerror = function() {
+      // SSE connection lost, don't retry automatically
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+    };
+  }
+
+  // Tab click handlers
+  var tabs = document.querySelectorAll('.phase-tab');
+  tabs.forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      loadPhase(tab.getAttribute('data-phase'));
+    });
+  });
+
+  // Initial load
+  if (currentPhase) {
+    loadPhase(currentPhase);
+  }
 })();
 </script>
 </body>
