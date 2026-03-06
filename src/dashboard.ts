@@ -330,6 +330,7 @@ ${status.activeCritterDetails.length > 0 ? `
             <th>Phase</th>
             <th>Repo</th>
             <th>Branch</th>
+            <th>PR</th>
             <th>Elapsed</th>
           </tr>
         </thead>
@@ -337,11 +338,15 @@ ${status.activeCritterDetails.length > 0 ? `
 ${status.activeCritterDetails.map((d) => {
   const elapsed = fmtDuration(Date.now() - d.startedAt);
   const phaseLabel = d.phase === "plan" ? "Planning" : d.phase === "exec" ? "Execution" : "Review";
+  const prCell = d.prUrl
+    ? `<a href="${escapeHtml(d.prUrl)}" target="_blank" rel="noopener">PR</a>`
+    : "\u2014";
   return `          <tr>
             <td>${escapeHtml(d.identifier)}</td>
             <td>${phaseLabel}</td>
             <td>${escapeHtml(d.repo)}</td>
             <td><code>${escapeHtml(d.branch)}</code></td>
+            <td>${prCell}</td>
             <td>${elapsed}</td>
           </tr>`;
 }).join("\n")}
