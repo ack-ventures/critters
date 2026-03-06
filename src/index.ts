@@ -50,6 +50,7 @@ Commands:
   list-types  Show configured critter types
   logs        Show logs for a critter run
   init-repo   Scaffold .critters.yaml in current repo
+  prompt-help Launch Claude to help design critter types and prompts
   validate    Validate config file without starting daemon
   help        Show this help
 
@@ -117,6 +118,12 @@ if (subcommand === "validate") {
 if (subcommand === "kickoff") {
   const { runKickoff } = await import("./cli-kickoff.js");
   await runKickoff();
+  process.exit(0);
+}
+
+if (subcommand === "prompt-help") {
+  const { runPromptHelp } = await import("./prompt-help.js");
+  await runPromptHelp();
   process.exit(0);
 }
 

@@ -485,6 +485,7 @@ Usage: `critters [command] [flags]`
 | `list-types` | Show configured critter types |
 | `init` | Interactive setup — creates `~/.critters/` with config, env, and prompt template files |
 | `init-repo` | Scaffold `.critters.yaml` in the current repo |
+| `prompt-help` | Launch Claude to help configure critter types and prompts |
 | `validate` | Validate config file without starting daemon |
 | `update` | Check for and apply binary updates |
 | `version` | Print version |
