@@ -3,6 +3,7 @@ import { spawnClaude, spawnClaudeSubprocess } from "../claude.js";
 import { commitFile } from "../git.js";
 import { logTask } from "../logger.js";
 import { buildPlanningPrompt, getPlanningAllowedTools } from "../prompt.js";
+import { buildPromptVars, resolveSkills } from "../prompt-template.js";
 import type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
 
 export class PlanningPhaseRunner implements PhaseRunner {
@@ -23,7 +24,10 @@ export class PlanningPhaseRunner implements PhaseRunner {
       projectId: task.projectId,
     };
 
-    const prompt = buildPlanningPrompt(critterTask, repoConfig);
+    const basePrompt = buildPlanningPrompt(critterTask, repoConfig);
+    const vars = buildPromptVars(task, workDir, "");
+    const skillContent = resolveSkills(ctx.phase.skills, vars);
+    const prompt = skillContent ? basePrompt + skillContent : basePrompt;
 
     const spawn = config.noTmux
       ? await spawnClaudeSubprocess(

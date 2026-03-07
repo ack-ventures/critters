@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { spawnClaude, spawnClaudeSubprocess } from "../claude.js";
 import { logTask } from "../logger.js";
+import { buildPromptVars, resolveSkills } from "../prompt-template.js";
 import { buildReviewPrompt, getReviewAllowedTools } from "../review-prompt.js";
 import { runCommand, tailLines } from "../utils.js";
 import type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
@@ -124,7 +125,10 @@ export class ReviewPhaseRunner implements PhaseRunner {
     };
 
     const allowedTools = getReviewAllowedTools();
-    const prompt = buildReviewPrompt(reviewTask, repoConfig);
+    const basePrompt = buildReviewPrompt(reviewTask, repoConfig);
+    const vars = buildPromptVars(task, workDir, task.prBranch ?? "");
+    const skillContent = resolveSkills(ctx.phase.skills, vars);
+    const prompt = skillContent ? basePrompt + skillContent : basePrompt;
 
     logTask(task.identifier, "Starting review phase");
 

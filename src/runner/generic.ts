@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { spawnClaude, spawnClaudeSubprocess } from "../claude.js";
 import { logTask, logTaskWarn } from "../logger.js";
-import { buildPromptVars, resolvePrompt, resolveTools } from "../prompt-template.js";
+import { buildPromptVars, resolvePrompt, resolveSkills, resolveTools } from "../prompt-template.js";
 import { tailLines } from "../utils.js";
 import type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
 
@@ -84,6 +84,12 @@ export class GenericPhaseRunner implements PhaseRunner {
     let prompt = resolvePrompt(phase.prompt, vars);
     if (prompt === null) {
       throw new Error(`Prompt "${phase.prompt}" resolved to null — builtin prompts should use dedicated runners`);
+    }
+
+    // Append skill content
+    const skillContent = resolveSkills(phase.skills, vars);
+    if (skillContent) {
+      prompt += skillContent;
     }
 
     // Append report instruction so Claude knows to write the file

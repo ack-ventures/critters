@@ -241,6 +241,28 @@ describe("parseCritterType", () => {
     expect(ct.trigger.assignee).toBeUndefined();
   });
 
+  test("parses skills field on phases", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [
+        { name: "p", prompt: "file.md", model: "sonnet", maxTurns: 10, skills: ["~/.critters/skills/a.md", "~/.critters/skills/b.md"] },
+      ],
+      outcomes: { success: { status: "Done" } },
+    };
+    const ct = parseCritterType("test", raw);
+    expect(ct.phases[0].skills).toEqual(["~/.critters/skills/a.md", "~/.critters/skills/b.md"]);
+  });
+
+  test("skills defaults to undefined when not specified", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5 }],
+      outcomes: { success: { status: "Done" } },
+    };
+    const ct = parseCritterType("test", raw);
+    expect(ct.phases[0].skills).toBeUndefined();
+  });
+
   test("preserves enrichment field", () => {
     const raw = {
       trigger: { label: "X", status: "Y" },

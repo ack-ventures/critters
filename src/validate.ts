@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { checkProviderCredentials, resolveConfigPath, validateRepoUrls, validateWorkDir } from "./config.js";
 import { type CritterTypeConfig, parseCritterTypes, synthesizeDefaultTypes } from "./critter-type.js";
@@ -197,6 +199,22 @@ export function validateConfigFile(configPath?: string): { errors: string[]; war
       }
       if (phase.maxTurns < 5) {
         warnings.push(`Low maxTurns (${phase.maxTurns}) in phase '${phase.name}' (type '${typeName}') may not give Claude enough room to work`);
+      }
+    }
+  }
+
+  // Validate skill file paths
+  for (const ct of critterTypes) {
+    for (const phase of ct.phases) {
+      if (phase.skills) {
+        for (const skillRef of phase.skills) {
+          const filePath = skillRef.startsWith("~")
+            ? join(homedir(), skillRef.slice(1))
+            : skillRef;
+          if (!existsSync(filePath)) {
+            errors.push(`Skill file not found: ${filePath} (type "${ct.name}", phase "${phase.name}")`);
+          }
+        }
       }
     }
   }
