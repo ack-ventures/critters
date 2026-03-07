@@ -1,4 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { resolveMcpConfig } from "./claude.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import {
   autoCommit,
@@ -350,6 +351,9 @@ export class UnifiedSpawner {
         mkdirSync(plansDir, { recursive: true });
       }
 
+      // Resolve MCP config (once per task, not per phase)
+      const { mcpConfig, strictMcpConfig } = resolveMcpConfig(critterType, this.config);
+
       // Load per-repo config
       const repoConfig = existsSync(`${workDir}/.critters.yaml`)
         ? loadRepoConfig(workDir)
@@ -383,6 +387,8 @@ export class UnifiedSpawner {
           repoConfig,
           signal: abortController.signal,
           resuming,
+          mcpConfig,
+          strictMcpConfig,
         };
 
         if (phase.name === "execution" && critterType.name === "create") {

@@ -144,6 +144,8 @@ export class ReviewPhaseRunner implements PhaseRunner {
           ctx.phase.model,
           task.repoUrl,
           signal,
+          ctx.mcpConfig,
+          ctx.strictMcpConfig,
         )
       : await spawnClaude(
           prompt,
@@ -157,6 +159,8 @@ export class ReviewPhaseRunner implements PhaseRunner {
           ctx.phase.model,
           task.repoUrl,
           signal,
+          ctx.mcpConfig,
+          ctx.strictMcpConfig,
         );
 
     if (spawn.timedOut) {

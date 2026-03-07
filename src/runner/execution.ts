@@ -43,6 +43,8 @@ export class ExecutionPhaseRunner implements PhaseRunner {
           ctx.phase.model,
           task.repoUrl,
           signal,
+          ctx.mcpConfig,
+          ctx.strictMcpConfig,
         )
       : await spawnClaude(
           prompt,
@@ -56,6 +58,8 @@ export class ExecutionPhaseRunner implements PhaseRunner {
           ctx.phase.model,
           task.repoUrl,
           signal,
+          ctx.mcpConfig,
+          ctx.strictMcpConfig,
         );
 
     validatePhaseResult(spawn, "execution");

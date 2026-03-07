@@ -115,6 +115,8 @@ export class GenericPhaseRunner implements PhaseRunner {
           phase.model,
           task.repoUrl,
           signal,
+          ctx.mcpConfig,
+          ctx.strictMcpConfig,
         )
       : await spawnClaude(
           prompt,
@@ -128,6 +130,8 @@ export class GenericPhaseRunner implements PhaseRunner {
           phase.model,
           task.repoUrl,
           signal,
+          ctx.mcpConfig,
+          ctx.strictMcpConfig,
         );
 
     if (spawn.timedOut) {

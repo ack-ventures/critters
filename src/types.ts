@@ -66,6 +66,8 @@ export interface Config {
     onExecutionStarted?: string;
   };
   autoRetry?: AutoRetryConfig;
+  mcpConfig?: string | string[];
+  strictMcpConfig?: boolean;
   provider: "linear" | "jira";
   critterTypes: CritterTypeConfig[];
 }
