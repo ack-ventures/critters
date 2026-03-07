@@ -234,22 +234,6 @@ Only the env vars for providers you actually use are required. A Linear-only con
 
 See [CLAUDE.md](CLAUDE.md) for full multi-provider docs, Jira differences, and more config examples.
 
-## Tips from usage
-
-- **Create a `/critter` slash command in Claude Code** to speed up ticket creation. Instead of manually formatting Linear issues, describe what you want and let Claude create the ticket with the right label, status, and `repo:` line. You can batch-create several at once.
-
-- **Claude Max 20x is ideal for running lots of critters.** Each critter spawns `claude -p` under the hood, so having lots of tokens to available to you is a good thing.
-
-- **Map projects to repos in the config** so you don't need a `repo:` line in every ticket description. Once a project is mapped, any "Critter"-labeled issue in that project automatically targets the right repo.
-
-- **Put a sentence or two of direction in the ticket description.** "Use the existing `AuthService` pattern" or "add tests in `__tests__/`" makes a real difference in PR quality. Vague tickets produce vague PRs.
-
-- **Set up Slack notifications** to get notified when critters finish or fail. Use `SLACK_WEBHOOK_URL` for simple notifications, or `SLACK_BOT_TOKEN` + `SLACK_CHANNEL` for threaded notifications (all updates for an issue grouped under one message).
-
-- **Plans are committed to `critters/plans/`** in the target repo's branch. You can review what the critter intended before looking at the code diff.
-
-- **Use a `/batch-review` slash command with Claude Code agent teams** to review multiple critter PRs at once. Spin up one agent per PR in separate git worktrees and let them review, fix, and merge in parallel.
-
 ---
 
 See [CLAUDE.md](CLAUDE.md) for detailed developer docs, architecture diagrams, and contributor conventions.
