@@ -567,6 +567,10 @@ critterTypes:
 | `mcpConfig` | — | Path(s) to MCP config JSON file(s), applied to all critters |
 | `strictMcpConfig` | false | When true, passes `--strict-mcp-config` to prevent inheriting operator's MCP servers |
 | `metricsRetentionDays` | 90 | Days to retain metrics data before pruning |
+| `tunnel` | — | Tunnel configuration for remote dashboard access |
+| `tunnel.enabled` | false | Enable ngrok tunnel |
+| `tunnel.auth` | — | Basic auth credentials (`user:password`) |
+| `tunnel.domain` | — | Static ngrok domain (free tier gives one) |
 
 ### Allowed tools
 
@@ -626,6 +630,7 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 | `src/repo-config.ts` | Per-repo `.critters.yaml` loader |
 | `src/types.ts` | Shared TypeScript type definitions |
 | `src/utils.ts` | Shared utility functions |
+| `src/tunnel.ts` | ngrok tunnel management for remote dashboard access |
 | `src/version.ts` | Version constant |
 | `src/validate.ts` | `critters validate` CLI command |
 | `src/env.ts` | Shared `.env` fallback loader |
@@ -777,3 +782,7 @@ An HTTP server starts on `healthPort` (default 3847, set to 0 to disable).
 | `/review-poll` | POST | Trigger an immediate review poll cycle |
 
 Metrics are stored in `~/.critters/metrics.jsonl` (JSONL format). Events: `task_started`, `task_completed`, `task_failed`, `review_started`, `review_completed`, `review_failed`, `poll_completed`.
+
+## Remote Access (ngrok)
+
+Enable `tunnel.enabled` in config to automatically start an ngrok tunnel to the dashboard. Requires `ngrok` CLI installed. The public URL is logged on startup. Use `tunnel.auth` for basic auth protection and `tunnel.domain` for a static URL.
