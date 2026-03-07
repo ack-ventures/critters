@@ -38,6 +38,19 @@ This downloads the latest binary, installs it to your PATH, and walks you throug
 - `--type NAME` — filter dry-run to a specific critter type
 - `--json-logs` — output structured JSON logs (one object per line)
 
+## Self-Hosting
+
+See [docs/self-hosting.md](docs/self-hosting.md) for the full deployment guide.
+
+**Quick start (binary):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ack-ventures/critters/main/install.sh | bash
+critters init
+tmux new -s critters
+critters
+```
+
 ## Development quick start
 
 **Prerequisites:** [Bun](https://bun.sh), [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), [`gh` CLI](https://cli.github.com) (authenticated), `tmux`, `jq`
@@ -233,6 +246,11 @@ critterTypes:
 Only the env vars for providers you actually use are required. A Linear-only config doesn't need `JIRA_*` vars.
 
 See [CLAUDE.md](CLAUDE.md) for full multi-provider docs, Jira differences, and more config examples.
+
+## Documentation
+
+- [Self-Hosting Guide](docs/self-hosting.md) — deployment, systemd, remote access, monitoring
+- [Configuration Reference](docs/configuration.md) — all config fields, environment variables, critter types, hooks
 
 ---
 
