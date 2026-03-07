@@ -258,7 +258,7 @@ async function main() {
     process.exit(0);
   }
 
-  log(`Critters ${getDisplayVersion()} starting...`);
+  log(`Critters ${getDisplayVersion()} starting (${config.critterTypes.length} type${config.critterTypes.length === 1 ? "" : "s"})...`);
   const startTime = Date.now();
 
   if (!noTmux) {
