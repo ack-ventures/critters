@@ -277,10 +277,10 @@ export class UnifiedSpawner {
         await tracker.updateStatus(task.id, "In Progress", task.groupId);
         await tracker.comment(task.id, "Cloning repo...");
       } else if (isReviewType) {
-        await tracker.comment(task.id, "Review critter picking up PR...");
+        await tracker.comment(task.id, `Review critter (${critterType.phases[0].model}) picking up PR...`);
       } else {
         // Custom type — update to first phase status or just comment
-        await tracker.comment(task.id, `Critter [${critterType.name}] picking up task...`);
+        await tracker.comment(task.id, `Critter [${critterType.name}] (${critterType.phases[0].model}) picking up task...`);
       }
 
       // 1. Clone repo
@@ -368,7 +368,7 @@ export class UnifiedSpawner {
       let costAlertSent = false;
       for (const phase of critterType.phases) {
         if (critterType.name === "create") {
-          await tracker.comment(task.id, `${phase.name === "planning" ? "Planning" : "Plan approved, executing"}...`);
+          await tracker.comment(task.id, `${phase.name === "planning" ? "Planning" : "Plan approved, executing"} (${phase.model})...`);
         }
         logTask(task.identifier, `Starting phase: ${phase.name} | ${shortRepoName(task.repoUrl)} | ${branch || task.prBranch || ""}`);
         const detail = this.activeCritterMap.get(task.id);
@@ -411,7 +411,7 @@ export class UnifiedSpawner {
           durationMs: phaseDuration,
           costUsd: phaseResult.spawn.costUsd,
         });
-        const phaseStats = `${phase.name} completed in ${formatDuration(phaseDuration)}${formatPhaseStats(phaseResult.spawn)}`;
+        const phaseStats = `${phase.name} (${phase.model}) completed in ${formatDuration(phaseDuration)}${formatPhaseStats(phaseResult.spawn)}`;
         logTask(task.identifier, phaseStats);
         await tracker.comment(task.id, phaseStats);
 
@@ -492,7 +492,8 @@ export class UnifiedSpawner {
         }
         await tracker.comment(task.id, comment);
       } else {
-        await tracker.comment(task.id, `Critter [${critterType.name}] completed in ${totalDuration}`);
+        const modelSummary = [...new Set(critterType.phases.map(p => p.model))].join("/");
+        await tracker.comment(task.id, `Critter [${critterType.name}] (${modelSummary}) completed in ${totalDuration}`);
       }
 
       const totalCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
@@ -726,7 +727,8 @@ export class UnifiedSpawner {
 
     const totalDuration = formatDuration(Date.now() - taskStart);
     logTask(task.identifier, `Completed in ${totalDuration}`);
-    await tracker.comment(task.id, `PR created: ${prUrl} (completed in ${totalDuration})`);
+    const modelSummary = [...new Set(critterType.phases.map(p => p.model))].join("/");
+    await tracker.comment(task.id, `PR created: ${prUrl} (${modelSummary}, completed in ${totalDuration})`);
     await this.slackNotifier.notify(
       task.id,
       formatSuccess(task.identifier, task.title, prUrl, totalDuration),
@@ -788,7 +790,7 @@ export class UnifiedSpawner {
         await tracker.comment(task.id, "PR was already merged");
         logTask(task.identifier, "Review complete — PR was already merged");
       } else {
-        await tracker.comment(task.id, `PR merged by review critter (${totalDuration})`);
+        await tracker.comment(task.id, `PR merged by review critter (${critterType.phases[0].model}, ${totalDuration})`);
         await this.slackNotifier.notify(
           task.id,
           formatReviewMerged(task.identifier, task.title, task.prUrl ?? "", totalDuration),
@@ -827,7 +829,7 @@ export class UnifiedSpawner {
       if (needsChangesOutcome) {
         await tracker.updateStatus(task.id, needsChangesOutcome.status, task.groupId);
       }
-      await tracker.comment(task.id, `Review critter requested changes: ${reason}`);
+      await tracker.comment(task.id, `Review critter (${critterType.phases[0].model}) requested changes: ${reason}`);
       await this.slackNotifier.notify(
         task.id,
         formatReviewNeedsChanges(task.identifier, task.title, reason ?? "No reason provided", totalDuration),
