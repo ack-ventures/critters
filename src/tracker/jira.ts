@@ -1,7 +1,7 @@
 import type { TriggerConfig } from "../critter-type.js";
 import { log, logError, logTaskError } from "../logger.js";
 import { withRetry } from "../retry.js";
-import type { IssueTracker, IssueTrackerIssue, TrackerTask } from "./types.js";
+import type { CreatedIssue, CreateIssueInput, IssueTracker, IssueTrackerIssue, TrackerTask, TrackerTeam } from "./types.js";
 
 /**
  * Jira Cloud tracker implementation using REST API v3.
@@ -197,6 +197,14 @@ export class JiraTracker implements IssueTracker {
 
   async ensureLabel(_name: string): Promise<void> {
     // Jira labels are auto-created when applied to issues — no action needed
+  }
+
+  async createIssue(_input: CreateIssueInput): Promise<CreatedIssue> {
+    throw new Error("createIssue is not yet implemented for Jira");
+  }
+
+  async listTeams(): Promise<TrackerTeam[]> {
+    throw new Error("listTeams is not yet implemented for Jira");
   }
 
   /**

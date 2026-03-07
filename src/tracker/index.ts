@@ -2,7 +2,7 @@ import { JiraTracker } from "./jira.js";
 import { LinearTracker } from "./linear.js";
 import type { IssueTracker, ProviderConfig } from "./types.js";
 
-export type { IssueTracker, IssueTrackerIssue, ProviderConfig, TrackerTask } from "./types.js";
+export type { CreatedIssue, CreateIssueInput, IssueTracker, IssueTrackerIssue, ProviderConfig, TrackerTask, TrackerTeam } from "./types.js";
 
 export function createTracker(providerConfig: ProviderConfig): IssueTracker {
   switch (providerConfig.type) {

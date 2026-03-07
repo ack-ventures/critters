@@ -25,6 +25,27 @@ export interface IssueTracker {
   ): Promise<string | null>;
   ensureStatus(groupId: string, name: string, type?: string, color?: string): Promise<void>;
   ensureLabel(name: string): Promise<void>;
+  createIssue(input: CreateIssueInput): Promise<CreatedIssue>;
+  listTeams(): Promise<TrackerTeam[]>;
+}
+
+export interface CreateIssueInput {
+  teamId: string;
+  title: string;
+  description: string;
+  labelNames: string[];
+}
+
+export interface CreatedIssue {
+  id: string;
+  identifier: string;
+  url: string;
+}
+
+export interface TrackerTeam {
+  id: string;
+  name: string;
+  key: string;
 }
 
 export interface TrackerTask {
