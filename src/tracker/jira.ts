@@ -11,6 +11,7 @@ export class JiraTracker implements IssueTracker {
   private baseUrl: string;
   private authHeader: string;
   private statusMap: Record<string, string>;
+  private host: string;
 
   constructor(
     host: string,
@@ -18,6 +19,7 @@ export class JiraTracker implements IssueTracker {
     apiToken: string,
     statusMap?: Record<string, string>,
   ) {
+    this.host = host;
     this.baseUrl = `https://${host}/rest/api/3`;
     this.authHeader = `Basic ${btoa(`${email}:${apiToken}`)}`;
     this.statusMap = statusMap ?? {};
@@ -199,12 +201,38 @@ export class JiraTracker implements IssueTracker {
     // Jira labels are auto-created when applied to issues — no action needed
   }
 
-  async createIssue(_input: CreateIssueInput): Promise<CreatedIssue> {
-    throw new Error("createIssue is not yet implemented for Jira");
+  async createIssue(input: CreateIssueInput): Promise<CreatedIssue> {
+    const resp = await this.request("/issue", {
+      method: "POST",
+      body: JSON.stringify({
+        fields: {
+          project: { key: input.teamId },
+          summary: input.title,
+          description: {
+            type: "doc",
+            version: 1,
+            content: [{
+              type: "paragraph",
+              content: [{ type: "text", text: input.description }],
+            }],
+          },
+          labels: input.labelNames,
+          issuetype: { name: "Task" },
+        },
+      }),
+    });
+    const data = (await resp.json()) as { id: string; key: string; self: string };
+    return {
+      id: data.id,
+      identifier: data.key,
+      url: `https://${this.host}/browse/${data.key}`,
+    };
   }
 
   async listTeams(): Promise<TrackerTeam[]> {
-    throw new Error("listTeams is not yet implemented for Jira");
+    const resp = await this.request("/project/search?maxResults=100");
+    const data = (await resp.json()) as { values: Array<{ id: string; name: string; key: string }> };
+    return (data.values ?? []).map((p) => ({ id: p.key, name: p.name, key: p.key }));
   }
 
   /**

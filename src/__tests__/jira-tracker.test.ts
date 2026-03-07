@@ -271,6 +271,86 @@ describe("JiraTracker", () => {
       expect(mockFetchFn).not.toHaveBeenCalled();
     });
   });
+
+  describe("listTeams", () => {
+    test("fetches projects and maps to TrackerTeam shape", async () => {
+      mockFetchFn.mockResolvedValueOnce(
+        mockResponse({
+          values: [
+            { id: "10001", name: "My Project", key: "PROJ" },
+            { id: "10002", name: "Backend", key: "BACK" },
+          ],
+        }),
+      );
+
+      const teams = await tracker.listTeams();
+
+      expect(teams).toEqual([
+        { id: "PROJ", name: "My Project", key: "PROJ" },
+        { id: "BACK", name: "Backend", key: "BACK" },
+      ]);
+      const call = mockFetchFn.mock.calls[0] as [string, RequestInit];
+      expect(call[0]).toContain("/project/search");
+    });
+
+    test("returns empty array when no projects exist", async () => {
+      mockFetchFn.mockResolvedValueOnce(mockResponse({ values: [] }));
+
+      const teams = await tracker.listTeams();
+      expect(teams).toEqual([]);
+    });
+  });
+
+  describe("createIssue", () => {
+    test("creates issue with correct ADF description and labels", async () => {
+      mockFetchFn.mockResolvedValueOnce(
+        mockResponse({ id: "10042", key: "PROJ-42", self: "https://mycompany.atlassian.net/rest/api/3/issue/10042" }),
+      );
+
+      await tracker.createIssue({
+        teamId: "PROJ",
+        title: "Fix bug",
+        description: "Details here",
+        labelNames: ["Critter"],
+      });
+
+      const call = mockFetchFn.mock.calls[0] as [string, RequestInit];
+      expect(call[0]).toContain("/issue");
+      expect(call[1].method).toBe("POST");
+      const body = JSON.parse(call[1].body as string);
+      expect(body.fields.project).toEqual({ key: "PROJ" });
+      expect(body.fields.summary).toBe("Fix bug");
+      expect(body.fields.labels).toEqual(["Critter"]);
+      expect(body.fields.issuetype).toEqual({ name: "Task" });
+      expect(body.fields.description).toEqual({
+        type: "doc",
+        version: 1,
+        content: [{
+          type: "paragraph",
+          content: [{ type: "text", text: "Details here" }],
+        }],
+      });
+    });
+
+    test("returns correct identifier and URL", async () => {
+      mockFetchFn.mockResolvedValueOnce(
+        mockResponse({ id: "10042", key: "PROJ-42", self: "https://mycompany.atlassian.net/rest/api/3/issue/10042" }),
+      );
+
+      const result = await tracker.createIssue({
+        teamId: "PROJ",
+        title: "Fix bug",
+        description: "Details here",
+        labelNames: ["Critter"],
+      });
+
+      expect(result).toEqual({
+        id: "10042",
+        identifier: "PROJ-42",
+        url: "https://mycompany.atlassian.net/browse/PROJ-42",
+      });
+    });
+  });
 });
 
 describe("extractPlainText", () => {
