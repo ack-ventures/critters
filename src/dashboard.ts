@@ -1136,6 +1136,24 @@ export function renderLogPage(identifier: string, status: HealthStatus, workDir:
       padding: 60px 20px;
       color: var(--text-dim);
     }
+    .new-logs-indicator {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #5dade2;
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+      display: none;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .new-logs-indicator:hover {
+      background: #3498db;
+    }
   </style>
 </head>
 <body>
@@ -1158,6 +1176,7 @@ ${phases.map((p) => `    <button class="phase-tab${p.phase === (phases[phases.le
   </div>` : ""}
 
   <pre id="log-content">Loading...</pre>
+  <div id="new-logs-indicator" class="new-logs-indicator">↓ New logs</div>
 `}
 
 <script>
@@ -1170,10 +1189,32 @@ ${phases.map((p) => `    <button class="phase-tab${p.phase === (phases[phases.le
   if (!logEl) return;
 
   var eventSource = null;
+  var userScrolledUp = false;
+  var firstMessage = true;
+  var indicator = document.getElementById('new-logs-indicator');
+
+  logEl.addEventListener('scroll', function() {
+    var atBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 50;
+    userScrolledUp = !atBottom;
+    if (atBottom && indicator) {
+      indicator.style.display = 'none';
+    }
+  });
+
+  if (indicator) {
+    indicator.addEventListener('click', function() {
+      logEl.scrollTop = logEl.scrollHeight;
+      indicator.style.display = 'none';
+      userScrolledUp = false;
+    });
+  }
 
   function loadPhase(phase) {
     currentPhase = phase;
     logEl.textContent = 'Loading...';
+    userScrolledUp = false;
+    firstMessage = true;
+    if (indicator) indicator.style.display = 'none';
 
     // Update tab active state
     var tabs = document.querySelectorAll('.phase-tab');
@@ -1187,40 +1228,41 @@ ${phases.map((p) => `    <button class="phase-tab${p.phase === (phases[phases.le
       eventSource = null;
     }
 
-    // Fetch existing content
-    var url = '/api/logs/' + encodeURIComponent(identifier) + '?tail=500';
-    if (phase) url += '&phase=' + encodeURIComponent(phase);
+    if (isActive) {
+      // Use SSE as sole data source for active critters
+      startSSE(phase);
+    } else {
+      // Fetch static content for completed critters
+      var url = '/api/logs/' + encodeURIComponent(identifier) + '?tail=500';
+      if (phase) url += '&phase=' + encodeURIComponent(phase);
 
-    fetch(url)
-      .then(function(res) {
-        if (!res.ok) throw new Error('No logs');
-        return res.text();
-      })
-      .then(function(text) {
-        logEl.textContent = text || 'Waiting for logs...';
-        logEl.scrollTop = logEl.scrollHeight;
-
-        // Start SSE for live updates if active
-        if (isActive) {
-          startSSE(phase);
-        }
-      })
-      .catch(function() {
-        logEl.textContent = isActive ? 'Waiting for logs...' : 'No logs available for this phase.';
-        if (isActive) {
-          // Retry after delay
-          setTimeout(function() { loadPhase(phase); }, 3000);
-        }
-      });
+      fetch(url)
+        .then(function(res) {
+          if (!res.ok) throw new Error('No logs');
+          return res.text();
+        })
+        .then(function(text) {
+          logEl.textContent = text || 'No logs available for this phase.';
+          logEl.scrollTop = logEl.scrollHeight;
+        })
+        .catch(function() {
+          logEl.textContent = 'No logs available for this phase.';
+        });
+    }
   }
 
   function startSSE(phase) {
-    var sseUrl = '/api/logs/' + encodeURIComponent(identifier) + '/stream';
-    if (phase) sseUrl += '?phase=' + encodeURIComponent(phase);
+    var sseUrl = '/api/logs/' + encodeURIComponent(identifier) + '/stream?tail=500';
+    if (phase) sseUrl += '&phase=' + encodeURIComponent(phase);
+
+    var retryCount = 0;
+    var maxRetries = 5;
 
     eventSource = new EventSource(sseUrl);
     eventSource.onmessage = function(e) {
       var data = e.data;
+      retryCount = 0;
+
       // Check for control events
       try {
         var obj = JSON.parse(data);
@@ -1239,14 +1281,30 @@ ${phases.map((p) => `    <button class="phase-tab${p.phase === (phases[phases.le
         if (obj.event === 'heartbeat') return;
       } catch(ex) {}
 
+      if (firstMessage) {
+        logEl.textContent = '';
+        firstMessage = false;
+      }
+
       logEl.textContent += data + '\\n';
-      logEl.scrollTop = logEl.scrollHeight;
+
+      if (!userScrolledUp) {
+        logEl.scrollTop = logEl.scrollHeight;
+      } else if (indicator) {
+        indicator.style.display = 'block';
+      }
     };
     eventSource.onerror = function() {
-      // SSE connection lost, don't retry automatically
       if (eventSource) {
         eventSource.close();
         eventSource = null;
+      }
+      if (retryCount < maxRetries && isActive) {
+        retryCount++;
+        var delay = Math.min(2000 * Math.pow(2, retryCount - 1), 30000);
+        setTimeout(function() {
+          startSSE(phase);
+        }, delay);
       }
     };
   }
