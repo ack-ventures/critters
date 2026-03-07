@@ -474,8 +474,16 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
       <span class="meta-sep">|</span>
       <button id="poll-btn" style="background:var(--accent);border:1px solid var(--border);color:var(--text);padding:4px 12px;border-radius:4px;cursor:pointer;font-size:0.85rem;">Poll Now</button>
       <span class="meta-sep">|</span>
+      <button id="new-critter-btn" style="background:var(--accent);border:1px solid var(--border);color:var(--text);padding:4px 12px;border-radius:4px;cursor:pointer;font-size:0.85rem;">+ New Critter</button>
+      <span class="meta-sep">|</span>
       <span id="refresh-countdown" class="meta">Refreshing in 30s</span>
     </div>
+  </div>
+
+  <div id="auth-prompt" style="display:none;background:var(--card-bg);border:1px solid var(--border);border-radius:6px;padding:8px 16px;margin-bottom:12px;">
+    <span style="color:var(--text-dim);margin-right:8px;">Dashboard token required:</span>
+    <input type="password" id="auth-token-input" placeholder="Enter token" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:4px;font-size:0.85rem;">
+    <button id="auth-save-btn" style="background:var(--accent);border:1px solid var(--border);color:var(--text);padding:4px 12px;border-radius:4px;cursor:pointer;font-size:0.85rem;margin-left:4px;">Save</button>
   </div>
 
 ${allTypes.length >= 2 ? `  <div class="type-filters">
@@ -816,8 +824,75 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="7" class="empty-stat
       </table>
     </div>
   </div>
+
+<div id="create-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;max-width:500px;width:90%;padding:24px;">
+    <h2 style="font-size:1.1rem;margin-bottom:16px;">Create Critter Ticket</h2>
+    <div id="create-error" style="display:none;background:rgba(233,69,96,0.15);border:1px solid var(--failure);border-radius:4px;padding:8px;margin-bottom:12px;font-size:0.85rem;color:var(--failure);"></div>
+    <div id="create-success" style="display:none;background:rgba(78,204,163,0.15);border:1px solid var(--success);border-radius:4px;padding:8px;margin-bottom:12px;font-size:0.85rem;color:var(--success);"></div>
+    <form id="create-form">
+      <div id="create-provider-wrap" style="margin-bottom:12px;">
+        <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Provider</label>
+        <select id="create-provider" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;"></select>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Team / Project</label>
+        <select id="create-team" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;" required></select>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Critter Type</label>
+        <select id="create-type" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;"></select>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Title</label>
+        <input type="text" id="create-title" required style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;" placeholder="Issue title">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Description</label>
+        <textarea id="create-description" rows="6" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;resize:vertical;font-family:inherit;" placeholder="Include repo: git@github.com:org/repo.git on its own line if no project mapping exists"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button type="button" id="create-cancel" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px 16px;border-radius:4px;cursor:pointer;font-size:0.85rem;">Cancel</button>
+        <button type="submit" id="create-submit" style="background:var(--success);border:none;color:#1a1a2e;padding:8px 16px;border-radius:4px;cursor:pointer;font-size:0.85rem;font-weight:600;">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
 var __dashboardToken = ${dashboardToken ? JSON.stringify(dashboardToken) : "null"};
+var paused = false;
+
+function getAuthHeaders() {
+  var token = __dashboardToken || localStorage.getItem('critters-token');
+  return token ? { 'Authorization': 'Bearer ' + token } : {};
+}
+
+function showAuthPrompt() {
+  var prompt = document.getElementById('auth-prompt');
+  if (prompt) prompt.style.display = 'block';
+}
+
+(function() {
+  var saveBtn = document.getElementById('auth-save-btn');
+  var tokenInput = document.getElementById('auth-token-input');
+  if (!saveBtn || !tokenInput) return;
+
+  saveBtn.addEventListener('click', function() {
+    var val = tokenInput.value.trim();
+    if (val) {
+      localStorage.setItem('critters-token', val);
+      document.getElementById('auth-prompt').style.display = 'none';
+    }
+  });
+
+  fetch('/api/v1/auth-check').then(function(r) { return r.json(); }).then(function(data) {
+    if (data.required && !__dashboardToken && !localStorage.getItem('critters-token')) {
+      showAuthPrompt();
+    }
+  }).catch(function() {});
+})();
+
 (function() {
   var table = document.querySelector('.table-section table');
   if (!table) return;
@@ -898,10 +973,7 @@ var __dashboardToken = ${dashboardToken ? JSON.stringify(dashboardToken) : "null
   btn.addEventListener('click', function() {
     btn.disabled = true;
     btn.textContent = 'Polling...';
-    var headers = {};
-    if (__dashboardToken) {
-      headers['Authorization'] = 'Bearer ' + __dashboardToken;
-    }
+    var headers = getAuthHeaders();
     fetch('/poll', { method: 'POST', headers: headers })
       .then(function(res) { return res.json(); })
       .then(function() {
@@ -926,7 +998,6 @@ var __dashboardToken = ${dashboardToken ? JSON.stringify(dashboardToken) : "null
   var INTERVAL = 30;
   var remaining = INTERVAL;
   var countdownEl = document.getElementById('refresh-countdown');
-  var paused = false;
 
   var filterInput = document.getElementById('activity-filter');
   if (filterInput) {
@@ -1015,6 +1086,156 @@ function fetchLogPreview(identifier) {
       contentEl.textContent = 'Waiting for logs...';
     });
 }
+
+(function() {
+  var modal = document.getElementById('create-modal');
+  var openBtn = document.getElementById('new-critter-btn');
+  var cancelBtn = document.getElementById('create-cancel');
+  var form = document.getElementById('create-form');
+  var providerWrap = document.getElementById('create-provider-wrap');
+  var providerSelect = document.getElementById('create-provider');
+  var teamSelect = document.getElementById('create-team');
+  var typeSelect = document.getElementById('create-type');
+  var errorEl = document.getElementById('create-error');
+  var successEl = document.getElementById('create-success');
+  var submitBtn = document.getElementById('create-submit');
+  var metadataCache = null;
+
+  function hideModal() {
+    modal.style.display = 'none';
+    paused = false;
+  }
+
+  function showModal() {
+    modal.style.display = 'flex';
+    paused = true;
+    errorEl.style.display = 'none';
+    successEl.style.display = 'none';
+    form.reset();
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Create';
+    loadMetadata();
+  }
+
+  openBtn.addEventListener('click', showModal);
+  cancelBtn.addEventListener('click', hideModal);
+  modal.addEventListener('click', function(e) { if (e.target === modal) hideModal(); });
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && modal.style.display !== 'none') hideModal(); });
+
+  function loadMetadata() {
+    if (metadataCache) { populateDropdowns(metadataCache); return; }
+    fetch('/api/v1/metadata').then(function(r) { return r.json(); }).then(function(data) {
+      metadataCache = data;
+      populateDropdowns(data);
+    }).catch(function() {
+      errorEl.textContent = 'Failed to load metadata';
+      errorEl.style.display = 'block';
+    });
+  }
+
+  function populateDropdowns(data) {
+    var providers = Object.keys(data.providers || {});
+    providerSelect.innerHTML = '';
+    providers.forEach(function(p) {
+      var opt = document.createElement('option');
+      opt.value = p; opt.textContent = p;
+      providerSelect.appendChild(opt);
+    });
+    providerWrap.style.display = providers.length > 1 ? '' : 'none';
+
+    typeSelect.innerHTML = '';
+    var types = data.critterTypes || [];
+    types.forEach(function(ct) {
+      var opt = document.createElement('option');
+      opt.value = ct.name; opt.textContent = ct.name + ' (' + ct.triggerLabel + ')';
+      typeSelect.appendChild(opt);
+    });
+
+    updateTeams(data);
+  }
+
+  providerSelect.addEventListener('change', function() {
+    if (metadataCache) updateTeams(metadataCache);
+  });
+
+  function updateTeams(data) {
+    var provider = providerSelect.value;
+    var teams = (data.providers[provider] || {}).teams || [];
+    teamSelect.innerHTML = '';
+    teams.forEach(function(t) {
+      var opt = document.createElement('option');
+      opt.value = t.id; opt.textContent = t.name + ' (' + t.key + ')';
+      teamSelect.appendChild(opt);
+    });
+  }
+
+  function escapeText(s) {
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    errorEl.style.display = 'none';
+    successEl.style.display = 'none';
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Creating...';
+
+    var body = {
+      provider: providerSelect.value,
+      teamId: teamSelect.value,
+      title: document.getElementById('create-title').value,
+      description: document.getElementById('create-description').value,
+      critterType: typeSelect.value
+    };
+
+    fetch('/api/v1/issues', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, getAuthHeaders()),
+      body: JSON.stringify(body)
+    })
+    .then(function(res) {
+      if (res.status === 401) {
+        localStorage.removeItem('critters-token');
+        showAuthPrompt();
+        throw new Error('Unauthorized - please set your token');
+      }
+      return res.json();
+    })
+    .then(function(data) {
+      if (data.success) {
+        var msg = 'Created ' + escapeText(data.identifier);
+        if (data.url) {
+          var a = document.createElement('a');
+          a.href = data.url;
+          a.target = '_blank';
+          a.rel = 'noopener';
+          a.textContent = 'View';
+          msg += ' \\u2014 ';
+          successEl.innerHTML = msg;
+          successEl.appendChild(a);
+        } else {
+          successEl.textContent = msg;
+        }
+        successEl.style.display = 'block';
+        fetch('/poll', { method: 'POST', headers: getAuthHeaders() }).catch(function() {});
+        setTimeout(hideModal, 5000);
+      } else {
+        errorEl.textContent = data.error || 'Unknown error';
+        errorEl.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create';
+      }
+    })
+    .catch(function(err) {
+      errorEl.textContent = err.message || 'Request failed';
+      errorEl.style.display = 'block';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Create';
+    });
+  });
+})();
 </script>
 </body>
 </html>`;

@@ -786,6 +786,8 @@ An HTTP server starts on `healthPort` (default 3847, set to 0 to disable).
 | `/api/v1/metadata` | GET | JSON metadata: providers with teams, critter types |
 | `/api/v1/issues` | POST | Create a critter issue. Body: `{ provider, teamId, title, description, critterType }` |
 
+The dashboard includes a "New Critter" button in the header that opens a modal form for creating critter tickets. The form populates provider, team, and critter type dropdowns from `/api/v1/metadata` and submits to `/api/v1/issues`. When `dashboardToken` is configured, the dashboard handles auth via `localStorage` — prompting users for a token if needed and including it in all POST requests.
+
 Metrics are stored in `~/.critters/metrics.jsonl` (JSONL format). Events: `task_started`, `task_completed`, `task_failed`, `review_started`, `review_completed`, `review_failed`, `poll_completed`.
 
 ## Remote Access (ngrok)
