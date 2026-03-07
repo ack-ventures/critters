@@ -9,6 +9,8 @@ services:
       - ~/.ssh:/root/.ssh:ro              # SSH keys for git clone
       - ~/.config/gh:/root/.config/gh:ro  # GitHub CLI auth
       - ~/.claude:/root/.claude             # Claude CLI auth
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN:-}
     ports:
       - "3847:3847"
     restart: unless-stopped
