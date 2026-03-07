@@ -38,6 +38,15 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
   && apt-get install -y --no-install-recommends gh \
   && rm -rf /var/lib/apt/lists/*
 
+# Install ngrok (for optional tunnel support)
+RUN curl -fsSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
+    | gpg --dearmor -o /usr/share/keyrings/ngrok-archive-keyring.gpg \
+  && echo "deb [signed-by=/usr/share/keyrings/ngrok-archive-keyring.gpg] https://ngrok-agent.s3.amazonaws.com buster main" \
+    > /etc/apt/sources.list.d/ngrok.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends ngrok \
+  && rm -rf /var/lib/apt/lists/*
+
 # Set default git identity for commits
 RUN git config --global user.name "Critters" \
   && git config --global user.email "critters@noreply"
