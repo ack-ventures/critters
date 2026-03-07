@@ -334,7 +334,7 @@ async function main() {
     }), metricsPath, {
       triggerPoll: () => watcher.triggerPoll(),
       triggerReviewPoll: () => watcher.triggerPoll(), // unified watcher handles both
-    }, config.workDir);
+    }, config.workDir, config.dashboardToken);
   }
 
   // Start tunnel if configured
@@ -365,7 +365,7 @@ async function main() {
   }
 
   // Config hot-reload watcher
-  const immutableFields = ["workDir", "healthPort", "tmuxSession"] as const;
+  const immutableFields = ["workDir", "healthPort", "tmuxSession", "dashboardToken"] as const;
   const resolvedPath = resolveConfigPath(configPath);
   const configWatcher = new ConfigWatcher(resolvedPath, (newConfig) => {
     // Preserve runtime flag

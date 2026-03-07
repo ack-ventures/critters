@@ -158,7 +158,7 @@ function inferType(m: MetricEvent): string {
   return m.critterType ?? (m.event.startsWith("review_") ? "review" : "create");
 }
 
-export function renderDashboard(metricsPath: string, status: HealthStatus, uptime: number, typeFilter?: string): string {
+export function renderDashboard(metricsPath: string, status: HealthStatus, uptime: number, typeFilter?: string, dashboardToken?: string): string {
   const allMetrics = getRecentMetrics(10000);
 
   // Extract unique types for filter buttons
@@ -817,6 +817,7 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="7" class="empty-stat
     </div>
   </div>
 <script>
+var __dashboardToken = ${dashboardToken ? JSON.stringify(dashboardToken) : "null"};
 (function() {
   var table = document.querySelector('.table-section table');
   if (!table) return;
@@ -897,7 +898,11 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="7" class="empty-stat
   btn.addEventListener('click', function() {
     btn.disabled = true;
     btn.textContent = 'Polling...';
-    fetch('/poll', { method: 'POST' })
+    var headers = {};
+    if (__dashboardToken) {
+      headers['Authorization'] = 'Bearer ' + __dashboardToken;
+    }
+    fetch('/poll', { method: 'POST', headers: headers })
       .then(function(res) { return res.json(); })
       .then(function() {
         btn.textContent = 'Triggered!';

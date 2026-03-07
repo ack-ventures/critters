@@ -1,4 +1,5 @@
 import { statSync } from "node:fs";
+import { checkAuth } from "./auth.js";
 import { renderDashboard, renderLogPage } from "./dashboard.js";
 import { formatToolUse, formatUserEvent, readLogTail, resolveLogFile, resolveWorkDirForIdentifier, stripAnsi } from "./log-resolver.js";
 import { log } from "./logger.js";
@@ -36,6 +37,7 @@ export function startHealthServer(
     triggerReviewPoll?: () => Promise<number>;
   },
   workDir?: string,
+  dashboardToken?: string,
 ): { stop: () => void } {
   const startTime = Date.now();
 
@@ -83,7 +85,7 @@ export function startHealthServer(
         const status = getStatus();
         const uptime = Date.now() - startTime;
         const typeFilter = url.searchParams.get("type") || undefined;
-        const html = renderDashboard(metricsPath ?? "", status, uptime, typeFilter);
+        const html = renderDashboard(metricsPath ?? "", status, uptime, typeFilter, dashboardToken);
         return new Response(html, {
           headers: { "Content-Type": "text/html; charset=utf-8" },
         });
@@ -93,6 +95,8 @@ export function startHealthServer(
         if (req.method !== "POST") {
           return new Response("Method Not Allowed", { status: 405 });
         }
+        const authResp = checkAuth(req, dashboardToken);
+        if (authResp) return authResp;
         if (!triggers?.triggerPoll) {
           return Response.json({ error: "Poll trigger not available" }, { status: 503 });
         }
@@ -104,6 +108,8 @@ export function startHealthServer(
         if (req.method !== "POST") {
           return new Response("Method Not Allowed", { status: 405 });
         }
+        const authResp = checkAuth(req, dashboardToken);
+        if (authResp) return authResp;
         if (!triggers?.triggerReviewPoll) {
           return Response.json({ error: "Review poll trigger not available" }, { status: 503 });
         }
@@ -269,6 +275,10 @@ export function startHealthServer(
         return new Response(html, {
           headers: { "Content-Type": "text/html; charset=utf-8" },
         });
+      }
+
+      if (url.pathname === "/api/v1/auth-check") {
+        return Response.json({ required: !!dashboardToken });
       }
 
       return new Response("Not Found", { status: 404 });

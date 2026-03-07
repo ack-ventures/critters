@@ -560,6 +560,7 @@ critterTypes:
 | `reviewTimeoutMinutes` | 15 | Timeout per review (increase for slow CI) |
 | `maxReviewTurns` | 30 | Max Claude turns per review |
 | `healthPort` | 3847 | HTTP server port for dashboard and health checks (0 to disable) |
+| `dashboardToken` | — | Shared secret for dashboard POST endpoints (also reads `DASHBOARD_TOKEN` env var) |
 | `maxLogSizeMb` | 10 | Max log file size in MB before rotation (with `--no-tmux`) |
 | `jiraStatusMap` | {} | Map critter status names to Jira status names (e.g., `"Todo": "To Do"`) |
 | `hooks` | {} | Shell commands run on lifecycle events |
@@ -649,6 +650,7 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 - `SLACK_WEBHOOK_URL` (optional) — for completion notifications
 - `SLACK_BOT_TOKEN` (optional) — Slack bot token (`xoxb-...`) for threaded notifications
 - `SLACK_CHANNEL` (optional, required with `SLACK_BOT_TOKEN`) — Slack channel ID for bot notifications
+- `DASHBOARD_TOKEN` (optional) — bearer token for dashboard POST endpoints
 
 Only the credentials for providers actually referenced by your `critterTypes` are required. A Linear-only config doesn't need Jira vars and vice versa.
 
@@ -780,6 +782,7 @@ An HTTP server starts on `healthPort` (default 3847, set to 0 to disable).
 | `/metrics` | GET | JSON array of recent metric events (last 100) |
 | `/poll` | POST | Trigger an immediate critter poll cycle |
 | `/review-poll` | POST | Trigger an immediate review poll cycle |
+| `/api/v1/auth-check` | GET | JSON `{ required: boolean }` — whether auth is configured |
 
 Metrics are stored in `~/.critters/metrics.jsonl` (JSONL format). Events: `task_started`, `task_completed`, `task_failed`, `review_started`, `review_completed`, `review_failed`, `poll_completed`.
 

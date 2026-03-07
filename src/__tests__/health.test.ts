@@ -273,6 +273,86 @@ describe("POST /review-poll", () => {
   });
 });
 
+describe("auth", () => {
+  test("POST /poll returns 401 without token when dashboardToken is configured", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    server = startHealthServer(port, defaultStatus, undefined, {
+      triggerPoll: async () => 0,
+      triggerReviewPoll: async () => 0,
+    }, undefined, "secret-token");
+
+    const res = await fetch(`http://localhost:${port}/poll`, { method: "POST" });
+    expect(res.status).toBe(401);
+  });
+
+  test("POST /poll returns 200 with correct bearer token", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    server = startHealthServer(port, defaultStatus, undefined, {
+      triggerPoll: async () => 2,
+      triggerReviewPoll: async () => 0,
+    }, undefined, "secret-token");
+
+    const res = await fetch(`http://localhost:${port}/poll`, {
+      method: "POST",
+      headers: { Authorization: "Bearer secret-token" },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ triggered: true, issuesFound: 2 });
+  });
+
+  test("POST /poll returns 401 with wrong bearer token", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    server = startHealthServer(port, defaultStatus, undefined, {
+      triggerPoll: async () => 0,
+      triggerReviewPoll: async () => 0,
+    }, undefined, "secret-token");
+
+    const res = await fetch(`http://localhost:${port}/poll`, {
+      method: "POST",
+      headers: { Authorization: "Bearer wrong-token" },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  test("POST /poll works without auth when dashboardToken is not set", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    server = startHealthServer(port, defaultStatus, undefined, {
+      triggerPoll: async () => 1,
+      triggerReviewPoll: async () => 0,
+    });
+
+    const res = await fetch(`http://localhost:${port}/poll`, { method: "POST" });
+    expect(res.status).toBe(200);
+  });
+
+  test("GET /api/v1/auth-check returns required: true when token set", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, "secret-token");
+
+    const res = await fetch(`http://localhost:${port}/api/v1/auth-check`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ required: true });
+  });
+
+  test("GET /api/v1/auth-check returns required: false when token not set", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    server = startHealthServer(port, defaultStatus);
+
+    const res = await fetch(`http://localhost:${port}/api/v1/auth-check`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ required: false });
+  });
+});
+
 describe("stop()", () => {
   test("shuts down the server", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));

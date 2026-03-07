@@ -51,6 +51,7 @@ export interface Config {
   maxReviewTurns: number;
   maxLogSizeMb: number;
   healthPort: number;
+  dashboardToken?: string;
   metricsRetentionDays: number;
   linearApiKey?: string;
   jiraHost?: string;
