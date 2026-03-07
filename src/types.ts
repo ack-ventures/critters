@@ -22,6 +22,12 @@ export interface AutoRetryConfig {
   maxDelaySeconds: number;
 }
 
+export interface TunnelConfig {
+  enabled?: boolean;
+  auth?: string;       // "user:password" for basic auth
+  domain?: string;     // static ngrok domain
+}
+
 export interface Config {
   pollIntervalSeconds: number;
   concurrency: number;
@@ -66,6 +72,7 @@ export interface Config {
     onExecutionStarted?: string;
   };
   autoRetry?: AutoRetryConfig;
+  tunnel?: TunnelConfig;
   mcpConfig?: string | string[];
   strictMcpConfig?: boolean;
   provider: "linear" | "jira";

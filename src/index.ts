@@ -16,6 +16,7 @@ import { checkPrerequisites } from "./prerequisites.js";
 import { runStatus } from "./status.js";
 import { createTracker } from "./tracker/index.js";
 import type { IssueTracker } from "./tracker/types.js";
+import type { TunnelHandle } from "./tunnel.js";
 import type { Config } from "./types.js";
 import { UnifiedSpawner } from "./unified-spawner.js";
 import { UnifiedWatcher } from "./unified-watcher.js";
@@ -336,6 +337,16 @@ async function main() {
     }, config.workDir);
   }
 
+  // Start tunnel if configured
+  let tunnelHandle: TunnelHandle | null = null;
+  if (config.tunnel?.enabled && config.healthPort !== 0) {
+    const { startTunnel } = await import("./tunnel.js");
+    tunnelHandle = await startTunnel(config.healthPort, config.tunnel);
+    if (tunnelHandle) {
+      log(`Tunnel active: ${tunnelHandle.url}`);
+    }
+  }
+
   // Periodic main pane title update with uptime + active count
   let titleInterval: ReturnType<typeof setInterval> | null = null;
   if (!noTmux) {
@@ -366,6 +377,12 @@ async function main() {
         log(`Warning: '${field}' cannot be changed at runtime (ignoring ${JSON.stringify(config[field])} → ${JSON.stringify(newConfig[field])})`);
         (newConfig as unknown as Record<string, unknown>)[field] = config[field];
       }
+    }
+
+    // Tunnel config is immutable at runtime (ngrok is a long-lived subprocess)
+    if (newConfig.tunnel?.enabled !== config.tunnel?.enabled) {
+      log("Warning: 'tunnel.enabled' cannot be changed at runtime — restart the daemon to apply");
+      newConfig.tunnel = config.tunnel;
     }
 
     // Check if new providers are needed
@@ -410,6 +427,7 @@ async function main() {
   // Signal handlers
   const shutdown = () => {
     log("Shutting down...");
+    tunnelHandle?.stop();
     configWatcher.stop();
     if (titleInterval) clearInterval(titleInterval);
     healthServer?.stop();

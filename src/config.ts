@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { parse as parseYaml } from "yaml";
 import { type CritterTypeConfig, parseCritterTypes as parseCritterTypesFromYaml, synthesizeDefaultTypes, validateCritterType } from "./critter-type.js";
-import type { AutoRetryConfig, Config, RepoConfig } from "./types.js";
+import { log } from "./logger.js";
+import type { AutoRetryConfig, Config, RepoConfig, TunnelConfig } from "./types.js";
 
 export function validateWorkDir(workDir: string): void {
   const resolved = workDir.startsWith("/") ? workDir : `${process.cwd()}/${workDir}`;
@@ -119,6 +120,8 @@ export function loadConfig(configPath?: string): Config {
   mkdirSync(workDir, { recursive: true });
   const resolvedWorkDir = realpathSync(workDir);
 
+  const tunnel = yaml.tunnel as TunnelConfig | undefined;
+
   const provider = ((yaml.provider as string) ?? "linear") as "linear" | "jira";
 
   const config: Config = {
@@ -156,6 +159,7 @@ export function loadConfig(configPath?: string): Config {
     costAlertThreshold: (yaml.costAlertThreshold as number) ?? undefined,
     hooks,
     autoRetry,
+    tunnel,
     mcpConfig: (yaml.mcpConfig as string | string[]) ?? undefined,
     strictMcpConfig: (yaml.strictMcpConfig as boolean) ?? undefined,
     provider,
@@ -313,6 +317,14 @@ function validateConfig(config: Config): void {
   }
   if (config.slackBotToken && !config.slackChannel) {
     throw new Error("SLACK_CHANNEL must be set when SLACK_BOT_TOKEN is configured");
+  }
+  if (config.tunnel?.enabled && config.tunnel?.auth) {
+    if (!/^[^:]+:.+$/.test(config.tunnel.auth)) {
+      throw new Error(`Invalid config: tunnel.auth must be in "user:password" format, got "${config.tunnel.auth}"`);
+    }
+  }
+  if (config.tunnel?.enabled && config.healthPort === 0) {
+    log("Warning: tunnel.enabled is true but healthPort is 0 — no tunnel will be started");
   }
   validateRepoUrls(config.repos, config.teamRepos);
   const credErrors = checkProviderCredentials(config.critterTypes, config.provider, {
