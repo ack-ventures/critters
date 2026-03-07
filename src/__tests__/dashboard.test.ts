@@ -214,6 +214,24 @@ describe("renderDashboard", () => {
     expect(html).toContain(".bar-stack { display: flex; flex-direction: column-reverse; width: 100%; align-items: center; height: 100%; }");
   });
 
+  test("contains New Critter button", () => {
+    const html = renderDashboard("", defaultStatus(), 0);
+    expect(html).toContain('id="new-critter-btn"');
+    expect(html).toContain("New Critter");
+  });
+
+  test("contains create modal markup", () => {
+    const html = renderDashboard("", defaultStatus(), 0);
+    expect(html).toContain('id="create-modal"');
+    expect(html).toContain('id="create-form"');
+    expect(html).toContain('id="create-title"');
+  });
+
+  test("contains auth check script", () => {
+    const html = renderDashboard("", defaultStatus(), 0);
+    expect(html).toContain("api/v1/auth-check");
+  });
+
   test("renders active critters detail table when critters are running", () => {
     const status = defaultStatus();
     status.activeCritters = 1;
