@@ -1,6 +1,6 @@
 import { statSync } from "node:fs";
 import { renderDashboard, renderLogPage } from "./dashboard.js";
-import { readLogTail, resolveLogFile, resolveWorkDirForIdentifier, stripAnsi } from "./log-resolver.js";
+import { formatToolUse, formatUserEvent, readLogTail, resolveLogFile, resolveWorkDirForIdentifier, stripAnsi } from "./log-resolver.js";
 import { log } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
 import type { ActiveCritterDetail } from "./types.js";
@@ -191,11 +191,18 @@ export function startHealthServer(
                               if (block.type === "text" && block.text) {
                                 send(stripAnsi(block.text));
                               } else if (block.type === "tool_use") {
-                                send(stripAnsi(`[Tool: ${block.name}]`));
+                                send(formatToolUse(block));
                               }
                             }
                           } else if (obj.type === "result") {
                             send(`[Result: cost=$${(obj.cost_usd ?? 0).toFixed(2)}, turns=${obj.num_turns ?? "?"}]`);
+                          } else if (obj.type === "user") {
+                            const userLine = formatUserEvent(obj);
+                            if (userLine) {
+                              for (const ul of userLine.split("\n")) {
+                                send(ul);
+                              }
+                            }
                           }
                         } catch {
                           send(stripAnsi(line));
