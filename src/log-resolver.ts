@@ -116,6 +116,83 @@ export function resolveAllPhases(dir: string): Array<{ phase: string; logFile: s
   return results;
 }
 
+export function formatToolUse(block: { name: string; input?: Record<string, unknown> }): string {
+  const name = block.name;
+  const input = block.input ?? {};
+
+  if (name === "Read" || name === "Write" || name === "Edit") {
+    return `→ ${name} ${input.file_path ?? ""}`;
+  }
+  if (name === "Bash") {
+    return `→ Bash $ ${input.command ?? ""}`;
+  }
+  if (name === "Glob") {
+    const pattern = input.pattern ?? "";
+    const path = input.path ? ` in ${input.path}` : "";
+    return `→ Glob ${pattern}${path}`;
+  }
+  if (name === "Grep") {
+    const pattern = input.pattern ?? "";
+    const path = input.path ? ` in ${input.path}` : "";
+    return `→ Grep /${pattern}/${path}`;
+  }
+  if (name === "Task") {
+    return `→ Task (${input.description ?? ""})`;
+  }
+  return `→ ${name}`;
+}
+
+export function formatUserEvent(obj: Record<string, unknown>): string | null {
+  const toolResult = obj.tool_use_result as Record<string, unknown> | undefined;
+
+  if (toolResult && typeof toolResult === "object") {
+    const lines: string[] = [];
+
+    if (toolResult.stdout || toolResult.stderr) {
+      // Bash output
+      if (typeof toolResult.stdout === "string" && toolResult.stdout.length > 0) {
+        const stdoutLines = toolResult.stdout.split("\n").filter((l: string) => l.length > 0);
+        if (stdoutLines.length > 10) {
+          lines.push(...stdoutLines.slice(0, 10), `  ... (${stdoutLines.length} lines total)`);
+        } else {
+          lines.push(...stdoutLines);
+        }
+      }
+      if (typeof toolResult.stderr === "string" && toolResult.stderr.length > 0) {
+        const stderrLines = toolResult.stderr.split("\n").filter((l: string) => l.length > 0);
+        const truncated = stderrLines.length > 10
+          ? [...stderrLines.slice(0, 10), `  ... (${stderrLines.length} lines total)`]
+          : stderrLines;
+        lines.push(...truncated.map((l: string) => `stderr: ${l}`));
+      }
+      return lines.length > 0 ? lines.join("\n") : null;
+    }
+
+    if (toolResult.type === "create") {
+      return `✓ Created ${toolResult.filePath ?? ""}`;
+    }
+
+    if (toolResult.status === "completed") {
+      return `✓ Subagent done (${toolResult.totalTokens ?? 0} tokens)`;
+    }
+
+    return null;
+  }
+
+  // Check for tool errors in message.content
+  const message = obj.message as { content?: Array<Record<string, unknown>> } | undefined;
+  if (message?.content) {
+    const errors = message.content
+      .filter((c) => c.type === "tool_result" && c.is_error === true)
+      .map((c) => String(c.content ?? "error"));
+    if (errors.length > 0) {
+      return `✗ ${errors.join(", ").slice(0, 200)}`;
+    }
+  }
+
+  return null;
+}
+
 export function readLogTail(logFile: string, lines: number): string {
   try {
     const content = readFileSync(logFile, "utf-8");
@@ -138,11 +215,16 @@ function extractReadableContent(jsonLines: string[]): string {
           if (block.type === "text" && block.text) {
             output.push(stripAnsi(block.text));
           } else if (block.type === "tool_use") {
-            output.push(stripAnsi(`[Tool: ${block.name}]`));
+            output.push(formatToolUse(block));
           }
         }
       } else if (obj.type === "result" && obj.result) {
         output.push(stripAnsi(`[Result: cost=$${(obj.cost_usd ?? 0).toFixed(2)}, turns=${obj.num_turns ?? "?"}]`));
+      } else if (obj.type === "user") {
+        const userLine = formatUserEvent(obj);
+        if (userLine) {
+          output.push(userLine);
+        }
       }
     } catch {
       // Not valid JSON, include raw line stripped of ANSI
