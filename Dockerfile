@@ -4,6 +4,7 @@ WORKDIR /app
 COPY package.json bun.lock tsconfig.json ./
 RUN bun install --frozen-lockfile
 COPY src/ src/
+COPY CLAUDE.md ./
 
 ARG VERSION=dev
 RUN echo "export const VERSION = \"${VERSION}\";" > src/version.ts
