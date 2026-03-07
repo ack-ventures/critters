@@ -824,6 +824,41 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="7" class="empty-stat
       </table>
     </div>
   </div>
+
+<div id="create-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;max-width:500px;width:90%;padding:24px;">
+    <h2 style="font-size:1.1rem;margin-bottom:16px;">Create Critter Ticket</h2>
+    <div id="create-error" style="display:none;background:rgba(233,69,96,0.15);border:1px solid var(--failure);border-radius:4px;padding:8px;margin-bottom:12px;font-size:0.85rem;color:var(--failure);"></div>
+    <div id="create-success" style="display:none;background:rgba(78,204,163,0.15);border:1px solid var(--success);border-radius:4px;padding:8px;margin-bottom:12px;font-size:0.85rem;color:var(--success);"></div>
+    <form id="create-form">
+      <div id="create-provider-wrap" style="margin-bottom:12px;">
+        <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Provider</label>
+        <select id="create-provider" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;"></select>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Team / Project</label>
+        <select id="create-team" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;" required></select>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Critter Type</label>
+        <select id="create-type" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;"></select>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Title</label>
+        <input type="text" id="create-title" required style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;" placeholder="Issue title">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Description</label>
+        <textarea id="create-description" rows="6" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;resize:vertical;font-family:inherit;" placeholder="Include repo: git@github.com:org/repo.git on its own line if no project mapping exists"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button type="button" id="create-cancel" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px 16px;border-radius:4px;cursor:pointer;font-size:0.85rem;">Cancel</button>
+        <button type="submit" id="create-submit" style="background:var(--success);border:none;color:#1a1a2e;padding:8px 16px;border-radius:4px;cursor:pointer;font-size:0.85rem;font-weight:600;">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
 var __dashboardToken = ${dashboardToken ? JSON.stringify(dashboardToken) : "null"};
 var paused = false;
@@ -1202,40 +1237,6 @@ function fetchLogPreview(identifier) {
   });
 })();
 </script>
-
-<div id="create-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center;">
-  <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;max-width:500px;width:90%;padding:24px;">
-    <h2 style="font-size:1.1rem;margin-bottom:16px;">Create Critter Ticket</h2>
-    <div id="create-error" style="display:none;background:rgba(233,69,96,0.15);border:1px solid var(--failure);border-radius:4px;padding:8px;margin-bottom:12px;font-size:0.85rem;color:var(--failure);"></div>
-    <div id="create-success" style="display:none;background:rgba(78,204,163,0.15);border:1px solid var(--success);border-radius:4px;padding:8px;margin-bottom:12px;font-size:0.85rem;color:var(--success);"></div>
-    <form id="create-form">
-      <div id="create-provider-wrap" style="margin-bottom:12px;">
-        <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Provider</label>
-        <select id="create-provider" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;"></select>
-      </div>
-      <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Team / Project</label>
-        <select id="create-team" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;" required></select>
-      </div>
-      <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Critter Type</label>
-        <select id="create-type" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;"></select>
-      </div>
-      <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Title</label>
-        <input type="text" id="create-title" required style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;" placeholder="Issue title">
-      </div>
-      <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Description</label>
-        <textarea id="create-description" rows="6" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;resize:vertical;font-family:inherit;" placeholder="Include repo: git@github.com:org/repo.git on its own line if no project mapping exists"></textarea>
-      </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end;">
-        <button type="button" id="create-cancel" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px 16px;border-radius:4px;cursor:pointer;font-size:0.85rem;">Cancel</button>
-        <button type="submit" id="create-submit" style="background:var(--success);border:none;color:#1a1a2e;padding:8px 16px;border-radius:4px;cursor:pointer;font-size:0.85rem;font-weight:600;">Create</button>
-      </div>
-    </form>
-  </div>
-</div>
 </body>
 </html>`;
 }
