@@ -83,6 +83,7 @@ export function loadConfig(configPath?: string): Config {
   const slackWebhookUrl = process.env.SLACK_WEBHOOK_URL || undefined;
   const slackBotToken = process.env.SLACK_BOT_TOKEN || undefined;
   const slackChannel = process.env.SLACK_CHANNEL || undefined;
+  const dashboardToken = (yaml.dashboardToken as string) ?? process.env.DASHBOARD_TOKEN ?? undefined;
 
   const repos: Record<string, RepoConfig> = {};
   if (yaml.repos && typeof yaml.repos === "object") {
@@ -145,6 +146,7 @@ export function loadConfig(configPath?: string): Config {
     maxReviewTurns: (yaml.maxReviewTurns as number) ?? 30,
     maxLogSizeMb: (yaml.maxLogSizeMb as number) ?? 10,
     healthPort: (yaml.healthPort as number) ?? 3847,
+    dashboardToken,
     metricsRetentionDays: (yaml.metricsRetentionDays as number) ?? 90,
     repos,
     teamRepos,
