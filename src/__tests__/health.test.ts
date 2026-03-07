@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { type HealthStatus, resetMetricsSummaryCache, startHealthServer } from "../health.js";
+import type { CritterTypeConfig } from "../critter-type.js";
+import { type HealthStatus, resetMetadataCache, resetMetricsSummaryCache, startHealthServer } from "../health.js";
 import { initMetrics, recordMetric } from "../metrics.js";
+import type { IssueTracker } from "../tracker/types.js";
 import { createTempDir } from "./helpers.js";
 
 let tempDir: string;
@@ -25,6 +27,7 @@ beforeEach(() => {
   tempDir = tmp.path;
   cleanup = tmp.cleanup;
   resetMetricsSummaryCache();
+  resetMetadataCache();
 });
 
 afterEach(() => {
@@ -350,6 +353,218 @@ describe("auth", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toEqual({ required: false });
+  });
+});
+
+// ── Mock helpers for metadata/issues tests ──────────────────────────────────
+
+function createMockTracker(overrides?: Partial<IssueTracker>): IssueTracker {
+  return {
+    provider: "linear",
+    init: async () => {},
+    findIssues: async () => [],
+    findIssueByIdentifier: async () => null,
+    updateStatus: async () => {},
+    comment: async () => {},
+    getComments: async () => [],
+    uploadAttachment: async () => null,
+    ensureStatus: async () => {},
+    ensureLabel: async () => {},
+    createIssue: async () => ({
+      id: "new-id",
+      identifier: "ACK-999",
+      url: "https://linear.app/test/ACK-999",
+    }),
+    listTeams: async () => [
+      { id: "team1", name: "Team Alpha", key: "TA" },
+    ],
+    ...overrides,
+  };
+}
+
+function createMockCritterType(overrides?: Partial<CritterTypeConfig>): CritterTypeConfig {
+  return {
+    name: "create",
+    trigger: { label: "Critter", status: "Todo" },
+    repo: { clone: true, branch: true },
+    phases: [{ name: "execution", prompt: "builtin:execution", model: "opus", maxTurns: 75, tools: "default" }],
+    outcomes: { success: { status: "In Review" } },
+    concurrency: 2,
+    timeoutMinutes: 30,
+    ...overrides,
+  };
+}
+
+describe("GET /api/v1/metadata", () => {
+  test("returns providers and critter types with mock trackers", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    const trackers = new Map([["linear", createMockTracker()]]);
+    const critterTypes = [createMockCritterType()];
+    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, undefined, {
+      trackers,
+      critterTypes,
+    });
+
+    const res = await fetch(`http://localhost:${port}/api/v1/metadata`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.providers.linear.teams).toEqual([{ id: "team1", name: "Team Alpha", key: "TA" }]);
+    expect(body.critterTypes).toEqual([
+      { name: "create", triggerLabel: "Critter", triggerStatus: "Todo", provider: "linear" },
+    ]);
+  });
+
+  test("returns empty providers when no context provided", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    server = startHealthServer(port, defaultStatus);
+
+    const res = await fetch(`http://localhost:${port}/api/v1/metadata`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.providers).toEqual({});
+    expect(body.critterTypes).toEqual([]);
+  });
+
+  test("uses defaultProvider for critter types without explicit provider", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    const trackers = new Map([["jira", createMockTracker({ provider: "jira" })]]);
+    const critterTypes = [createMockCritterType({ provider: undefined })];
+    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, undefined, {
+      trackers,
+      critterTypes,
+      defaultProvider: "jira",
+    });
+
+    const res = await fetch(`http://localhost:${port}/api/v1/metadata`);
+    const body = await res.json();
+    expect(body.critterTypes[0].provider).toBe("jira");
+  });
+
+  test("returns empty teams when tracker.listTeams throws", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    const trackers = new Map([["linear", createMockTracker({
+      listTeams: async () => { throw new Error("API error"); },
+    })]]);
+    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, undefined, {
+      trackers,
+      critterTypes: [],
+    });
+
+    const res = await fetch(`http://localhost:${port}/api/v1/metadata`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.providers.linear.teams).toEqual([]);
+  });
+});
+
+describe("POST /api/v1/issues", () => {
+  test("creates issue via tracker and returns identifier", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    const trackers = new Map([["linear", createMockTracker()]]);
+    const critterTypes = [createMockCritterType()];
+    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, undefined, {
+      trackers,
+      critterTypes,
+    });
+
+    const res = await fetch(`http://localhost:${port}/api/v1/issues`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "linear", teamId: "team1", title: "Test Issue", critterType: "create" }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ success: true, identifier: "ACK-999", url: "https://linear.app/test/ACK-999" });
+  });
+
+  test("returns 400 when title is missing", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    const trackers = new Map([["linear", createMockTracker()]]);
+    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, undefined, { trackers, critterTypes: [] });
+
+    const res = await fetch(`http://localhost:${port}/api/v1/issues`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "linear", teamId: "team1" }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("Title is required");
+  });
+
+  test("returns 400 when teamId is missing", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    const trackers = new Map([["linear", createMockTracker()]]);
+    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, undefined, { trackers, critterTypes: [] });
+
+    const res = await fetch(`http://localhost:${port}/api/v1/issues`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "linear", title: "Test" }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("Team is required");
+  });
+
+  test("returns 400 for unknown provider", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    const trackers = new Map([["linear", createMockTracker()]]);
+    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, undefined, { trackers, critterTypes: [] });
+
+    const res = await fetch(`http://localhost:${port}/api/v1/issues`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "github", teamId: "t1", title: "Test" }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain("github");
+  });
+
+  test("returns 401 when auth is required and missing", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    const trackers = new Map([["linear", createMockTracker()]]);
+    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, "secret-token", { trackers, critterTypes: [] });
+
+    const res = await fetch(`http://localhost:${port}/api/v1/issues`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "linear", teamId: "t1", title: "Test" }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  test("returns 405 for GET request", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    const trackers = new Map([["linear", createMockTracker()]]);
+    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, undefined, { trackers, critterTypes: [] });
+
+    const res = await fetch(`http://localhost:${port}/api/v1/issues`);
+    expect(res.status).toBe(405);
+  });
+
+  test("returns 503 when trackers not available", async () => {
+    initMetrics(join(tempDir, "metrics.jsonl"));
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    server = startHealthServer(port, defaultStatus);
+
+    const res = await fetch(`http://localhost:${port}/api/v1/issues`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "linear", teamId: "t1", title: "Test" }),
+    });
+    expect(res.status).toBe(503);
   });
 });
 

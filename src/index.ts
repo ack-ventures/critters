@@ -7,7 +7,7 @@ import { loadConfig, resolveConfigPath } from "./config.js";
 import { ConfigWatcher, diffConfigs } from "./config-watcher.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import { loadEnvFallback } from "./env.js";
-import { startHealthServer } from "./health.js";
+import { resetMetadataCache, startHealthServer } from "./health.js";
 import { runInit } from "./init.js";
 import { runInitRepo } from "./init-repo.js";
 import { enableJsonLogs, initFileLogging, log, logError } from "./logger.js";
@@ -321,6 +321,15 @@ async function main() {
 
   // Start health server
   let healthServer: { stop: () => void } | null = null;
+  const healthContext: {
+    trackers: Map<string, IssueTracker>;
+    critterTypes: CritterTypeConfig[];
+    defaultProvider: string;
+  } = {
+    trackers,
+    critterTypes: config.critterTypes,
+    defaultProvider: config.provider,
+  };
   if (config.healthPort !== 0) {
     const metricsPath = join(homedir(), ".critters", "metrics.jsonl");
     healthServer = startHealthServer(config.healthPort, () => ({
@@ -334,7 +343,7 @@ async function main() {
     }), metricsPath, {
       triggerPoll: () => watcher.triggerPoll(),
       triggerReviewPoll: () => watcher.triggerPoll(), // unified watcher handles both
-    }, config.workDir, config.dashboardToken);
+    }, config.workDir, config.dashboardToken, healthContext);
   }
 
   // Start tunnel if configured
@@ -416,6 +425,10 @@ async function main() {
       spawner.updateConfig(newConfig, newTrackers);
       trackers = newTrackers;
       config = newConfig;
+      healthContext.trackers = newTrackers;
+      healthContext.critterTypes = newConfig.critterTypes;
+      healthContext.defaultProvider = newConfig.provider;
+      resetMetadataCache();
       await ensureLabelsAndStatuses(config, trackers);
       log(summary);
     })().catch((err) => {
