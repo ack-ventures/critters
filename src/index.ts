@@ -272,7 +272,7 @@ async function main() {
   // Verify required CLI tools are available
   await checkPrerequisites();
 
-  if (noTmux) {
+  if (noTmux && !jsonLogs) {
     initFileLogging(config.maxLogSizeMb);
   }
 
