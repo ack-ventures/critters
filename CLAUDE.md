@@ -783,6 +783,8 @@ An HTTP server starts on `healthPort` (default 3847, set to 0 to disable).
 | `/poll` | POST | Trigger an immediate critter poll cycle |
 | `/review-poll` | POST | Trigger an immediate review poll cycle |
 | `/api/v1/auth-check` | GET | JSON `{ required: boolean }` — whether auth is configured |
+| `/api/v1/metadata` | GET | JSON metadata: providers with teams, critter types |
+| `/api/v1/issues` | POST | Create a critter issue. Body: `{ provider, teamId, title, description, critterType }` |
 
 Metrics are stored in `~/.critters/metrics.jsonl` (JSONL format). Events: `task_started`, `task_completed`, `task_failed`, `review_started`, `review_completed`, `review_failed`, `poll_completed`.
 

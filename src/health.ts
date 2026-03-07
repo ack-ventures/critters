@@ -1,9 +1,11 @@
 import { statSync } from "node:fs";
 import { checkAuth } from "./auth.js";
+import type { CritterTypeConfig } from "./critter-type.js";
 import { renderDashboard, renderLogPage } from "./dashboard.js";
 import { formatToolUse, formatUserEvent, readLogTail, resolveLogFile, resolveWorkDirForIdentifier, stripAnsi } from "./log-resolver.js";
 import { log } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
+import type { IssueTracker, TrackerTeam } from "./tracker/types.js";
 import type { ActiveCritterDetail } from "./types.js";
 import { getDisplayVersion } from "./updater.js";
 import { formatDuration } from "./utils.js";
@@ -28,6 +30,15 @@ export function resetMetricsSummaryCache(): void {
   cachedAt = 0;
 }
 
+let cachedMetadata: { providers: Record<string, { teams: TrackerTeam[] }>; critterTypes: { name: string; triggerLabel: string; triggerStatus: string; provider: string }[] } | null = null;
+let metadataCachedAt = 0;
+const METADATA_CACHE_TTL_MS = 60_000;
+
+export function resetMetadataCache(): void {
+  cachedMetadata = null;
+  metadataCachedAt = 0;
+}
+
 export function startHealthServer(
   port: number,
   getStatus: () => HealthStatus,
@@ -38,6 +49,11 @@ export function startHealthServer(
   },
   workDir?: string,
   dashboardToken?: string,
+  context?: {
+    trackers?: Map<string, IssueTracker>;
+    critterTypes?: CritterTypeConfig[];
+    defaultProvider?: string;
+  },
 ): { stop: () => void } {
   const startTime = Date.now();
 
@@ -279,6 +295,100 @@ export function startHealthServer(
 
       if (url.pathname === "/api/v1/auth-check") {
         return Response.json({ required: !!dashboardToken });
+      }
+
+      if (url.pathname === "/api/v1/metadata") {
+        const now = Date.now();
+        if (cachedMetadata && now - metadataCachedAt < METADATA_CACHE_TTL_MS) {
+          return Response.json(cachedMetadata);
+        }
+
+        const providers: Record<string, { teams: TrackerTeam[] }> = {};
+        if (context?.trackers) {
+          for (const [name, tracker] of context.trackers) {
+            try {
+              providers[name] = { teams: await tracker.listTeams() };
+            } catch {
+              providers[name] = { teams: [] };
+            }
+          }
+        }
+        const defaultProvider = context?.defaultProvider ?? "linear";
+        const critterTypes = (context?.critterTypes ?? []).map((ct) => ({
+          name: ct.name,
+          triggerLabel: ct.trigger.label,
+          triggerStatus: ct.trigger.status,
+          provider: ct.provider ?? defaultProvider,
+        }));
+
+        cachedMetadata = { providers, critterTypes };
+        metadataCachedAt = now;
+        return Response.json(cachedMetadata);
+      }
+
+      if (url.pathname === "/api/v1/issues") {
+        if (req.method !== "POST") {
+          return new Response("Method Not Allowed", { status: 405 });
+        }
+        const authResp = checkAuth(req, dashboardToken);
+        if (authResp) return authResp;
+
+        if (!context?.trackers) {
+          return Response.json({ error: "Trackers not available" }, { status: 503 });
+        }
+
+        let body: {
+          provider?: string;
+          teamId?: string;
+          title?: string;
+          description?: string;
+          critterType?: string;
+        };
+        try {
+          body = await req.json();
+        } catch {
+          return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+        }
+
+        if (!body.title?.trim()) {
+          return Response.json({ error: "Title is required" }, { status: 400 });
+        }
+        if (!body.teamId?.trim()) {
+          return Response.json({ error: "Team is required" }, { status: 400 });
+        }
+
+        const providerName = body.provider ?? context.defaultProvider ?? "linear";
+        const tracker = context.trackers.get(providerName);
+        if (!tracker) {
+          return Response.json(
+            { error: `No tracker configured for provider "${providerName}"` },
+            { status: 400 },
+          );
+        }
+
+        const critterType = context.critterTypes?.find(
+          (ct) => ct.name === body.critterType,
+        );
+        const triggerLabel = critterType?.trigger.label ?? "Critter";
+
+        const description = body.description?.trim() ?? "";
+
+        try {
+          const created = await tracker.createIssue({
+            teamId: body.teamId,
+            title: body.title.trim(),
+            description,
+            labelNames: [triggerLabel],
+          });
+          return Response.json({
+            success: true,
+            identifier: created.identifier,
+            url: created.url,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return Response.json({ success: false, error: message }, { status: 500 });
+        }
       }
 
       return new Response("Not Found", { status: 404 });
