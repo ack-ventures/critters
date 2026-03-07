@@ -1,7 +1,10 @@
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import type { CritterTypeConfig } from "./critter-type.js";
 import { STREAM_FILTER } from "./jq-filter.js";
 import { logTask, logTaskError, logTaskWarn } from "./logger.js";
-import type { SpawnResult } from "./types.js";
+import type { Config, SpawnResult } from "./types.js";
 import { formatDuration, runCommand, shellEscape, shortRepoName, sleep } from "./utils.js";
 
 // Rotating colors for critter panes — each critter gets a distinct look
@@ -30,6 +33,23 @@ function buildPaneLabel(identifier: string, title: string, phase: string, repoSh
   return base;
 }
 
+export function resolveMcpConfig(
+  critterType: CritterTypeConfig,
+  config: Config,
+): { mcpConfig: string[]; strictMcpConfig: boolean } {
+  const raw = critterType.mcpConfig ?? config.mcpConfig;
+  const strict = critterType.strictMcpConfig ?? config.strictMcpConfig ?? false;
+
+  if (!raw) return { mcpConfig: [], strictMcpConfig: strict };
+
+  const paths = Array.isArray(raw) ? raw : [raw];
+  const resolved = paths.map(p =>
+    p.startsWith("~") ? join(homedir(), p.slice(1)) : p
+  );
+
+  return { mcpConfig: resolved, strictMcpConfig: strict };
+}
+
 export async function spawnClaude(
   prompt: string,
   allowedTools: string[],
@@ -42,6 +62,8 @@ export async function spawnClaude(
   model: string,
   repoUrl: string,
   signal?: AbortSignal,
+  mcpConfig?: string[],
+  strictMcpConfig?: boolean,
 ): Promise<SpawnResult> {
   const repoShort = shortRepoName(repoUrl);
   const windowName = buildPaneLabel(identifier, title, phase, repoShort);
@@ -64,6 +86,11 @@ export async function spawnClaude(
 
   const errLog = `${workDir}/.critter-err-${phase}.log`;
 
+  const mcpArgs = mcpConfig && mcpConfig.length > 0
+    ? mcpConfig.map(p => ` \\\n  --mcp-config ${shellEscape(p)}`).join("")
+    : "";
+  const strictMcpArg = strictMcpConfig ? " \\\n  --strict-mcp-config" : "";
+
   // Write a bash script that streams Claude's output via stream-json + jq
   const currentPath = process.env.PATH || "/usr/local/bin:/usr/bin:/bin";
   const script = `#!/bin/bash
@@ -78,7 +105,7 @@ claude -p "$(cat ${shellEscape(promptFile)})" \\
   --allowedTools ${shellEscape(allowedTools.join(","))} \\
   --max-turns ${maxTurns} \\
   --verbose \\
-  --output-format stream-json \\
+  --output-format stream-json${mcpArgs}${strictMcpArg} \\
   2>${shellEscape(errLog)} | \\
   tee ${shellEscape(jsonLogFile)} | \\
   jq --unbuffered -cr --arg tool_color '${color.toolColor}' -f ${shellEscape(filterFile)}
@@ -254,6 +281,8 @@ export async function spawnClaudeSubprocess(
   model: string,
   repoUrl: string,
   signal?: AbortSignal,
+  mcpConfig?: string[],
+  strictMcpConfig?: boolean,
 ): Promise<SpawnResult> {
   const repoShort = shortRepoName(repoUrl);
   const promptFile = `${workDir}/.critter-prompt-${phase}`;
@@ -264,6 +293,11 @@ export async function spawnClaudeSubprocess(
   writeFileSync(promptFile, prompt);
 
   logTask(identifier, `Spawning Claude subprocess: ${buildPaneLabel(identifier, title, phase, repoShort)}`);
+
+  const subMcpArgs = mcpConfig && mcpConfig.length > 0
+    ? mcpConfig.map(p => ` --mcp-config ${shellEscape(p)}`).join("")
+    : "";
+  const subStrictMcpArg = strictMcpConfig ? " --strict-mcp-config" : "";
 
   const currentPath = process.env.PATH || "/usr/local/bin:/usr/bin:/bin";
   const bashCmd = [
@@ -276,6 +310,8 @@ export async function spawnClaudeSubprocess(
       ` --max-turns ${maxTurns}` +
       ` --verbose` +
       ` --output-format stream-json` +
+      subMcpArgs +
+      subStrictMcpArg +
       ` 2>${shellEscape(errLog)}` +
       ` >${shellEscape(jsonLogFile)}`,
   ].join("\n");

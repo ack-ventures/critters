@@ -41,6 +41,8 @@ export class PlanningPhaseRunner implements PhaseRunner {
           ctx.phase.model,
           task.repoUrl,
           signal,
+          ctx.mcpConfig,
+          ctx.strictMcpConfig,
         )
       : await spawnClaude(
           prompt,
@@ -54,6 +56,8 @@ export class PlanningPhaseRunner implements PhaseRunner {
           ctx.phase.model,
           task.repoUrl,
           signal,
+          ctx.mcpConfig,
+          ctx.strictMcpConfig,
         );
 
     validatePhaseResult(spawn, "planning");

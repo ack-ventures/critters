@@ -219,6 +219,37 @@ export function validateConfigFile(configPath?: string): { errors: string[]; war
     }
   }
 
+  // Validate MCP config
+  const globalMcp = yaml.mcpConfig;
+  if (globalMcp !== undefined) {
+    if (typeof globalMcp !== "string" && !Array.isArray(globalMcp)) {
+      errors.push("mcpConfig must be a string or array of strings");
+    }
+  }
+  if (yaml.strictMcpConfig !== undefined && typeof yaml.strictMcpConfig !== "boolean") {
+    errors.push("strictMcpConfig must be a boolean");
+  }
+
+  const mcpPaths: string[] = [];
+  if (typeof globalMcp === "string") mcpPaths.push(globalMcp);
+  else if (Array.isArray(globalMcp)) mcpPaths.push(...globalMcp as string[]);
+
+  for (const ct of critterTypes) {
+    if (ct.mcpConfig) {
+      const paths = Array.isArray(ct.mcpConfig) ? ct.mcpConfig : [ct.mcpConfig];
+      mcpPaths.push(...paths);
+    }
+  }
+
+  for (const mcpPath of mcpPaths) {
+    const filePath = mcpPath.startsWith("~")
+      ? join(homedir(), mcpPath.slice(1))
+      : mcpPath;
+    if (!existsSync(filePath)) {
+      warnings.push(`MCP config file not found: ${filePath} (may exist at runtime)`);
+    }
+  }
+
   // Check provider credentials
   const provider = (yaml.provider as string) ?? "linear";
   const credErrors = checkProviderCredentials(critterTypes, provider, {

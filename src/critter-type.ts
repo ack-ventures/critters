@@ -31,6 +31,8 @@ export interface CritterTypeConfig {
   timeoutMinutes: number;
   enrichment?: string;
   provider?: "linear" | "jira";
+  mcpConfig?: string | string[];
+  strictMcpConfig?: boolean;
 }
 
 /**
@@ -177,6 +179,8 @@ export function parseCritterType(name: string, raw: Record<string, unknown>): Cr
     timeoutMinutes: (raw.timeoutMinutes as number) ?? 30,
     enrichment: raw.enrichment as string | undefined,
     provider: raw.provider as "linear" | "jira" | undefined,
+    mcpConfig: raw.mcpConfig as string | string[] | undefined,
+    strictMcpConfig: raw.strictMcpConfig as boolean | undefined,
   };
 
   validateCritterType(ct);

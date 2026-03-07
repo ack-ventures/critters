@@ -156,6 +156,8 @@ export function loadConfig(configPath?: string): Config {
     costAlertThreshold: (yaml.costAlertThreshold as number) ?? undefined,
     hooks,
     autoRetry,
+    mcpConfig: (yaml.mcpConfig as string | string[]) ?? undefined,
+    strictMcpConfig: (yaml.strictMcpConfig as boolean) ?? undefined,
     provider,
     critterTypes: [], // populated below
   };

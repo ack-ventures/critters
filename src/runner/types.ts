@@ -15,6 +15,8 @@ export interface PhaseContext {
   signal: AbortSignal;
   /** Whether this is a resume of a previously failed attempt */
   resuming: boolean;
+  mcpConfig: string[];
+  strictMcpConfig: boolean;
 }
 
 export interface PhaseResult {

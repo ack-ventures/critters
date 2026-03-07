@@ -166,6 +166,8 @@ critterTypes:
 | `concurrency` | no | 2 | Max parallel instances of this type |
 | `timeoutMinutes` | no | 30 | Total timeout for all phases |
 | `enrichment` | no | — | `extractPrUrl` to extract PR URL from issue comments (for review types) |
+| `mcpConfig` | no | global `mcpConfig` | Path(s) to MCP config JSON file(s) — fully replaces global |
+| `strictMcpConfig` | no | global `strictMcpConfig` | Per-type override for strict MCP config mode |
 
 ### Phases
 
@@ -562,6 +564,8 @@ critterTypes:
 | `jiraStatusMap` | {} | Map critter status names to Jira status names (e.g., `"Todo": "To Do"`) |
 | `hooks` | {} | Shell commands run on lifecycle events |
 | `costAlertThreshold` | — | Cost (USD) per task that triggers a Slack alert |
+| `mcpConfig` | — | Path(s) to MCP config JSON file(s), applied to all critters |
+| `strictMcpConfig` | false | When true, passes `--strict-mcp-config` to prevent inheriting operator's MCP servers |
 | `metricsRetentionDays` | 90 | Days to retain metrics data before pruning |
 
 ### Allowed tools
