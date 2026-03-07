@@ -92,6 +92,10 @@ Settings live in `critters.config.yaml`:
 | `maxLogSizeMb` | 10 | Max log file size in MB before rotation (with `--no-tmux`) |
 | `jiraStatusMap` | {} | Map critter status names to Jira workflow status names |
 | `hooks` | {} | Shell commands run on lifecycle events (see below) |
+| `costAlertThreshold` | — | Cost (USD) per task that triggers a Slack alert |
+| `mcpConfig` | — | Path(s) to MCP config JSON file(s), applied to all critters |
+| `strictMcpConfig` | false | When true, passes `--strict-mcp-config` to prevent inheriting operator's MCP servers |
+| `metricsRetentionDays` | 90 | Days to retain metrics data before pruning |
 
 Per-repo tool overrides merge with the defaults:
 
