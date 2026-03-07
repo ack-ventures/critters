@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadConfig, resolveConfigPath } from "./config.js";
@@ -259,6 +260,9 @@ async function main() {
   }
 
   log(`Critters ${getDisplayVersion()} starting (${config.critterTypes.length} type${config.critterTypes.length === 1 ? "" : "s"})...`);
+  if (existsSync("/.dockerenv")) {
+    log("Running inside Docker container");
+  }
   const startTime = Date.now();
 
   if (!noTmux) {
