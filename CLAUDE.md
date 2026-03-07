@@ -561,6 +561,8 @@ critterTypes:
 | `maxLogSizeMb` | 10 | Max log file size in MB before rotation (with `--no-tmux`) |
 | `jiraStatusMap` | {} | Map critter status names to Jira status names (e.g., `"Todo": "To Do"`) |
 | `hooks` | {} | Shell commands run on lifecycle events |
+| `costAlertThreshold` | — | Cost (USD) per task that triggers a Slack alert |
+| `metricsRetentionDays` | 90 | Days to retain metrics data before pruning |
 
 ### Allowed tools
 
@@ -614,7 +616,9 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 | `src/logs.ts` | `critters logs` CLI command |
 | `src/cli-kickoff.ts` | `critters kickoff` CLI command |
 | `src/cli-clean.ts` | `critters clean` CLI command |
+| `src/cli-tail.ts` | `critters tail` CLI command |
 | `src/init-repo.ts` | `critters init-repo` CLI command |
+| `src/log-resolver.ts` | Log file reading, formatting, and `formatToolUse()` helper |
 | `src/repo-config.ts` | Per-repo `.critters.yaml` loader |
 | `src/types.ts` | Shared TypeScript type definitions |
 | `src/utils.ts` | Shared utility functions |
@@ -659,6 +663,7 @@ Usage: `critters [command] [flags]`
 | `logs <ID>` | View critter logs (`--phase planning\|execution\|review`, `--follow\|-f`) |
 | `retry <ID>` | Reset a failed critter to Todo for re-pickup (`--force` to override non-failed states) |
 | `kickoff` | Trigger an immediate poll cycle via the health server |
+| `tail` | Live-stream output from all active critters |
 | `list-types` | Show configured critter types |
 | `init` | Interactive setup — creates `~/.critters/` with config, env, and prompt template files |
 | `init-repo` | Scaffold `.critters.yaml` in the current repo |
