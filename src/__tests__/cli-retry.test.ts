@@ -17,6 +17,8 @@ const mockTracker: IssueTracker = {
   uploadAttachment: mock(() => Promise.resolve(null)),
   ensureStatus: mock(() => Promise.resolve()),
   ensureLabel: mock(() => Promise.resolve()),
+  createIssue: mock(() => Promise.reject(new Error("not implemented"))),
+  listTeams: mock(() => Promise.resolve([])),
 };
 
 // Mock createTracker to return our mock

@@ -2,7 +2,7 @@ import { LinearClient } from "@linear/sdk";
 import type { TriggerConfig } from "../critter-type.js";
 import { log, logError, logTaskError } from "../logger.js";
 import { withRetry } from "../retry.js";
-import type { IssueTracker, IssueTrackerIssue, TrackerTask } from "./types.js";
+import type { CreatedIssue, CreateIssueInput, IssueTracker, IssueTrackerIssue, TrackerTask, TrackerTeam } from "./types.js";
 
 const MAX_PAGINATED_ISSUES = 200;
 
@@ -277,6 +277,41 @@ export class LinearTracker implements IssueTracker {
       labels: labels.nodes.map((l) => l.name),
       groupId: team?.id ?? "",
     };
+  }
+
+  async listTeams(): Promise<TrackerTeam[]> {
+    const teams = await this.client.teams();
+    return teams.nodes.map((t) => ({ id: t.id, name: t.name, key: t.key }));
+  }
+
+  async createIssue(input: CreateIssueInput): Promise<CreatedIssue> {
+    const labelIds: string[] = [];
+    for (const labelName of input.labelNames) {
+      const labels = await this.client.issueLabels({
+        filter: { name: { eq: labelName } },
+      });
+      if (labels.nodes.length > 0) {
+        labelIds.push(labels.nodes[0].id);
+      } else {
+        const result = await this.client.createIssueLabel({
+          name: labelName,
+          color: "#8B5CF6",
+        });
+        const label = await result.issueLabel;
+        if (!label) throw new Error(`Failed to create label "${labelName}"`);
+        labelIds.push(label.id);
+      }
+    }
+
+    const result = await this.client.createIssue({
+      teamId: input.teamId,
+      title: input.title,
+      description: input.description,
+      labelIds,
+    });
+    const issue = await result.issue;
+    if (!issue) throw new Error("Failed to create issue");
+    return { id: issue.id, identifier: issue.identifier, url: issue.url };
   }
 
   /**
