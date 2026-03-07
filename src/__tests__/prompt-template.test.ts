@@ -6,6 +6,7 @@ import {
   getBuiltinPhaseName,
   isBuiltinPhase,
   resolvePrompt,
+  resolveSkills,
   resolveTools,
 } from "../prompt-template.js";
 import type { TrackerTask } from "../tracker/types.js";
@@ -163,6 +164,68 @@ describe("resolveTools", () => {
 
   test("throws for unknown preset", () => {
     expect(() => resolveTools("nonexistent" as any, config, task, null)).toThrow("Unknown tools preset");
+  });
+});
+
+describe("resolveSkills", () => {
+  test("returns empty string for undefined skills", () => {
+    expect(resolveSkills(undefined, {})).toBe("");
+  });
+
+  test("returns empty string for empty skills array", () => {
+    expect(resolveSkills([], {})).toBe("");
+  });
+
+  test("resolves a single skill file with separator", () => {
+    const skillFile = join(tempDir, "my-skill.md");
+    writeFileSync(skillFile, "Always use TypeScript strict mode.");
+
+    const result = resolveSkills([skillFile], {});
+    expect(result).toContain("## Skill: my-skill");
+    expect(result).toContain("Always use TypeScript strict mode.");
+    expect(result).toContain("---");
+  });
+
+  test("resolves multiple skills in order", () => {
+    const skill1 = join(tempDir, "first.md");
+    const skill2 = join(tempDir, "second.md");
+    writeFileSync(skill1, "First skill content");
+    writeFileSync(skill2, "Second skill content");
+
+    const result = resolveSkills([skill1, skill2], {});
+    const firstIdx = result.indexOf("First skill content");
+    const secondIdx = result.indexOf("Second skill content");
+    expect(firstIdx).toBeGreaterThan(-1);
+    expect(secondIdx).toBeGreaterThan(-1);
+    expect(firstIdx).toBeLessThan(secondIdx);
+    expect(result).toContain("## Skill: first");
+    expect(result).toContain("## Skill: second");
+  });
+
+  test("applies {{var}} substitution in skills", () => {
+    const skillFile = join(tempDir, "vars.md");
+    writeFileSync(skillFile, "Working on {{identifier}} in {{workDir}}");
+
+    const result = resolveSkills([skillFile], {
+      identifier: "ACK-99",
+      workDir: "/tmp/work",
+    });
+    expect(result).toContain("Working on ACK-99 in /tmp/work");
+  });
+
+  test("throws for missing skill file", () => {
+    expect(() => resolveSkills(["/tmp/nonexistent-skill.md"], {})).toThrow(
+      "Skill file not found",
+    );
+  });
+
+  test("strips extension from skill name", () => {
+    const skillFile = join(tempDir, "output-format.md");
+    writeFileSync(skillFile, "Format output as JSON.");
+
+    const result = resolveSkills([skillFile], {});
+    expect(result).toContain("## Skill: output-format");
+    expect(result).not.toContain("output-format.md");
   });
 });
 

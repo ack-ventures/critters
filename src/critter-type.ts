@@ -13,6 +13,7 @@ export interface PhaseConfig {
   model: string;
   maxTurns: number;
   tools: string | string[];
+  skills?: string[];
 }
 
 export interface OutcomeConfig {
@@ -155,6 +156,7 @@ export function parseCritterType(name: string, raw: Record<string, unknown>): Cr
     model: p.model as string,
     maxTurns: p.maxTurns as number,
     tools: (p.tools as string | string[]) ?? "default",
+    skills: p.skills as string[] | undefined,
   }));
 
   const ct: CritterTypeConfig = {

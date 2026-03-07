@@ -158,6 +158,7 @@ critterTypes:
 | `phases[].model` | yes | — | Claude model: `opus`, `sonnet`, or `haiku` |
 | `phases[].maxTurns` | yes | — | Max Claude API round-trips for this phase |
 | `phases[].tools` | no | `default` | `readonly`, `default`, `review`, or explicit array of tool names |
+| `phases[].skills` | no | — | Array of skill file paths appended to the phase prompt (supports `{{var}}` substitution) |
 | `outcomes.success` | no | — | Status to set on success. `comment: true` is now implicit for custom types |
 | `outcomes.failure` | no | — | Status to set on failure |
 | `outcomes.merged` | no | — | Status to set when a PR is merged (review type) |
@@ -171,6 +172,34 @@ critterTypes:
 Each type defines one or more phases. Built-in prompts (`builtin:planning`, `builtin:execution`, `builtin:review`) use dedicated runners with battle-tested logic. Custom prompts use the generic runner.
 
 Tool presets: `readonly` (planning tools), `default` (execution tools from config), `review` (review tools), or an explicit array of tool names.
+
+### Skills
+
+Skills are reusable prompt fragments (markdown files) that can be injected into any phase via the `skills` field. Each skill file is read, has `{{var}}` substitution applied (same variables as prompts), and is appended to the phase prompt with a separator:
+
+```
+---
+
+## Skill: <filename-without-extension>
+
+<skill content>
+```
+
+Skills are appended in array order after the main prompt content. For built-in phases, skills are appended after the built-in prompt. For custom phases, skills are appended before the report instruction.
+
+Recommended file locations: `~/.critters/skills/` for global skills, `.critters/skills/` for per-repo skills. Use `~`-prefixed or absolute paths for skills outside the cloned repo, since relative paths resolve against the daemon's CWD.
+
+Example:
+```yaml
+phases:
+  - name: audit
+    prompt: ~/.critters/prompts/code-audit.md
+    model: sonnet
+    maxTurns: 20
+    skills:
+      - ~/.critters/skills/output-format.md
+      - ~/.critters/skills/security-checklist.md
+```
 
 ### Testing custom types
 

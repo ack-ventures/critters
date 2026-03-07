@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { PhaseConfig } from "./critter-type.js";
 import {
   getExecutionAllowedTools,
@@ -100,6 +100,39 @@ export function resolveTools(
     tools.push(...repoConfig.extraAllowedTools);
   }
   return [...new Set(tools)];
+}
+
+/**
+ * Resolve skill files and return concatenated content with separators.
+ */
+export function resolveSkills(
+  skills: string[] | undefined,
+  vars: Record<string, string>,
+): string {
+  if (!skills || skills.length === 0) return "";
+
+  const parts: string[] = [];
+  for (const skillRef of skills) {
+    const filePath = skillRef.startsWith("~")
+      ? join(homedir(), skillRef.slice(1))
+      : skillRef;
+
+    if (!existsSync(filePath)) {
+      throw new Error(`Skill file not found: ${filePath}`);
+    }
+
+    let content = readFileSync(filePath, "utf-8");
+
+    // Apply {{var}} substitution
+    for (const [key, value] of Object.entries(vars)) {
+      content = content.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value);
+    }
+
+    const skillName = basename(filePath).replace(/\.[^.]+$/, "");
+    parts.push(`---\n\n## Skill: ${skillName}\n\n${content.trim()}`);
+  }
+
+  return "\n\n" + parts.join("\n\n");
 }
 
 /**
