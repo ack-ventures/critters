@@ -72,6 +72,34 @@ bun start
 # or: bun run src/index.ts
 ```
 
+## Docker
+
+```bash
+# Clone and configure
+git clone https://github.com/ack-ventures/critters && cd critters
+cp .env.example .env
+# Edit .env — set ANTHROPIC_API_KEY and LINEAR_API_KEY (and/or JIRA_* vars)
+
+# Start
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Dashboard at http://localhost:3847
+```
+
+The Docker image includes all runtime dependencies (Claude Code CLI, `gh`, `git`, `jq`).
+
+**Auth requirements:**
+- `ANTHROPIC_API_KEY` in `.env` — for the Claude Code CLI
+- `~/.ssh` — SSH keys for git clone (mounted read-only)
+- `~/.config/gh` — GitHub CLI auth tokens (mounted read-only; run `gh auth login` on the host first)
+
+For the pre-built image, replace `build: .` with `image: ghcr.io/ack-ventures/critters:latest` in `docker-compose.yaml`.
+
+> **Note:** The pre-built image is `linux/amd64` only. On ARM64 hosts (Apple Silicon, AWS Graviton), build locally with `docker compose build` instead.
+
 ## How it works
 
 1. **Watcher** polls your issue tracker (Linear and/or Jira) every 120 seconds for issues with the "Critter" label in "Todo" status.

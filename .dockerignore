@@ -1,0 +1,17 @@
+node_modules
+dist
+.env
+.git
+*.log
+dashboard-*.png
+test-configs
+.husky
+.claude
+biome.json
+.critter-*
+critters/
+LICENSE
+CONTRIBUTING.md
+CLAUDE.md
+README.md
+install.sh
