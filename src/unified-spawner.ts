@@ -445,7 +445,7 @@ export class UnifiedSpawner {
 
         // Handle review phase outcomes inline
         if (phase.prompt === "builtin:review") {
-          return this.handleReviewOutcome(task, critterType, phaseResult.data, phaseResult.spawn, taskStart, tracker);
+          return this.handleReviewOutcome(task, critterType, phaseResult.data, phaseResult.spawn, workDir, taskStart, tracker);
         }
 
         // Handle execution phase outcomes inline
@@ -494,6 +494,12 @@ export class UnifiedSpawner {
       } else {
         const modelSummary = [...new Set(critterType.phases.map(p => p.model))].join("/");
         await tracker.comment(task.id, `Critter [${critterType.name}] (${modelSummary}) completed in ${totalDuration}`);
+      }
+
+      // Upload full output logs
+      const { uploaded: logAttachments } = await this.uploadLogs(task, critterType, workDir, tracker);
+      if (logAttachments.length > 0) {
+        logTask(task.identifier, `Uploaded ${logAttachments.length} log files`);
       }
 
       const totalCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
@@ -567,7 +573,7 @@ export class UnifiedSpawner {
       }
 
       // Upload logs
-      const { uploaded: attachmentUrls, fallbackExcerpts } = await this.uploadFailureLogs(task, critterType, workDir, tracker);
+      const { uploaded: attachmentUrls, fallbackExcerpts } = await this.uploadLogs(task, critterType, workDir, tracker);
 
       // Read checkpoint file if it exists
       let checkpointStatus = "";
@@ -735,6 +741,12 @@ export class UnifiedSpawner {
     );
     logTask(task.identifier, `Success — PR: ${prUrl}`);
 
+    // Upload full output logs
+    const { uploaded: logAttachments } = await this.uploadLogs(task, critterType, workDir, tracker);
+    if (logAttachments.length > 0) {
+      logTask(task.identifier, `Uploaded ${logAttachments.length} log files`);
+    }
+
     const totalTurns = phaseResults.reduce((sum, r) => sum + (r.numTurns ?? 0), 0);
     const totalInput = phaseResults.reduce((sum, r) => sum + (r.inputTokens ?? 0), 0);
     const totalOutput = phaseResults.reduce((sum, r) => sum + (r.outputTokens ?? 0), 0);
@@ -774,6 +786,7 @@ export class UnifiedSpawner {
     critterType: CritterTypeConfig,
     data: Record<string, unknown>,
     spawn: SpawnResult,
+    workDir: string,
     taskStart: number,
     tracker: IssueTracker,
   ): Promise<TaskResult> {
@@ -796,6 +809,11 @@ export class UnifiedSpawner {
           formatReviewMerged(task.identifier, task.title, task.prUrl ?? "", totalDuration),
         );
         logTask(task.identifier, `Review complete — PR merged`);
+      }
+      // Upload full output logs
+      const { uploaded: logAttachments } = await this.uploadLogs(task, critterType, workDir, tracker);
+      if (logAttachments.length > 0) {
+        logTask(task.identifier, `Uploaded ${logAttachments.length} log files`);
       }
       recordMetric({
         timestamp: "",
@@ -835,6 +853,11 @@ export class UnifiedSpawner {
         formatReviewNeedsChanges(task.identifier, task.title, reason ?? "No reason provided", totalDuration),
       );
       logTask(task.identifier, `Review complete — needs changes: ${reason}`);
+      // Upload full output logs
+      const { uploaded: ncLogAttachments } = await this.uploadLogs(task, critterType, workDir, tracker);
+      if (ncLogAttachments.length > 0) {
+        logTask(task.identifier, `Uploaded ${ncLogAttachments.length} log files`);
+      }
       recordMetric({
         timestamp: "",
         event: "review_completed",
@@ -866,7 +889,7 @@ export class UnifiedSpawner {
     throw new Error("Could not determine review outcome (no REVIEW_RESULT sentinel and PR not merged)");
   }
 
-  private async uploadFailureLogs(
+  private async uploadLogs(
     task: TrackerTask,
     critterType: CritterTypeConfig,
     workDir: string,
@@ -876,20 +899,7 @@ export class UnifiedSpawner {
     let fallbackExcerpts = "";
     const MAX_LOG_SIZE = 5 * 1024 * 1024;
 
-    // Build log file list based on phases
-    const logFiles: Array<{ path: string; name: string }> = [];
-    for (const phase of critterType.phases) {
-      const phaseTag = phase.name === "planning" ? "plan" : phase.name === "execution" ? "exec" : phase.name;
-      logFiles.push(
-        { path: `${workDir}/.critter-output-${phaseTag}.json`, name: `${task.identifier}-${phaseTag}-output.txt` },
-        { path: `${workDir}/.critter-err-${phaseTag}.log`, name: `${task.identifier}-${phaseTag}-stderr.txt` },
-      );
-    }
-    // Always include plan and checkpoint files
-    logFiles.push(
-      { path: `${workDir}/critters/plans/${task.identifier}.md`, name: `${task.identifier}-plan.md` },
-      { path: `${workDir}/critters/plans/${task.identifier}.checkpoint.md`, name: `${task.identifier}-checkpoint.md` },
-    );
+    const logFiles = buildLogFileList(workDir, task.identifier, critterType.phases);
 
     for (const file of logFiles) {
       if (!existsSync(file.path)) continue;
@@ -1013,4 +1023,24 @@ export async function addPrTimeoutComment(
   } catch (err) {
     logTaskError(identifier, `Failed to comment on PR: ${err}`);
   }
+}
+
+export function buildLogFileList(
+  workDir: string,
+  identifier: string,
+  phases: Array<{ name: string }>,
+): Array<{ path: string; name: string }> {
+  const logFiles: Array<{ path: string; name: string }> = [];
+  for (const phase of phases) {
+    const phaseTag = phase.name === "planning" ? "plan" : phase.name === "execution" ? "exec" : phase.name;
+    logFiles.push(
+      { path: `${workDir}/.critter-output-${phaseTag}.json`, name: `${identifier}-${phaseTag}-output.txt` },
+      { path: `${workDir}/.critter-err-${phaseTag}.log`, name: `${identifier}-${phaseTag}-stderr.txt` },
+    );
+  }
+  logFiles.push(
+    { path: `${workDir}/critters/plans/${identifier}.md`, name: `${identifier}-plan.md` },
+    { path: `${workDir}/critters/plans/${identifier}.checkpoint.md`, name: `${identifier}-checkpoint.md` },
+  );
+  return logFiles;
 }
