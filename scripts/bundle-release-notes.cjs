@@ -30,6 +30,30 @@ try {
       };
     }
   });
+
+  // Generate notes for the current tag being built (not yet released)
+  const currentTag = process.env.GITHUB_REF_NAME;
+  if (currentTag && !notes.some((n) => n.tag === currentTag)) {
+    try {
+      const generated = execFileSync(
+        "gh",
+        ["api", "repos/{owner}/{repo}/releases/generate-notes",
+         "-f", `tag_name=${currentTag}`,
+         "--jq", ".body"],
+        { encoding: "utf8" }
+      ).trim();
+      notes.unshift({
+        tag: currentTag,
+        date: new Date().toISOString().split("T")[0],
+        name: currentTag,
+        body: generated,
+      });
+      console.log(`Generated notes for current tag ${currentTag}`);
+    } catch (e) {
+      console.log(`Could not generate notes for ${currentTag}: ${e.message}`);
+    }
+  }
+
   fs.writeFileSync(
     "src/release-notes.ts",
     "export const RELEASE_NOTES: Array<{ tag: string; date: string; name: string; body: string }> = " +
