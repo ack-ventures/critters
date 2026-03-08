@@ -41,7 +41,7 @@ jobs:
       - name: Bundle release notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node scripts/bundle-release-notes.js
+        run: node scripts/bundle-release-notes.cjs
 
       - name: Compile binary
         run: bun build --compile src/index.ts --outfile ${{ matrix.name }}
