@@ -7,7 +7,8 @@ services:
       - ~/.critters:/root/.critters       # config, metrics, state
       - ~/.ssh:/root/.ssh:ro              # SSH keys for git clone
       - ~/.config/gh:/root/.config/gh:ro  # GitHub CLI auth
-      - ~/.claude:/root/.claude             # Claude CLI auth
+      - ~/.claude:/root/.claude             # Claude CLI data
+      - ~/.claude.json:/root/.claude.json    # Claude CLI auth config
     environment:
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN:-}
     ports:
