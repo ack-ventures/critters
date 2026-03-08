@@ -30,7 +30,7 @@ export function resetMetricsSummaryCache(): void {
   cachedAt = 0;
 }
 
-let cachedMetadata: { providers: Record<string, { teams: TrackerTeam[] }>; critterTypes: { name: string; triggerLabel: string; triggerStatus: string; provider: string }[] } | null = null;
+let cachedMetadata: { providers: Record<string, { teams: TrackerTeam[] }>; critterTypes: { name: string; triggerLabel: string; triggerStatus: string; provider: string }[]; repos: Array<{ url: string; label: string }> } | null = null;
 let metadataCachedAt = 0;
 const METADATA_CACHE_TTL_MS = 60_000;
 
@@ -53,6 +53,8 @@ export function startHealthServer(
     trackers?: Map<string, IssueTracker>;
     critterTypes?: CritterTypeConfig[];
     defaultProvider?: string;
+    repos?: Record<string, { url: string; extraAllowedTools?: string[] }>;
+    teamRepos?: Record<string, string>;
   },
 ): { stop: () => void } {
   const startTime = Date.now();
@@ -321,7 +323,33 @@ export function startHealthServer(
           provider: ct.provider ?? defaultProvider,
         }));
 
-        cachedMetadata = { providers, critterTypes };
+        // Build deduplicated repos list
+        const repoUrls = new Set<string>();
+        const reposList: Array<{ url: string; label: string }> = [];
+
+        function extractLabel(url: string): string {
+          const match = url.match(/[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?$/);
+          return match ? match[1] : url;
+        }
+
+        if (context?.repos) {
+          for (const repo of Object.values(context.repos)) {
+            if (!repoUrls.has(repo.url)) {
+              repoUrls.add(repo.url);
+              reposList.push({ url: repo.url, label: extractLabel(repo.url) });
+            }
+          }
+        }
+        if (context?.teamRepos) {
+          for (const url of Object.values(context.teamRepos)) {
+            if (!repoUrls.has(url)) {
+              repoUrls.add(url);
+              reposList.push({ url, label: extractLabel(url) });
+            }
+          }
+        }
+
+        cachedMetadata = { providers, critterTypes, repos: reposList };
         metadataCachedAt = now;
         return Response.json(cachedMetadata);
       }
