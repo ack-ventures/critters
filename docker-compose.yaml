@@ -4,15 +4,12 @@ services:
     # or: image: ghcr.io/ack-ventures/critters:latest
     env_file: .env
     volumes:
-      - ./critters.config.yaml:/app/critters.config.yaml:ro
-      - critters-data:/root/.critters     # metrics, state
+      - ~/.critters:/root/.critters       # config, metrics, state
       - ~/.ssh:/root/.ssh:ro              # SSH keys for git clone
       - ~/.config/gh:/root/.config/gh:ro  # GitHub CLI auth
-      # Uncomment if using Claude CLI interactive auth instead of ANTHROPIC_API_KEY:
-      # - ~/.claude:/root/.claude
+      - ~/.claude:/root/.claude             # Claude CLI auth
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN:-}
     ports:
       - "3847:3847"
     restart: unless-stopped
-
-volumes:
-  critters-data:
