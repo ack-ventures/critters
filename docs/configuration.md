@@ -48,6 +48,7 @@ When the config file changes, a diff summary is logged showing what was updated.
 | `reviewTimeoutMinutes` | number | 15 | Timeout per review in minutes |
 | `maxReviewTurns` | number | 30 | Max Claude turns per review |
 | `healthPort` | number | 3847 | HTTP server port for dashboard and health checks. Set to 0 to disable. Must be 0 or 1024-65535 |
+| `dashboardToken` | string | *(none)* | Shared secret for dashboard POST endpoints. Also reads `DASHBOARD_TOKEN` env var. When set, all POST endpoints require `Authorization: Bearer <token>` |
 | `maxLogSizeMb` | number | 10 | Max log file size in MB before rotation (with `--no-tmux`) |
 | `jiraStatusMap` | object | `{}` | Map critter status names to Jira workflow status names |
 | `hooks` | object | `{}` | Shell commands run on lifecycle events |

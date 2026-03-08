@@ -133,19 +133,38 @@ sudo systemctl start critters
 
 Make sure the service user has `claude`, `gh`, `git`, and `jq` on its PATH. The `Environment=PATH=...` line in the unit file ensures this.
 
-### Option C: Docker (community)
+### Option C: Docker
 
-There is no official Docker image. If you want to containerize critters, a Dockerfile would need:
+The project includes a `Dockerfile` and `docker-compose.yaml`. The Docker image is also published to GHCR on each release.
 
-- A base image with the [Bun](https://bun.sh) runtime
-- Claude Code CLI, GitHub CLI, git, and jq installed
-- `--no-tmux` flag (no tmux needed in containers)
-- Volume mounts for:
-  - `~/.critters/` (config, env, metrics)
-  - Claude authentication directory
-  - GitHub CLI authentication directory
+```bash
+# Clone and configure
+git clone https://github.com/ack-ventures/critters && cd critters
+cp .env.example .env
+# Edit .env — set ANTHROPIC_API_KEY and LINEAR_API_KEY (and/or JIRA_* vars)
 
-The project ships as a compiled binary — containerization is left to the community.
+# Start
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Dashboard at http://localhost:3847
+```
+
+The image includes all runtime dependencies (Claude Code CLI, `gh`, `git`, `jq`, `ngrok`). It runs with `--no-tmux --json-logs --skip-update`.
+
+**Volume mounts** (configured in `docker-compose.yaml`):
+- `~/.critters` — config, metrics, state
+- `~/.ssh` — SSH keys for git clone (read-only)
+- `~/.config/gh` — GitHub CLI auth (read-only)
+- `~/.claude` and `~/.claude.json` — Claude CLI auth
+
+**Auth:** Docker requires `ANTHROPIC_API_KEY` in `.env` (interactive Claude auth via system keychain doesn't work in containers). GitHub CLI must be authenticated on the host first (`gh auth login`).
+
+For the pre-built image, replace `build: .` with `image: ghcr.io/ack-ventures/critters:latest` in `docker-compose.yaml`.
+
+> **Note:** The pre-built image is `linux/amd64` only. On ARM64 hosts (Apple Silicon, AWS Graviton), build locally with `docker compose build` instead.
 
 ## Updating
 
