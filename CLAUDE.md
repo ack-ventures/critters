@@ -634,6 +634,8 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 | `src/tunnel.ts` | ngrok tunnel management for remote dashboard access |
 | `src/version.ts` | Version constant |
 | `src/validate.ts` | `critters validate` CLI command |
+| `src/cli-release-notes.ts` | `critters release-notes` CLI command |
+| `src/release-notes.ts` | Release notes data (bundled at build time by `scripts/bundle-release-notes.js`) |
 | `src/env.ts` | Shared `.env` fallback loader |
 | `src/updater.ts` | Self-update check logic |
 | `src/prerequisites.ts` | Startup prerequisite checks |
@@ -680,6 +682,7 @@ Usage: `critters [command] [flags]`
 | `init-repo` | Scaffold `.critters.yaml` in the current repo |
 | `prompt-help` | Launch Claude to help configure critter types and prompts |
 | `clean` | Clean up stale work directories (`--all`, `--dry-run`) |
+| `release-notes` | Show release notes for recent versions |
 | `validate` | Validate config file without starting daemon |
 | `update` | Check for and apply binary updates |
 | `version` | Print version |
