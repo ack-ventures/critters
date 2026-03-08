@@ -4,8 +4,7 @@ services:
     # or: image: ghcr.io/ack-ventures/critters:latest
     env_file: .env
     volumes:
-      - ./critters.config.yaml:/app/critters.config.yaml:ro  # or ~/.critters/config.yaml
-      - ~/.critters:/root/.critters       # metrics, state, and fallback config
+      - ~/.critters:/root/.critters       # config, metrics, state
       - ~/.ssh:/root/.ssh:ro              # SSH keys for git clone
       - ~/.config/gh:/root/.config/gh:ro  # GitHub CLI auth
       - ~/.claude:/root/.claude             # Claude CLI auth
@@ -14,6 +13,3 @@ services:
     ports:
       - "3847:3847"
     restart: unless-stopped
-
-volumes:
-  critters-data:
