@@ -329,10 +329,14 @@ async function main() {
     trackers: Map<string, IssueTracker>;
     critterTypes: CritterTypeConfig[];
     defaultProvider: string;
+    repos: Record<string, { url: string; extraAllowedTools?: string[] }>;
+    teamRepos: Record<string, string>;
   } = {
     trackers,
     critterTypes: config.critterTypes,
     defaultProvider: config.provider,
+    repos: config.repos,
+    teamRepos: config.teamRepos,
   };
   if (config.healthPort !== 0) {
     const metricsPath = join(homedir(), ".critters", "metrics.jsonl");
@@ -432,6 +436,8 @@ async function main() {
       healthContext.trackers = newTrackers;
       healthContext.critterTypes = newConfig.critterTypes;
       healthContext.defaultProvider = newConfig.provider;
+      healthContext.repos = newConfig.repos;
+      healthContext.teamRepos = newConfig.teamRepos;
       resetMetadataCache();
       await ensureLabelsAndStatuses(config, trackers);
       log(summary);

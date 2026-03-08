@@ -843,6 +843,12 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="7" class="empty-stat
         <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Critter Type</label>
         <select id="create-type" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;"></select>
       </div>
+      <div id="create-repo-wrap" style="margin-bottom:12px;">
+        <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Repository</label>
+        <select id="create-repo" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;">
+          <option value="">None (specify in description)</option>
+        </select>
+      </div>
       <div style="margin-bottom:12px;">
         <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Title</label>
         <input type="text" id="create-title" required style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;" placeholder="Issue title">
@@ -1151,6 +1157,18 @@ function fetchLogPreview(identifier) {
       typeSelect.appendChild(opt);
     });
 
+    var repoSelect = document.getElementById('create-repo');
+    var repoWrap = document.getElementById('create-repo-wrap');
+    var repos = data.repos || [];
+    repoSelect.innerHTML = '<option value="">None (specify in description)</option>';
+    repos.forEach(function(r) {
+      var opt = document.createElement('option');
+      opt.value = r.url;
+      opt.textContent = r.label;
+      repoSelect.appendChild(opt);
+    });
+    repoWrap.style.display = repos.length > 0 ? '' : 'none';
+
     updateTeams(data);
   }
 
@@ -1182,11 +1200,17 @@ function fetchLogPreview(identifier) {
     submitBtn.disabled = true;
     submitBtn.textContent = 'Creating...';
 
+    var selectedRepo = document.getElementById('create-repo').value;
+    var description = document.getElementById('create-description').value;
+    if (selectedRepo && !/^repo:\\s/m.test(description)) {
+      description = 'repo: ' + selectedRepo + '\\n\\n' + description;
+    }
+
     var body = {
       provider: providerSelect.value,
       teamId: teamSelect.value,
       title: document.getElementById('create-title').value,
-      description: document.getElementById('create-description').value,
+      description: description,
       critterType: typeSelect.value
     };
 
