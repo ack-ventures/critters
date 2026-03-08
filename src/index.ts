@@ -47,6 +47,7 @@ Commands:
   kickoff     Trigger an immediate poll cycle
   status      Show daemon status
   version     Show version
+  release-notes Show release notes for recent versions
   update      Check for and apply updates
   init        Interactive config setup (~/.critters/)
   list-types  Show configured critter types
@@ -157,6 +158,12 @@ if (subcommand === "clean") {
 if (subcommand === "tail") {
   const { tailCommand } = await import("./cli-tail.js");
   await tailCommand(Bun.argv.slice(3));
+  process.exit(0);
+}
+
+if (subcommand === "release-notes") {
+  const { runReleaseNotes } = await import("./cli-release-notes.js");
+  runReleaseNotes();
   process.exit(0);
 }
 

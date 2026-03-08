@@ -38,6 +38,11 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           echo "export const VERSION = \"$VERSION\";" > src/version.ts
 
+      - name: Bundle release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/bundle-release-notes.js
+
       - name: Compile binary
         run: bun build --compile src/index.ts --outfile ${{ matrix.name }}
 
