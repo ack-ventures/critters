@@ -29,7 +29,7 @@ export class ExecutionPhaseRunner implements PhaseRunner {
       : getExecutionAllowedTools(config, critterTask, repoConfig);
     logTask(task.identifier, `Execution phase allowed tools: ${allowedTools.join(", ")}`);
 
-    const basePrompt = buildExecutionPrompt(critterTask, allowedTools, { resuming, repoConfig });
+    const basePrompt = buildExecutionPrompt(critterTask, allowedTools, { resuming, repoConfig, commitPlans: ctx.critterType.repo.commitPlans });
     const vars = buildPromptVars(task, workDir, branch);
     const skillContent = resolveSkills(ctx.phase.skills, vars);
     const prompt = skillContent ? basePrompt + skillContent : basePrompt;

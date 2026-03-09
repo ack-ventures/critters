@@ -173,7 +173,7 @@ function getOsGuidance(): string {
   return "You are running on Linux.";
 }
 
-export function buildExecutionPrompt(task: CritterTask, allowedTools: string[], options?: { resuming?: boolean; repoConfig?: PerRepoConfig | null }): string {
+export function buildExecutionPrompt(task: CritterTask, allowedTools: string[], options?: { resuming?: boolean; repoConfig?: PerRepoConfig | null; commitPlans?: boolean }): string {
   const bashTools = allowedTools
     .filter((t) => t.startsWith("Bash("))
     .map((t) => t.replace(/^Bash\(([^:]+):.*\)$/, "$1"));
@@ -214,7 +214,7 @@ The file should be a checklist mirroring the plan's sections, e.g.:
 - [ ] Step 3: Migrate spawner.ts
 - [ ] Step 4: Add tests
 \`\`\`
-Commit the checkpoint file alongside your code changes (include it in the same commit, not separately).
+${(options?.commitPlans ?? true) ? "Commit the checkpoint file alongside your code changes (include it in the same commit, not separately)." : "Do NOT commit files under `critters/` — they are internal working files, not part of the target repo."}
 
 ## Tool Restrictions
 You have a limited set of tools. Only these Bash commands are available: ${bashTools.join(", ")}.
