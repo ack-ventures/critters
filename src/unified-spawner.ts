@@ -415,6 +415,19 @@ export class UnifiedSpawner {
         logTask(task.identifier, phaseStats);
         await tracker.comment(task.id, phaseStats);
 
+        // Post phase report as a comment when phase.comment is true
+        if (phase.comment) {
+          const responseText = phaseResult.data.responseText as string | undefined;
+          if (responseText) {
+            const MAX_COMMENT_LENGTH = 10000;
+            const reportComment = responseText.length > MAX_COMMENT_LENGTH
+              ? `${responseText.slice(0, MAX_COMMENT_LENGTH)}\n\n*(truncated)*`
+              : responseText;
+            await tracker.comment(task.id, reportComment);
+            logTask(task.identifier, `Posted ${phase.name} report as comment (${responseText.length} chars)`);
+          }
+        }
+
         // Slack notification and hook for planning completion
         if (phase.name === "planning" && critterType.name === "create") {
           await this.slackNotifier.notify(

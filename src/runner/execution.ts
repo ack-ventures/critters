@@ -3,7 +3,7 @@ import { spawnClaude, spawnClaudeSubprocess } from "../claude.js";
 import { autoCommit, hasCommitsOnBranch, hasUncommittedChanges } from "../git.js";
 import { logTask, logTaskError } from "../logger.js";
 import { buildExecutionPrompt, getExecutionAllowedTools } from "../prompt.js";
-import { buildPromptVars, resolveSkills } from "../prompt-template.js";
+import { buildPromptVars, resolveSkills, resolveTools } from "../prompt-template.js";
 import { withRetry } from "../retry.js";
 import { formatDuration, runCommand, tailLines } from "../utils.js";
 import type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
@@ -23,7 +23,10 @@ export class ExecutionPhaseRunner implements PhaseRunner {
       projectId: task.projectId,
     };
 
-    const allowedTools = getExecutionAllowedTools(config, critterTask, repoConfig);
+    // Use explicit phase tools if configured, otherwise fall back to default execution tools
+    const allowedTools = Array.isArray(ctx.phase.tools)
+      ? resolveTools(ctx.phase.tools, config, task, repoConfig)
+      : getExecutionAllowedTools(config, critterTask, repoConfig);
     logTask(task.identifier, `Execution phase allowed tools: ${allowedTools.join(", ")}`);
 
     const basePrompt = buildExecutionPrompt(critterTask, allowedTools, { resuming, repoConfig });
