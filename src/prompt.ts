@@ -57,6 +57,10 @@ export function resolveRepoUrlWithSource(
     return { url: config.teamRepos[task.teamId], source: "from team config" };
   }
 
+  if (config.defaultRepo) {
+    return { url: config.defaultRepo, source: "from defaultRepo config" };
+  }
+
   return null;
 }
 

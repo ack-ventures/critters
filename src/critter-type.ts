@@ -17,8 +17,9 @@ export interface PhaseConfig {
 }
 
 export interface OutcomeConfig {
-  status: string;
+  status?: string;
   comment?: boolean;
+  removeLabel?: boolean;
 }
 
 export interface CritterTypeConfig {
@@ -147,8 +148,9 @@ export function parseCritterType(name: string, raw: Record<string, unknown>): Cr
   const parsedOutcomes: Record<string, OutcomeConfig> = {};
   for (const [key, val] of Object.entries(outcomes)) {
     parsedOutcomes[key] = {
-      status: val.status as string,
+      status: val.status as string | undefined,
       comment: val.comment as boolean | undefined,
+      removeLabel: val.removeLabel as boolean | undefined,
     };
   }
 

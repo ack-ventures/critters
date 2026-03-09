@@ -39,6 +39,7 @@ export interface Config {
   defaultAllowedTools: string[];
   repos: Record<string, RepoConfig>;
   teamRepos: Record<string, string>;
+  defaultRepo?: string;
   tmuxSession: string;
   branchPrefix: string;
   noTmux: boolean;

@@ -150,6 +150,7 @@ export function loadConfig(configPath?: string): Config {
     metricsRetentionDays: (yaml.metricsRetentionDays as number) ?? 90,
     repos,
     teamRepos,
+    defaultRepo: (yaml.defaultRepo as string) ?? undefined,
     linearApiKey,
     jiraHost,
     jiraEmail,
@@ -327,6 +328,9 @@ function validateConfig(config: Config): void {
   }
   if (config.tunnel?.enabled && config.healthPort === 0) {
     log("Warning: tunnel.enabled is true but healthPort is 0 — no tunnel will be started");
+  }
+  if (config.defaultRepo && !GIT_URL_RE.test(config.defaultRepo)) {
+    throw new Error(`Invalid git URL for defaultRepo: ${config.defaultRepo}`);
   }
   validateRepoUrls(config.repos, config.teamRepos);
   const credErrors = checkProviderCredentials(config.critterTypes, config.provider, {
