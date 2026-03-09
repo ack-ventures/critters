@@ -345,11 +345,8 @@ export class UnifiedSpawner {
         }, task.identifier);
       }
 
-      // Ensure plans directory exists (for create type)
-      if (critterType.name === "create") {
-        const plansDir = `${workDir}/critters/plans`;
-        mkdirSync(plansDir, { recursive: true });
-      }
+      // Ensure plans directory exists
+      mkdirSync(`${workDir}/critters/plans`, { recursive: true });
 
       // Resolve MCP config (once per task, not per phase)
       const { mcpConfig, strictMcpConfig } = resolveMcpConfig(critterType, this.config);
