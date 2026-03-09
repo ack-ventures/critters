@@ -152,6 +152,8 @@ critterTypes:
 | `trigger.assignee` | no | — | Only pick up issues assigned to this user. Email address, or `"me"` for the authenticated user |
 | `repo.clone` | no | true | Whether to shallow clone the repo |
 | `repo.branch` | no | — | Whether to create a feature branch (needed for PR-creating types) |
+| `repo.depth` | no | 1 | Git clone depth (increase for repos that need history) |
+| `repo.localPath` | no | — | Clone from a local path instead of remote (sets remote to `repoUrl` after clone) |
 | `phases` | yes | — | Array of phases to run sequentially (at least one) |
 | `phases[].name` | yes | — | Phase name (used in logs, tmux pane titles, output filenames) |
 | `phases[].prompt` | yes | — | `builtin:planning`, `builtin:execution`, `builtin:review`, or a file path (`~` expanded) |
