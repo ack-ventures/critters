@@ -564,6 +564,13 @@ export class UnifiedSpawner {
           logTaskError(task.identifier, `Failed to update status to ${failureOutcome.status}`);
         }
       }
+      if (failureOutcome?.removeLabel) {
+        try {
+          await tracker.removeLabel(task.id, critterType.trigger.label);
+        } catch (err) {
+          logTaskError(task.identifier, `Failed to remove label: ${err}`);
+        }
+      }
 
       // Salvage partial progress (for any type with a feature branch)
       let salvageInfo = "";
