@@ -97,8 +97,8 @@ describe("JiraTracker", () => {
       await tracker.findIssues({ label: "Critter", status: "To Do", assignee: "alice@company.com" });
 
       const call = mockFetchFn.mock.calls[0] as [string, RequestInit];
-      const url = decodeURIComponent(call[0]);
-      expect(url).toContain('AND assignee = "alice@company.com"');
+      const body = JSON.parse(call[1].body as string);
+      expect(body.jql).toContain('AND assignee = "alice@company.com"');
     });
 
     test("uses currentUser() for assignee 'me'", async () => {
@@ -107,8 +107,8 @@ describe("JiraTracker", () => {
       await tracker.findIssues({ label: "Critter", status: "To Do", assignee: "me" });
 
       const call = mockFetchFn.mock.calls[0] as [string, RequestInit];
-      const url = decodeURIComponent(call[0]);
-      expect(url).toContain("AND assignee = currentUser()");
+      const body = JSON.parse(call[1].body as string);
+      expect(body.jql).toContain("AND assignee = currentUser()");
     });
 
     test("omits assignee from JQL when not set", async () => {
@@ -117,8 +117,8 @@ describe("JiraTracker", () => {
       await tracker.findIssues({ label: "Critter", status: "To Do" });
 
       const call = mockFetchFn.mock.calls[0] as [string, RequestInit];
-      const url = decodeURIComponent(call[0]);
-      expect(url).not.toContain("assignee");
+      const body = JSON.parse(call[1].body as string);
+      expect(body.jql).not.toContain("assignee");
     });
 
     test("detects blockers from issue links", async () => {

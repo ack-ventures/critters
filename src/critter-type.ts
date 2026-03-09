@@ -24,7 +24,7 @@ export interface OutcomeConfig {
 export interface CritterTypeConfig {
   name: string;
   trigger: TriggerConfig;
-  repo: { clone: boolean; branch?: boolean };
+  repo: { clone: boolean; branch?: boolean; depth?: number; localPath?: string };
   phases: PhaseConfig[];
   outcomes: Record<string, OutcomeConfig>;
   concurrency: number;
@@ -172,6 +172,8 @@ export function parseCritterType(name: string, raw: Record<string, unknown>): Cr
     repo: {
       clone: (repoRaw.clone as boolean) ?? true,
       branch: repoRaw.branch as boolean | undefined,
+      depth: repoRaw.depth as number | undefined,
+      localPath: repoRaw.localPath as string | undefined,
     },
     phases: parsedPhases,
     outcomes: parsedOutcomes,

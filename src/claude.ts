@@ -97,7 +97,7 @@ export async function spawnClaude(
 set -o pipefail
 export PATH="$HOME/.bun/bin:$HOME/.local/bin:${currentPath}"
 unset CLAUDECODE
-echo -e "${color.label}━━━ ${windowName} ━━━${reset}"
+echo -e "${color.label}━━━ ${windowName.replace(/"/g, '\\"')} ━━━${reset}"
 echo ""
 cd ${shellEscape(workDir)}
 claude -p "$(cat ${shellEscape(promptFile)})" \\
