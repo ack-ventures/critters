@@ -8,15 +8,33 @@ export async function shallowClone(
   targetDir: string,
   identifier: string,
   cwd?: string,
+  depth: number = 1,
+  localPath?: string,
 ): Promise<void> {
   await withRetry(
     async () => {
-      logTask(identifier, `Cloning ${repoUrl} → ${targetDir}`);
-      const { code, stderr } = await runCommand(
-        "git",
-        ["clone", "--depth", "1", repoUrl, targetDir],
-        cwd ? { cwd } : undefined,
-      );
+      const source = localPath ?? repoUrl;
+      const args = localPath
+        ? ["clone", "--depth", String(depth), "--no-hardlinks", source, targetDir]
+        : ["clone", "--depth", String(depth), source, targetDir];
+      logTask(identifier, `Cloning ${source} → ${targetDir} (depth ${depth}${localPath ? ", local" : ""})`);
+      const { code, stderr } = await runCommand("git", args, cwd ? { cwd } : undefined);
+      if (localPath && code === 0) {
+        // Point origin back to the remote URL and sync to the default branch
+        await runCommand("git", ["remote", "set-url", "origin", repoUrl], { cwd: targetDir });
+        logTask(identifier, "Fetching latest from remote...");
+        const fetch = await runCommand("git", ["fetch", "--depth", String(depth), "origin"], { cwd: targetDir });
+        if (fetch.code === 0) {
+          // Determine the remote default branch and check it out
+          const headRef = await runCommand("git", ["symbolic-ref", "refs/remotes/origin/HEAD"], { cwd: targetDir });
+          const defaultBranch = headRef.code === 0
+            ? headRef.stdout.trim().replace("refs/remotes/origin/", "")
+            : "main";
+          await runCommand("git", ["checkout", "-B", defaultBranch, `origin/${defaultBranch}`], { cwd: targetDir });
+        } else {
+          logTaskWarn(identifier, `git fetch from remote failed (non-fatal): ${fetch.stderr}`);
+        }
+      }
       if (code !== 0) {
         throw new Error(`git clone failed: ${stderr}`);
       }

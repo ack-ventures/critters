@@ -40,9 +40,14 @@ export class JiraTracker implements IssueTracker {
           const assigneeValue = trigger.assignee === "me" ? "currentUser()" : `"${trigger.assignee}"`;
           jql += ` AND assignee = ${assigneeValue}`;
         }
-        const resp = await this.request(
-          `/search?jql=${encodeURIComponent(jql)}&expand=renderedFields&fields=summary,description,labels,project,issuelinks`,
-        );
+        const resp = await this.request("/search/jql", {
+          method: "POST",
+          body: JSON.stringify({
+            jql,
+            fields: ["summary", "description", "labels", "project", "issuelinks"],
+            expand: "renderedFields",
+          }),
+        });
         const data = (await resp.json()) as JiraSearchResponse;
 
         const tasks: TrackerTask[] = [];
@@ -134,16 +139,7 @@ export class JiraTracker implements IssueTracker {
     await this.request(`/issue/${taskId}/comment`, {
       method: "POST",
       body: JSON.stringify({
-        body: {
-          type: "doc",
-          version: 1,
-          content: [
-            {
-              type: "paragraph",
-              content: [{ type: "text", text: body }],
-            },
-          ],
-        },
+        body: markdownToAdf(body),
       }),
     });
   }
@@ -354,4 +350,149 @@ function adfToPlainText(adf: unknown): string {
   }
 }
 
-export { adfToPlainText, extractPlainText };
+// ── Markdown → ADF ──────────────────────────────────────────────────────────
+
+interface AdfNode {
+  type: string;
+  attrs?: Record<string, unknown>;
+  content?: AdfNode[];
+  text?: string;
+  marks?: Array<{ type: string }>;
+}
+
+/**
+ * Convert markdown text to Jira ADF (Atlassian Document Format).
+ * Handles headings, bullet lists, code blocks, bold, inline code, and paragraphs.
+ */
+function markdownToAdf(markdown: string): AdfNode {
+  const lines = markdown.split("\n");
+  const content: AdfNode[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Code block
+    if (line.startsWith("```")) {
+      const lang = line.slice(3).trim() || undefined;
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i].startsWith("```")) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      i++; // skip closing ```
+      content.push({
+        type: "codeBlock",
+        ...(lang ? { attrs: { language: lang } } : {}),
+        content: [{ type: "text", text: codeLines.join("\n") }],
+      });
+      continue;
+    }
+
+    // Heading
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)/);
+    if (headingMatch) {
+      content.push({
+        type: "heading",
+        attrs: { level: headingMatch[1].length },
+        content: parseInlineMarks(headingMatch[2]),
+      });
+      i++;
+      continue;
+    }
+
+    // Bullet list
+    if (line.match(/^[-*]\s/)) {
+      const items: AdfNode[] = [];
+      while (i < lines.length && lines[i].match(/^[-*]\s/)) {
+        items.push({
+          type: "listItem",
+          content: [{
+            type: "paragraph",
+            content: parseInlineMarks(lines[i].replace(/^[-*]\s/, "")),
+          }],
+        });
+        i++;
+      }
+      content.push({ type: "bulletList", content: items });
+      continue;
+    }
+
+    // Numbered list
+    if (line.match(/^\d+\.\s/)) {
+      const items: AdfNode[] = [];
+      while (i < lines.length && lines[i].match(/^\d+\.\s/)) {
+        items.push({
+          type: "listItem",
+          content: [{
+            type: "paragraph",
+            content: parseInlineMarks(lines[i].replace(/^\d+\.\s/, "")),
+          }],
+        });
+        i++;
+      }
+      content.push({ type: "orderedList", content: items });
+      continue;
+    }
+
+    // Empty line — skip
+    if (line.trim() === "") {
+      i++;
+      continue;
+    }
+
+    // Paragraph
+    content.push({
+      type: "paragraph",
+      content: parseInlineMarks(line),
+    });
+    i++;
+  }
+
+  return { type: "doc", version: 1, content } as AdfNode & { version: number };
+}
+
+/**
+ * Parse inline markdown marks: **bold**, `code`.
+ */
+function parseInlineMarks(text: string): AdfNode[] {
+  const nodes: AdfNode[] = [];
+  // Match **bold** or `code`
+  const regex = /(\*\*(.+?)\*\*|`([^`]+)`)/g;
+  let lastIndex = 0;
+  for (
+    let match = regex.exec(text);
+    match !== null;
+    match = regex.exec(text)
+  ) {
+    // Text before the match
+    if (match.index > lastIndex) {
+      nodes.push({ type: "text", text: text.slice(lastIndex, match.index) });
+    }
+
+    if (match[2]) {
+      // Bold
+      nodes.push({ type: "text", text: match[2], marks: [{ type: "strong" }] });
+    } else if (match[3]) {
+      // Inline code
+      nodes.push({ type: "text", text: match[3], marks: [{ type: "code" }] });
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Remaining text
+  if (lastIndex < text.length) {
+    nodes.push({ type: "text", text: text.slice(lastIndex) });
+  }
+
+  // If nothing was parsed, return the raw text
+  if (nodes.length === 0 && text.length > 0) {
+    nodes.push({ type: "text", text });
+  }
+
+  return nodes;
+}
+
+export { adfToPlainText, extractPlainText, markdownToAdf };

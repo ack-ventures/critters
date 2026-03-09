@@ -285,7 +285,7 @@ export class UnifiedSpawner {
 
       // 1. Clone repo
       if (critterType.repo.clone) {
-        await shallowClone(task.repoUrl, workDir, task.identifier, this.config.workDir);
+        await shallowClone(task.repoUrl, workDir, task.identifier, this.config.workDir, critterType.repo.depth ?? 1, critterType.repo.localPath);
       }
 
       // 2. Create branch (if type requires it)
