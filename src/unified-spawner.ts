@@ -456,9 +456,7 @@ export class UnifiedSpawner {
             if (detail) detail.prUrl = prUrl;
             return this.handleCreateSuccess(task, critterType, prUrl, branch, phaseResults, allPhaseStats, workDir, taskStart, tracker);
           }
-          // Commits exist but no PR
-          await tracker.comment(task.id, "Execution completed with commits but no PR was created.");
-          throw new Error("Execution completed but no PR was detected");
+          // No PR — fall through to generic success path
         }
       }
 
@@ -727,11 +725,11 @@ export class UnifiedSpawner {
     taskStart: number,
     tracker: IssueTracker,
   ): Promise<TaskResult> {
-    const successOutcome = critterType.outcomes.success;
-    if (successOutcome?.status) {
-      await tracker.updateStatus(task.id, successOutcome.status, task.groupId);
+    const outcome = critterType.outcomes.prCreated ?? critterType.outcomes.success;
+    if (outcome?.status) {
+      await tracker.updateStatus(task.id, outcome.status, task.groupId);
     }
-    if (successOutcome?.removeLabel) {
+    if (outcome?.removeLabel) {
       try {
         await tracker.removeLabel(task.id, critterType.trigger.label);
       } catch (err) {
