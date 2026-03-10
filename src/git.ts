@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
-import { logTask, logTaskError, logTaskWarn } from "./logger.js";
+import { log, logTask, logTaskError, logTaskWarn } from "./logger.js";
 import { withRetry } from "./retry.js";
 import { runCommand } from "./utils.js";
 
@@ -152,7 +152,10 @@ export async function deleteRemoteBranch(repoUrl: string, branch: string): Promi
 export function cleanupStaleWorkDirs(baseDir: string, activeWorkDirs?: Set<string>, maxAgeMinutes = 60): void {
   if (!existsSync(baseDir)) return;
   const entries = readdirSync(baseDir, { encoding: "utf-8" });
+  if (entries.length === 0) return;
+  log(`Cleaning up stale work directories (${entries.length} entries in ${baseDir})...`);
   const maxAgeMs = maxAgeMinutes * 60_000;
+  let removed = 0;
   for (const entry of entries) {
     const fullPath = `${baseDir}/${entry}`;
     if (activeWorkDirs?.has(fullPath)) continue;
@@ -162,6 +165,9 @@ export function cleanupStaleWorkDirs(baseDir: string, activeWorkDirs?: Set<strin
     } catch {
       continue;
     }
+    log(`  Removing stale directory: ${entry}`);
     cleanupWorkDir(fullPath);
+    removed++;
   }
+  if (removed > 0) log(`Stale cleanup complete (removed ${removed})`);
 }

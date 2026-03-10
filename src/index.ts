@@ -322,7 +322,6 @@ async function main() {
   const spawner = new UnifiedSpawner(config, trackers);
   spawner.cleanupStale();
   spawner.startPeriodicCleanup();
-  log("Cleaned up stale work directories");
 
   let lastPollAt: string | null = null;
   const updatePollTime = () => { lastPollAt = new Date().toISOString(); };
