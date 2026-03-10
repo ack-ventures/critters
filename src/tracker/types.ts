@@ -63,6 +63,8 @@ export interface TrackerTask {
   prUrl?: string;
   prNumber?: number;
   prBranch?: string;
+  /** URL to the issue in the tracker (Linear or Jira) */
+  issueUrl?: string;
 }
 
 export interface ProviderConfig {

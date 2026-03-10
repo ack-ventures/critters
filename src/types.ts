@@ -9,6 +9,7 @@ export interface CritterTask {
   teamId: string;
   projectId?: string;
   blockedBy?: { identifier: string; status: string }[];
+  issueUrl?: string;
 }
 
 export interface RepoConfig {

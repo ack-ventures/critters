@@ -114,6 +114,7 @@ export class LinearTracker implements IssueTracker {
             projectId: project?.id,
             labels: labelNames,
             ...(blockedBy.length > 0 ? { blockedBy } : {}),
+            issueUrl: issue.url,
           });
         }
 
