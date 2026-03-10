@@ -214,6 +214,27 @@ describe("JiraTracker", () => {
       const body = JSON.parse(transitionCall[1].body as string);
       expect(body.transition.id).toBe("11");
     });
+
+    test("logs error but does not throw when transition is rejected", async () => {
+      // First call: get transitions
+      mockFetchFn.mockResolvedValueOnce(
+        mockResponse({
+          transitions: [
+            { id: "31", name: "In Review", to: { name: "In Review" } },
+          ],
+        }),
+      );
+      // Second call: transition rejected (e.g. sprint requirement)
+      mockFetchFn.mockResolvedValueOnce(
+        mockResponse(
+          { errorMessages: ["Tickets must be added to a sprint before they can move to in-progress statuses"] },
+          400,
+        ),
+      );
+
+      // Should not throw
+      await tracker.updateStatus("10001", "In Review", "PROJ");
+    });
   });
 
   describe("comment", () => {

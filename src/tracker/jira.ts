@@ -129,10 +129,16 @@ export class JiraTracker implements IssueTracker {
       return;
     }
 
-    await this.request(`/issue/${taskId}/transitions`, {
-      method: "POST",
-      body: JSON.stringify({ transition: { id: transition.id } }),
-    });
+    try {
+      await this.request(`/issue/${taskId}/transitions`, {
+        method: "POST",
+        body: JSON.stringify({ transition: { id: transition.id } }),
+      });
+    } catch (err) {
+      // Jira workflow rules (e.g. "must be in a sprint") can reject transitions.
+      // Log but don't crash — the critter's work matters more than the status update.
+      logError(`Jira: Failed to transition issue ${taskId} to "${targetStatus}": ${err}`);
+    }
   }
 
   async comment(taskId: string, body: string): Promise<void> {
