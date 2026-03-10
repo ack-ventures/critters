@@ -69,6 +69,7 @@ export async function runClean(args: string[]): Promise<void> {
       const stats = statSync(fullPath);
       if (!stats.isDirectory()) continue;
       const ageMs = Date.now() - stats.mtimeMs;
+      console.log(`  Scanning ${entry}...`);
       const size = getDirSize(fullPath);
       const stale = all || ageMs >= STALE_THRESHOLD_MS;
       dirs.push({ name: entry, ageMs, size, stale });
@@ -104,6 +105,7 @@ export async function runClean(args: string[]): Promise<void> {
 
   for (const dir of toRemove) {
     try {
+      console.log(`  Removing ${dir.name}...`);
       rmSync(`${workDir}/${dir.name}`, { recursive: true, force: true });
     } catch (err) {
       console.warn(`  Warning: failed to remove ${dir.name}: ${err instanceof Error ? err.message : String(err)}`);
@@ -242,6 +244,18 @@ async function cleanStaleBranches(configPath: string | undefined, dryRun: boolea
     const branchPrefix = config.branchPrefix;
     const branchLines = stdout.trim().split("\n").filter(Boolean);
 
+    // Pre-filter to critter branches with valid identifiers
+    const critterBranches: { sha: string; branchName: string; identifier: string }[] = [];
+    for (const line of branchLines) {
+      const [sha, ref] = line.split("\t");
+      if (!ref) continue;
+      const branchName = ref.replace("refs/heads/", "");
+      if (!branchName.startsWith(`${branchPrefix}/`)) continue;
+      const identifier = extractIdentifier(branchName, branchPrefix);
+      if (!identifier) continue;
+      critterBranches.push({ sha, branchName, identifier });
+    }
+
     interface BranchInfo {
       name: string;
       sha: string;
@@ -250,19 +264,16 @@ async function cleanStaleBranches(configPath: string | undefined, dryRun: boolea
     }
     const branches: BranchInfo[] = [];
 
-    console.log(`Scanning branches in ${ownerRepo}...`);
+    if (critterBranches.length === 0) {
+      console.log(`No critter branches found in ${ownerRepo}`);
+      continue;
+    }
 
-    for (const line of branchLines) {
-      const [sha, ref] = line.split("\t");
-      if (!ref) continue;
-      const branchName = ref.replace("refs/heads/", "");
-      if (!branchName.startsWith(`${branchPrefix}/`)) continue;
+    console.log(`Scanning ${critterBranches.length} critter branches in ${ownerRepo}...`);
 
-      const identifier = extractIdentifier(branchName, branchPrefix);
-      if (!identifier) {
-        console.log(`  ${branchName}  unrecognized format              skip`);
-        continue;
-      }
+    for (let i = 0; i < critterBranches.length; i++) {
+      const { sha, branchName, identifier } = critterBranches[i];
+      const progress = `(${i + 1}/${critterBranches.length})`;
 
       // Check for PRs
       const prResult = await runCommand("gh", [
@@ -281,7 +292,7 @@ async function cleanStaleBranches(configPath: string | undefined, dryRun: boolea
 
       const openPr = prs.find((pr) => pr.state === "OPEN");
       if (openPr) {
-        console.log(`  ${branchName}  open PR #${openPr.number}              skip`);
+        console.log(`  ${progress} ${branchName}  open PR #${openPr.number}  skip`);
         branches.push({ name: branchName, sha, reason: `open PR #${openPr.number}`, stale: false });
         continue;
       }
@@ -290,7 +301,7 @@ async function cleanStaleBranches(configPath: string | undefined, dryRun: boolea
       if (mergedOrClosedPr) {
         const pr = mergedOrClosedPr;
         const reason = `${pr.state.toLowerCase()} PR #${pr.number}`;
-        console.log(`  ${branchName}  ${reason}            stale`);
+        console.log(`  ${progress} ${branchName}  ${reason}  stale`);
         branches.push({ name: branchName, sha, reason, stale: true });
         continue;
       }
@@ -301,12 +312,12 @@ async function cleanStaleBranches(configPath: string | undefined, dryRun: boolea
           const issue = await tracker.findIssueByIdentifier(identifier);
           if (issue && terminalStates.has(issue.statusName)) {
             const reason = `no PR, issue ${issue.statusName}`;
-            console.log(`  ${branchName}  ${reason}       stale`);
+            console.log(`  ${progress} ${branchName}  ${reason}  stale`);
             branches.push({ name: branchName, sha, reason, stale: true });
             continue;
           }
           if (issue) {
-            console.log(`  ${branchName}  no PR, issue ${issue.statusName}       skip`);
+            console.log(`  ${progress} ${branchName}  no PR, issue ${issue.statusName}  skip`);
             branches.push({ name: branchName, sha, reason: `no PR, issue ${issue.statusName}`, stale: false });
             continue;
           }
@@ -328,14 +339,14 @@ async function cleanStaleBranches(configPath: string | undefined, dryRun: boolea
 
         if (ageMs >= STALE_BRANCH_AGE_MS) {
           const reason = `no PR, ${ageDays} days old`;
-          console.log(`  ${branchName}  ${reason}      stale`);
+          console.log(`  ${progress} ${branchName}  ${reason}  stale`);
           branches.push({ name: branchName, sha, reason, stale: true });
         } else {
-          console.log(`  ${branchName}  no PR, ${ageDays} days old      skip`);
+          console.log(`  ${progress} ${branchName}  no PR, ${ageDays} days old  skip`);
           branches.push({ name: branchName, sha, reason: `no PR, ${ageDays} days old`, stale: false });
         }
       } else {
-        console.log(`  ${branchName}  could not determine age      skip`);
+        console.log(`  ${progress} ${branchName}  could not determine age  skip`);
         branches.push({ name: branchName, sha, reason: "unknown age", stale: false });
       }
     }

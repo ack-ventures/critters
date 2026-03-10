@@ -135,12 +135,15 @@ export class UnifiedSpawner {
   }
 
   cleanupStale(): void {
-    cleanupStaleWorkDirs(this.config.workDir, this.activeWorkDirs);
+    const maxTimeout = Math.max(...this.config.critterTypes.map(ct => ct.timeoutMinutes));
+    const maxAgeMinutes = maxTimeout + 30;
+    cleanupStaleWorkDirs(this.config.workDir, this.activeWorkDirs, maxAgeMinutes);
   }
 
   startPeriodicCleanup(): void {
     const intervalMs = 60 * 60 * 1000;
     this.cleanupInterval = setInterval(() => {
+      log("Running periodic work directory cleanup...");
       this.cleanupStale();
     }, intervalMs);
     this.cleanupInterval.unref();
@@ -686,6 +689,7 @@ export class UnifiedSpawner {
       this.activeWorkDirs.delete(workDir);
       this.activeCritterMap.delete(task.id);
       this.slackNotifier.clearThread(task.id);
+      logTask(task.identifier, "Cleaning up work directory...");
       cleanupWorkDir(workDir);
       logTask(task.identifier, "Cleaned up work directory");
     }
