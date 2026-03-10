@@ -193,10 +193,14 @@ sleep 5
     if (Number.isNaN(exitCode)) exitCode = 1;
   }
 
-  // Clean up the pane (it may already be gone after the script exits)
-  const cleanupResult = await runCommand("tmux", ["kill-pane", "-t", paneId]);
-  if (cleanupResult.code !== 0) {
-    logTaskWarn(identifier, `Failed to kill tmux pane during cleanup: ${cleanupResult.stderr}`);
+  // Clean up the pane (but don't kill the last pane — that would destroy the session)
+  const paneCount = await runCommand("tmux", ["list-panes", "-t", tmuxSession]);
+  const numPanes = paneCount.stdout.trim().split("\n").length;
+  if (numPanes > 1) {
+    const cleanupResult = await runCommand("tmux", ["kill-pane", "-t", paneId]);
+    if (cleanupResult.code !== 0) {
+      logTaskWarn(identifier, `Failed to kill tmux pane during cleanup: ${cleanupResult.stderr}`);
+    }
   }
 
   activeColors.delete(idx);

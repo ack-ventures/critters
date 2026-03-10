@@ -231,6 +231,17 @@ export class LinearTracker implements IssueTracker {
     }
   }
 
+  async removeLabel(taskId: string, label: string): Promise<void> {
+    const issue = await this.client.issue(taskId);
+    const labels = await issue.labels();
+    const labelToRemove = labels.nodes.find((l) => l.name === label);
+    if (!labelToRemove) return;
+    const remainingLabelIds = labels.nodes
+      .filter((l) => l.id !== labelToRemove.id)
+      .map((l) => l.id);
+    await this.client.updateIssue(taskId, { labelIds: remainingLabelIds });
+  }
+
   async ensureLabel(labelName: string): Promise<void> {
     const labels = await this.client.issueLabels({
       filter: { name: { eq: labelName } },

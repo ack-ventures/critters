@@ -370,6 +370,7 @@ function createMockTracker(overrides?: Partial<IssueTracker>): IssueTracker {
     uploadAttachment: async () => null,
     ensureStatus: async () => {},
     ensureLabel: async () => {},
+    removeLabel: async () => {},
     createIssue: async () => ({
       id: "new-id",
       identifier: "ACK-999",

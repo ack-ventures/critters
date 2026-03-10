@@ -197,6 +197,13 @@ export class JiraTracker implements IssueTracker {
     // Jira labels are auto-created when applied to issues — no action needed
   }
 
+  async removeLabel(taskId: string, label: string): Promise<void> {
+    await this.request(`/issue/${taskId}`, {
+      method: "PUT",
+      body: JSON.stringify({ update: { labels: [{ remove: label }] } }),
+    });
+  }
+
   async createIssue(input: CreateIssueInput): Promise<CreatedIssue> {
     const resp = await this.request("/issue", {
       method: "POST",

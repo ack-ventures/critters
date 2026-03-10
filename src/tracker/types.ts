@@ -25,6 +25,7 @@ export interface IssueTracker {
   ): Promise<string | null>;
   ensureStatus(groupId: string, name: string, type?: string, color?: string): Promise<void>;
   ensureLabel(name: string): Promise<void>;
+  removeLabel(taskId: string, label: string): Promise<void>;
   createIssue(input: CreateIssueInput): Promise<CreatedIssue>;
   listTeams(): Promise<TrackerTeam[]>;
 }

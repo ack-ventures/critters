@@ -3,7 +3,7 @@ import { spawnClaude, spawnClaudeSubprocess } from "../claude.js";
 import { autoCommit, hasCommitsOnBranch, hasUncommittedChanges } from "../git.js";
 import { logTask, logTaskError } from "../logger.js";
 import { buildExecutionPrompt, getExecutionAllowedTools } from "../prompt.js";
-import { buildPromptVars, resolveSkills } from "../prompt-template.js";
+import { buildPromptVars, resolveSkills, resolveTools } from "../prompt-template.js";
 import { withRetry } from "../retry.js";
 import { formatDuration, runCommand, tailLines } from "../utils.js";
 import type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
@@ -23,10 +23,13 @@ export class ExecutionPhaseRunner implements PhaseRunner {
       projectId: task.projectId,
     };
 
-    const allowedTools = getExecutionAllowedTools(config, critterTask, repoConfig);
+    // Use explicit phase tools if configured, otherwise fall back to default execution tools
+    const allowedTools = Array.isArray(ctx.phase.tools)
+      ? resolveTools(ctx.phase.tools, config, task, repoConfig)
+      : getExecutionAllowedTools(config, critterTask, repoConfig);
     logTask(task.identifier, `Execution phase allowed tools: ${allowedTools.join(", ")}`);
 
-    const basePrompt = buildExecutionPrompt(critterTask, allowedTools, { resuming, repoConfig });
+    const basePrompt = buildExecutionPrompt(critterTask, allowedTools, { resuming, repoConfig, commitPlans: ctx.critterType.repo.commitPlans });
     const vars = buildPromptVars(task, workDir, branch);
     const skillContent = resolveSkills(ctx.phase.skills, vars);
     const prompt = skillContent ? basePrompt + skillContent : basePrompt;
@@ -70,7 +73,14 @@ export class ExecutionPhaseRunner implements PhaseRunner {
     }
 
     if (!(await hasCommitsOnBranch(workDir, branch, task.identifier))) {
-      throw new Error("Execution completed but no commits were made");
+      // No commits — nothing to do (analysis-only completion)
+      return { spawn, data: { prUrl: null } };
+    }
+
+    // Only look for a PR if the branch was pushed to the remote
+    const { stdout: remoteOut } = await runCommand("git", ["ls-remote", "--heads", "origin", branch], { cwd: workDir });
+    if (!remoteOut.trim()) {
+      return { spawn, data: { prUrl: null } };
     }
 
     // Detect PR

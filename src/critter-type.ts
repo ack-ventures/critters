@@ -14,17 +14,19 @@ export interface PhaseConfig {
   maxTurns: number;
   tools: string | string[];
   skills?: string[];
+  comment?: boolean;
 }
 
 export interface OutcomeConfig {
-  status: string;
+  status?: string;
   comment?: boolean;
+  removeLabel?: boolean;
 }
 
 export interface CritterTypeConfig {
   name: string;
   trigger: TriggerConfig;
-  repo: { clone: boolean; branch?: boolean; depth?: number; localPath?: string };
+  repo: { clone: boolean; branch?: boolean; depth?: number; localPath?: string; commitPlans?: boolean };
   phases: PhaseConfig[];
   outcomes: Record<string, OutcomeConfig>;
   concurrency: number;
@@ -147,8 +149,9 @@ export function parseCritterType(name: string, raw: Record<string, unknown>): Cr
   const parsedOutcomes: Record<string, OutcomeConfig> = {};
   for (const [key, val] of Object.entries(outcomes)) {
     parsedOutcomes[key] = {
-      status: val.status as string,
+      status: val.status as string | undefined,
       comment: val.comment as boolean | undefined,
+      removeLabel: val.removeLabel as boolean | undefined,
     };
   }
 
@@ -159,6 +162,7 @@ export function parseCritterType(name: string, raw: Record<string, unknown>): Cr
     maxTurns: p.maxTurns as number,
     tools: (p.tools as string | string[]) ?? "default",
     skills: p.skills as string[] | undefined,
+    comment: p.comment as boolean | undefined,
   }));
 
   const ct: CritterTypeConfig = {
@@ -174,6 +178,7 @@ export function parseCritterType(name: string, raw: Record<string, unknown>): Cr
       branch: repoRaw.branch as boolean | undefined,
       depth: repoRaw.depth as number | undefined,
       localPath: repoRaw.localPath as string | undefined,
+      commitPlans: repoRaw.commitPlans as boolean | undefined,
     },
     phases: parsedPhases,
     outcomes: parsedOutcomes,
