@@ -80,6 +80,7 @@ export class JiraTracker implements IssueTracker {
             projectId: issue.fields.project.id,
             labels: issue.fields.labels ?? [],
             ...(blockedBy.length > 0 ? { blockedBy } : {}),
+            issueUrl: `https://${this.host}/browse/${issue.key}`,
           });
         }
 

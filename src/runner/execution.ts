@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { spawnClaudeForPhase } from "../claude.js";
-import { autoCommit, hasCommitsOnBranch, hasUncommittedChanges } from "../git.js";
+import { autoCommit, getDefaultBranch, hasCommitsOnBranch, hasUncommittedChanges } from "../git.js";
 import { logTask, logTaskError } from "../logger.js";
 import { buildExecutionPrompt, getExecutionAllowedTools } from "../prompt.js";
 import { buildPromptVars, resolveSkills, resolveTools } from "../prompt-template.js";
@@ -21,6 +21,7 @@ export class ExecutionPhaseRunner implements PhaseRunner {
       repoUrl: task.repoUrl,
       teamId: task.groupId,
       projectId: task.projectId,
+      issueUrl: task.issueUrl,
     };
 
     // Use explicit phase tools if configured, otherwise fall back to default execution tools
@@ -29,7 +30,8 @@ export class ExecutionPhaseRunner implements PhaseRunner {
       : getExecutionAllowedTools(config, critterTask, repoConfig);
     logTask(task.identifier, `Execution phase allowed tools: ${allowedTools.join(", ")}`);
 
-    const basePrompt = buildExecutionPrompt(critterTask, allowedTools, { resuming, repoConfig, commitPlans: ctx.critterType.repo.commitPlans });
+    const defaultBranch = await getDefaultBranch(workDir, task.identifier);
+    const basePrompt = buildExecutionPrompt(critterTask, allowedTools, { resuming, repoConfig, commitPlans: ctx.critterType.repo.commitPlans, defaultBranch });
     const vars = buildPromptVars(task, workDir, branch);
     const skillContent = resolveSkills(ctx.phase.skills, vars);
     const prompt = skillContent ? basePrompt + skillContent : basePrompt;

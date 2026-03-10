@@ -6,6 +6,7 @@ import {
   cleanupStaleWorkDirs,
   cleanupWorkDir,
   createBranch,
+  getDefaultBranch,
   hasCommitsOnBranch,
   hasUncommittedChanges,
   shallowClone,
@@ -942,6 +943,7 @@ export async function salvagePartialProgress(
   try {
     const ownerRepo = repoUrl ? extractOwnerRepo(repoUrl) : null;
     const repoArgs = ownerRepo ? ["--repo", ownerRepo] : [];
+    const defaultBranch = await getDefaultBranch(workDir, identifier);
     try {
       if (await hasUncommittedChanges(workDir)) {
         await autoCommit(workDir, identifier, `[${identifier}] Auto-commit in-progress work`);
@@ -978,12 +980,13 @@ export async function salvagePartialProgress(
       return {};
     }
 
-    // Create a draft PR
+    // Create a draft PR targeting the default branch
     const prResult = await runCommand(
       "gh",
       [
         "pr", "create", "--draft",
         "--head", branch,
+        "--base", defaultBranch,
         "--title", `[${identifier}] ${title} (partial)`,
         "--body", "Critter failed mid-execution. See the linked issue for details.",
         ...repoArgs,

@@ -176,7 +176,7 @@ function getOsGuidance(): string {
   return "You are running on Linux.";
 }
 
-export function buildExecutionPrompt(task: CritterTask, allowedTools: string[], options?: { resuming?: boolean; repoConfig?: PerRepoConfig | null; commitPlans?: boolean }): string {
+export function buildExecutionPrompt(task: CritterTask, allowedTools: string[], options?: { resuming?: boolean; repoConfig?: PerRepoConfig | null; commitPlans?: boolean; defaultBranch?: string }): string {
   const bashTools = allowedTools
     .filter((t) => t.startsWith("Bash("))
     .map((t) => t.replace(/^Bash\(([^:]+):.*\)$/, "$1"));
@@ -202,7 +202,7 @@ Read critters/plans/${task.identifier}.md — it contains an approved implementa
 ${planInstruction} Then:
 - Commit your changes with a message referencing ${task.identifier}
 - Push your branch
-- Create a PR using \`gh pr create --head <branch-name>\` with title "[${task.identifier}] ${task.title}" and body that includes a link to the Linear issue and "Automated by Critters". Always use the --head flag.
+- Create a PR using \`gh pr create --head <branch-name> --base ${options?.defaultBranch ?? "<default-branch>"}\` with title "[${task.identifier}] ${task.title}" and body that includes a link to ${task.issueUrl ? `the issue (${task.issueUrl})` : "the issue tracker ticket"} and "Automated by Critters". Always use both the --head and --base flags.${!options?.defaultBranch ? " Determine the default branch with: git rev-parse --abbrev-ref origin/HEAD" : ""}
 
 ## Editing Files
 - Always read a file before editing it. Pay attention to whether it uses tabs or spaces for indentation — the Read tool's line numbers can make tabs look like spaces.
