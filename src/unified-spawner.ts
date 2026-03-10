@@ -47,6 +47,24 @@ export interface TaskResult {
   error?: string;
 }
 
+async function applyOutcome(
+  outcome: { status?: string; removeLabel?: boolean } | undefined,
+  task: TrackerTask,
+  critterType: CritterTypeConfig,
+  tracker: IssueTracker,
+): Promise<void> {
+  if (outcome?.status) {
+    await tracker.updateStatus(task.id, outcome.status, task.groupId);
+  }
+  if (outcome?.removeLabel) {
+    try {
+      await tracker.removeLabel(task.id, critterType.trigger.label);
+    } catch (err) {
+      logTaskError(task.identifier, `Failed to remove label "${critterType.trigger.label}": ${err}`);
+    }
+  }
+}
+
 export class UnifiedSpawner {
   private config: Config;
   private trackers: Map<string, IssueTracker>;
@@ -474,17 +492,7 @@ export class UnifiedSpawner {
       const totalDuration = formatDuration(Date.now() - taskStart);
       logTask(task.identifier, `Completed in ${totalDuration}`);
 
-      const successOutcome = critterType.outcomes.success;
-      if (successOutcome?.status) {
-        await tracker.updateStatus(task.id, successOutcome.status, task.groupId);
-      }
-      if (successOutcome?.removeLabel) {
-        try {
-          await tracker.removeLabel(task.id, critterType.trigger.label);
-        } catch (err) {
-          logTaskError(task.identifier, `Failed to remove label "${critterType.trigger.label}": ${err}`);
-        }
-      }
+      await applyOutcome(critterType.outcomes.success, task, critterType, tracker);
 
       // Upload report from the last phase (generic runner writes .critter-report.md)
       const lastPhaseData = phaseDataList.length > 0 ? phaseDataList[phaseDataList.length - 1] : null;
@@ -556,20 +564,10 @@ export class UnifiedSpawner {
       const totalDuration = formatDuration(Date.now() - taskStart);
 
       // Move to failure status
-      const failureOutcome = critterType.outcomes.failure;
-      if (failureOutcome?.status) {
-        try {
-          await tracker.updateStatus(task.id, failureOutcome.status, task.groupId);
-        } catch {
-          logTaskError(task.identifier, `Failed to update status to ${failureOutcome.status}`);
-        }
-      }
-      if (failureOutcome?.removeLabel) {
-        try {
-          await tracker.removeLabel(task.id, critterType.trigger.label);
-        } catch (err) {
-          logTaskError(task.identifier, `Failed to remove label: ${err}`);
-        }
+      try {
+        await applyOutcome(critterType.outcomes.failure, task, critterType, tracker);
+      } catch {
+        logTaskError(task.identifier, `Failed to apply failure outcome`);
       }
 
       // Salvage partial progress (for any type with a feature branch)
@@ -742,17 +740,7 @@ export class UnifiedSpawner {
     taskStart: number,
     tracker: IssueTracker,
   ): Promise<TaskResult> {
-    const outcome = critterType.outcomes.prCreated ?? critterType.outcomes.success;
-    if (outcome?.status) {
-      await tracker.updateStatus(task.id, outcome.status, task.groupId);
-    }
-    if (outcome?.removeLabel) {
-      try {
-        await tracker.removeLabel(task.id, critterType.trigger.label);
-      } catch (err) {
-        logTaskError(task.identifier, `Failed to remove label "${critterType.trigger.label}": ${err}`);
-      }
-    }
+    await applyOutcome(critterType.outcomes.prCreated ?? critterType.outcomes.success, task, critterType, tracker);
 
     try {
       await updatePrWithPlan(workDir, prUrl, task.identifier, allPhaseStats);
@@ -824,17 +812,7 @@ export class UnifiedSpawner {
     const totalDuration = formatDuration(Date.now() - taskStart);
 
     if (decision === "merged" || data.alreadyMerged) {
-      const mergedOutcome = critterType.outcomes.merged;
-      if (mergedOutcome?.status) {
-        await tracker.updateStatus(task.id, mergedOutcome.status, task.groupId);
-      }
-      if (mergedOutcome?.removeLabel) {
-        try {
-          await tracker.removeLabel(task.id, critterType.trigger.label);
-        } catch (err) {
-          logTaskError(task.identifier, `Failed to remove label: ${err}`);
-        }
-      }
+      await applyOutcome(critterType.outcomes.merged, task, critterType, tracker);
       if (data.alreadyMerged) {
         await tracker.comment(task.id, "PR was already merged");
         logTask(task.identifier, "Review complete — PR was already merged");
@@ -879,17 +857,7 @@ export class UnifiedSpawner {
     }
 
     if (decision === "needs_changes") {
-      const needsChangesOutcome = critterType.outcomes.needsChanges;
-      if (needsChangesOutcome?.status) {
-        await tracker.updateStatus(task.id, needsChangesOutcome.status, task.groupId);
-      }
-      if (needsChangesOutcome?.removeLabel) {
-        try {
-          await tracker.removeLabel(task.id, critterType.trigger.label);
-        } catch (err) {
-          logTaskError(task.identifier, `Failed to remove label: ${err}`);
-        }
-      }
+      await applyOutcome(critterType.outcomes.needsChanges, task, critterType, tracker);
       await tracker.comment(task.id, `Review critter (${critterType.phases[0].model}) requested changes: ${reason}`);
       await this.slackNotifier.notify(
         task.id,

@@ -198,12 +198,9 @@ export class JiraTracker implements IssueTracker {
   }
 
   async removeLabel(taskId: string, label: string): Promise<void> {
-    const resp = await this.request(`/issue/${taskId}?fields=labels`);
-    const issue = (await resp.json()) as { fields: { labels: string[] } };
-    const updatedLabels = (issue.fields.labels ?? []).filter((l) => l !== label);
     await this.request(`/issue/${taskId}`, {
       method: "PUT",
-      body: JSON.stringify({ fields: { labels: updatedLabels } }),
+      body: JSON.stringify({ update: { labels: [{ remove: label }] } }),
     });
   }
 
