@@ -154,6 +154,7 @@ critterTypes:
 | `repo.branch` | no | — | Whether to create a feature branch (needed for PR-creating types) |
 | `repo.depth` | no | 1 | Git clone depth (increase for repos that need history) |
 | `repo.localPath` | no | — | Clone from a local path instead of remote (sets remote to `repoUrl` after clone) |
+| `repo.commitPlans` | no | true | Whether to commit plan/checkpoint files to the target repo |
 | `phases` | yes | — | Array of phases to run sequentially (at least one) |
 | `phases[].name` | yes | — | Phase name (used in logs, tmux pane titles, output filenames) |
 | `phases[].prompt` | yes | — | `builtin:planning`, `builtin:execution`, `builtin:review`, or a file path (`~` expanded) |
@@ -161,10 +162,14 @@ critterTypes:
 | `phases[].maxTurns` | yes | — | Max Claude API round-trips for this phase |
 | `phases[].tools` | no | `default` | `readonly`, `default`, `review`, or explicit array of tool names |
 | `phases[].skills` | no | — | Array of skill file paths appended to the phase prompt (supports `{{var}}` substitution) |
+| `phases[].comment` | no | false | Post the phase's report text as an issue comment |
 | `outcomes.success` | no | — | Status to set on success. `comment: true` is now implicit for custom types |
 | `outcomes.failure` | no | — | Status to set on failure |
 | `outcomes.merged` | no | — | Status to set when a PR is merged (review type) |
 | `outcomes.needsChanges` | no | — | Status to set when changes are requested (review type) |
+| `outcomes.prCreated` | no | falls back to `success` | Status to set when a PR is created (overrides `success` for PR-creating types) |
+| `outcomes.*.status` | no | — | Status to transition to. Optional — outcomes can act (remove labels, post comments) without changing status |
+| `outcomes.*.removeLabel` | no | false | Strip the trigger label from the issue on this outcome (prevents re-pickup) |
 | `concurrency` | no | 2 | Max parallel instances of this type |
 | `timeoutMinutes` | no | 30 | Total timeout for all phases |
 | `enrichment` | no | — | `extractPrUrl` to extract PR URL from issue comments (for review types) |
@@ -554,6 +559,7 @@ critterTypes:
 | `tmuxSession` | "critters" | Name of the tmux session to use |
 | `branchPrefix` | "critter" | Prefix for feature branch names (`<prefix>/<ID>-<slug>`) |
 | `teamRepos` | {} | Team ID → fallback repo URL |
+| `defaultRepo` | — | Final fallback repo URL when not in description, project config, or team config |
 | `planningModel` | "opus" | Claude model for planning phase |
 | `executionModel` | "opus" | Claude model for execution phase |
 | `reviewTriggerLabel` | "Critter Review" | Label that triggers review pickup |

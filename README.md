@@ -126,6 +126,7 @@ Settings live in `critters.config.yaml`:
 | `defaultAllowedTools` | see file | Tools critters can use |
 | `repos` | {} | Project ID &rarr; repo URL + extra tools |
 | `teamRepos` | {} | Team ID &rarr; fallback repo URL |
+| `defaultRepo` | — | Final fallback repo URL when not in description, project config, or team config |
 | `tmuxSession` | "critters" | Name of the tmux session to use |
 | `branchPrefix` | "critter" | Prefix for feature branch names (`<prefix>/<ID>-<slug>`) |
 | `planningModel` | "opus" | Claude model for planning phase |
