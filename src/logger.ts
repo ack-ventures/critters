@@ -154,7 +154,9 @@ function writeJsonLog(level: string, message: string, args: unknown[]): void {
         // never crash the daemon
       }
     }
-  } else if (isError) {
+  }
+
+  if (isError) {
     process.stderr.write(line);
   } else {
     process.stdout.write(line);
@@ -179,7 +181,9 @@ function writeLog(level: string, message: string, args: unknown[]): void {
         // never crash the daemon
       }
     }
-  } else if (level.includes("ERROR")) {
+  }
+
+  if (level.includes("ERROR")) {
     console.error(colorizeForConsole(level, message, args));
   } else if (level.includes("WARN")) {
     console.warn(colorizeForConsole(level, message, args));

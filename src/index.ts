@@ -298,9 +298,7 @@ async function main() {
   // Verify required CLI tools are available
   await checkPrerequisites();
 
-  if (noTmux && !jsonLogs) {
-    initFileLogging(config.maxLogSizeMb);
-  }
+  initFileLogging(config.maxLogSizeMb);
 
 
   // Capture main pane ID so periodic title updates only affect this pane
