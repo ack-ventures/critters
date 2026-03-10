@@ -69,7 +69,10 @@ Compare the PR against the original task description above. Check:
 - Format: REVIEW_RESULT:MERGED or REVIEW_RESULT:NEEDS_CHANGES:<reason>
 - Do NOT modify any files or create commits — you are a reviewer only
 - Be pragmatic: minor style nits or trivial improvements should NOT block a merge. Only request changes for genuine correctness, security, or completeness issues.
-- If the PR is mostly good with a minor issue, approve it with a note rather than requesting changes.`;
+- If the PR is mostly good with a minor issue, approve it with a note rather than requesting changes.
+
+## Reading Large Files
+The Read tool supports \`offset\` and \`limit\` parameters — use these to read large files in chunks rather than attempting to read the entire file at once.`;
 
   const custom = readCustomPrompt("review-prompt.md");
   if (custom) {
