@@ -5,7 +5,7 @@ import { resolveRepoUrl, resolveRepoUrlWithSource } from "./prompt.js";
 import type { IssueTracker, TrackerTask } from "./tracker/types.js";
 import type { Config } from "./types.js";
 import type { UnifiedSpawner } from "./unified-spawner.js";
-import { sleep } from "./utils.js";
+import { getTracker as getTrackerUtil, sleep } from "./utils.js";
 
 const PR_URL_RE = /PR created:\s*(https:\/\/github\.com\/[^\s)]+\/pull\/(\d+))/;
 
@@ -42,12 +42,7 @@ export class UnifiedWatcher {
   }
 
   private getTracker(critterType: CritterTypeConfig): IssueTracker {
-    const providerName = critterType.provider ?? this.config.provider;
-    const tracker = this.trackers.get(providerName);
-    if (!tracker) {
-      throw new Error(`No tracker configured for provider "${providerName}" (critter type "${critterType.name}")`);
-    }
-    return tracker;
+    return getTrackerUtil(critterType, this.config, this.trackers);
   }
 
   async start(): Promise<void> {

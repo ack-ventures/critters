@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { spawnClaude, spawnClaudeSubprocess } from "../claude.js";
+import { spawnClaudeForPhase } from "../claude.js";
 import { autoCommit, hasCommitsOnBranch, hasUncommittedChanges } from "../git.js";
 import { logTask, logTaskError } from "../logger.js";
 import { buildExecutionPrompt, getExecutionAllowedTools } from "../prompt.js";
@@ -10,7 +10,7 @@ import type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
 
 export class ExecutionPhaseRunner implements PhaseRunner {
   async run(ctx: PhaseContext): Promise<PhaseResult> {
-    const { task, config, workDir, branch, repoConfig, signal, resuming } = ctx;
+    const { task, config, workDir, branch, repoConfig, resuming } = ctx;
 
     // Adapt TrackerTask to CritterTask for prompt builders
     const critterTask = {
@@ -34,36 +34,7 @@ export class ExecutionPhaseRunner implements PhaseRunner {
     const skillContent = resolveSkills(ctx.phase.skills, vars);
     const prompt = skillContent ? basePrompt + skillContent : basePrompt;
 
-    const spawn = config.noTmux
-      ? await spawnClaudeSubprocess(
-          prompt,
-          allowedTools,
-          workDir,
-          ctx.phase.maxTurns,
-          task.identifier,
-          task.title,
-          "exec",
-          ctx.phase.model,
-          task.repoUrl,
-          signal,
-          ctx.mcpConfig,
-          ctx.strictMcpConfig,
-        )
-      : await spawnClaude(
-          prompt,
-          allowedTools,
-          workDir,
-          ctx.phase.maxTurns,
-          task.identifier,
-          task.title,
-          "exec",
-          config.tmuxSession,
-          ctx.phase.model,
-          task.repoUrl,
-          signal,
-          ctx.mcpConfig,
-          ctx.strictMcpConfig,
-        );
+    const spawn = await spawnClaudeForPhase(ctx, prompt, allowedTools, "exec");
 
     validatePhaseResult(spawn, "execution");
 
