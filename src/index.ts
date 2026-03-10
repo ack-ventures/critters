@@ -182,6 +182,14 @@ if (subcommand && !subcommand.startsWith("--")) {
 // ── Daemon ──────────────────────────────────────────────────────────────────
 
 async function main() {
+  process.on("unhandledRejection", (reason) => {
+    logError(`Unhandled rejection: ${reason instanceof Error ? reason.stack ?? reason.message : String(reason)}`);
+  });
+
+  process.on("uncaughtException", (err) => {
+    logError(`Uncaught exception: ${err.stack ?? err.message}`);
+  });
+
   const noTmux = Bun.argv.includes("--no-tmux");
   const skipUpdate = Bun.argv.includes("--skip-update");
   const dryRun = Bun.argv.includes("--dry-run");
