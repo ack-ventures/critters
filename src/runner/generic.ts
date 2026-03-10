@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import { spawnClaude, spawnClaudeSubprocess } from "../claude.js";
 import { logTask, logTaskWarn } from "../logger.js";
 import { buildPromptVars, resolvePrompt, resolveSkills, resolveTools } from "../prompt-template.js";
@@ -149,6 +149,11 @@ export class GenericPhaseRunner implements PhaseRunner {
     if (existsSync(reportPath)) {
       responseText = readFileSync(reportPath, "utf-8");
       logTask(task.identifier, `Report file found: ${REPORT_FILE} (${responseText.length} chars)`);
+      // Also copy to the plans directory so builtin:execution can find it
+      const planPath = `${workDir}/critters/plans/${task.identifier}.md`;
+      if (!existsSync(planPath)) {
+        copyFileSync(reportPath, planPath);
+      }
     } else {
       // Fallback: extract from stream-json output
       logTaskWarn(task.identifier, `No ${REPORT_FILE} found — extracting from Claude output`);
