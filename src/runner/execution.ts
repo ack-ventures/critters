@@ -73,7 +73,14 @@ export class ExecutionPhaseRunner implements PhaseRunner {
     }
 
     if (!(await hasCommitsOnBranch(workDir, branch, task.identifier))) {
-      throw new Error("Execution completed but no commits were made");
+      // No commits — nothing to do (analysis-only completion)
+      return { spawn, data: { prUrl: null } };
+    }
+
+    // Only look for a PR if the branch was pushed to the remote
+    const { stdout: remoteOut } = await runCommand("git", ["ls-remote", "--heads", "origin", branch], { cwd: workDir });
+    if (!remoteOut.trim()) {
+      return { spawn, data: { prUrl: null } };
     }
 
     // Detect PR
