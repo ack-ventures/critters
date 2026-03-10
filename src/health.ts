@@ -46,6 +46,7 @@ export function startHealthServer(
   triggers?: {
     triggerPoll?: () => Promise<number>;
     triggerReviewPoll?: () => Promise<number>;
+    triggerRestart?: () => void;
   },
   workDir?: string,
   dashboardToken?: string,
@@ -133,6 +134,24 @@ export function startHealthServer(
         }
         const issuesFound = await triggers.triggerReviewPoll();
         return Response.json({ triggered: true, issuesFound });
+      }
+
+      if (url.pathname === "/restart") {
+        if (req.method !== "POST") {
+          return new Response("Method Not Allowed", { status: 405 });
+        }
+        const authResp = checkAuth(req, dashboardToken);
+        if (authResp) return authResp;
+        if (!triggers?.triggerRestart) {
+          return Response.json({ error: "Restart not available" }, { status: 503 });
+        }
+
+        // Use setTimeout to let the HTTP response flush before process replacement
+        setTimeout(() => {
+          triggers.triggerRestart!();
+        }, 250);
+
+        return Response.json({ ok: true, message: "Restarting..." });
       }
 
       // API: GET /api/logs/<identifier> — returns processed log tail as plain text
