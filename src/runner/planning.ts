@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { spawnClaude, spawnClaudeSubprocess } from "../claude.js";
+import { spawnClaudeForPhase } from "../claude.js";
 import { commitFile } from "../git.js";
 import { logTask } from "../logger.js";
 import { buildPlanningPrompt, getPlanningAllowedTools } from "../prompt.js";
@@ -8,7 +8,7 @@ import type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
 
 export class PlanningPhaseRunner implements PhaseRunner {
   async run(ctx: PhaseContext): Promise<PhaseResult> {
-    const { task, config, workDir, repoConfig, signal } = ctx;
+    const { task, workDir, repoConfig } = ctx;
 
     const allowedTools = getPlanningAllowedTools();
     logTask(task.identifier, `Planning phase allowed tools: ${allowedTools.join(", ")}`);
@@ -29,36 +29,7 @@ export class PlanningPhaseRunner implements PhaseRunner {
     const skillContent = resolveSkills(ctx.phase.skills, vars);
     const prompt = skillContent ? basePrompt + skillContent : basePrompt;
 
-    const spawn = config.noTmux
-      ? await spawnClaudeSubprocess(
-          prompt,
-          allowedTools,
-          workDir,
-          ctx.phase.maxTurns,
-          task.identifier,
-          task.title,
-          "plan",
-          ctx.phase.model,
-          task.repoUrl,
-          signal,
-          ctx.mcpConfig,
-          ctx.strictMcpConfig,
-        )
-      : await spawnClaude(
-          prompt,
-          allowedTools,
-          workDir,
-          ctx.phase.maxTurns,
-          task.identifier,
-          task.title,
-          "plan",
-          config.tmuxSession,
-          ctx.phase.model,
-          task.repoUrl,
-          signal,
-          ctx.mcpConfig,
-          ctx.strictMcpConfig,
-        );
+    const spawn = await spawnClaudeForPhase(ctx, prompt, allowedTools, "plan");
 
     validatePhaseResult(spawn, "planning");
 

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { spawnClaude, spawnClaudeSubprocess } from "../claude.js";
+import { spawnClaudeForPhase } from "../claude.js";
 import { logTask } from "../logger.js";
 import { buildPromptVars, resolveSkills } from "../prompt-template.js";
 import { buildReviewPrompt, getReviewAllowedTools } from "../review-prompt.js";
@@ -57,7 +57,7 @@ export function parseReviewOutcome(logFilePath: string): ReviewOutcome {
 
 export class ReviewPhaseRunner implements PhaseRunner {
   async run(ctx: PhaseContext): Promise<PhaseResult> {
-    const { task, config, workDir, signal, repoConfig } = ctx;
+    const { task, workDir, repoConfig } = ctx;
 
     // Verify PR is still open
     if (task.prNumber) {
@@ -132,36 +132,7 @@ export class ReviewPhaseRunner implements PhaseRunner {
 
     logTask(task.identifier, "Starting review phase");
 
-    const spawn = config.noTmux
-      ? await spawnClaudeSubprocess(
-          prompt,
-          allowedTools,
-          workDir,
-          ctx.phase.maxTurns,
-          task.identifier,
-          task.title,
-          "review",
-          ctx.phase.model,
-          task.repoUrl,
-          signal,
-          ctx.mcpConfig,
-          ctx.strictMcpConfig,
-        )
-      : await spawnClaude(
-          prompt,
-          allowedTools,
-          workDir,
-          ctx.phase.maxTurns,
-          task.identifier,
-          task.title,
-          "review",
-          config.tmuxSession,
-          ctx.phase.model,
-          task.repoUrl,
-          signal,
-          ctx.mcpConfig,
-          ctx.strictMcpConfig,
-        );
+    const spawn = await spawnClaudeForPhase(ctx, prompt, allowedTools, "review");
 
     if (spawn.timedOut) {
       throw new Error("Timed out during review phase");

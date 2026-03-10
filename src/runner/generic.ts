@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync, readFileSync } from "node:fs";
-import { spawnClaude, spawnClaudeSubprocess } from "../claude.js";
+import { spawnClaudeForPhase } from "../claude.js";
 import { logTask, logTaskWarn } from "../logger.js";
 import { buildPromptVars, resolvePrompt, resolveSkills, resolveTools } from "../prompt-template.js";
 import { tailLines } from "../utils.js";
@@ -78,7 +78,7 @@ function extractResponseFromLog(jsonLogFile: string): string | null {
  */
 export class GenericPhaseRunner implements PhaseRunner {
   async run(ctx: PhaseContext): Promise<PhaseResult> {
-    const { task, config, workDir, branch, phase, repoConfig, signal } = ctx;
+    const { task, config, workDir, branch, phase, repoConfig } = ctx;
 
     const vars = buildPromptVars(task, workDir, branch);
     let prompt = resolvePrompt(phase.prompt, vars);
@@ -103,36 +103,7 @@ export class GenericPhaseRunner implements PhaseRunner {
 
     logTask(task.identifier, `Phase ${phase.name} allowed tools: ${allowedTools.join(", ")}`);
 
-    const spawn = config.noTmux
-      ? await spawnClaudeSubprocess(
-          prompt,
-          allowedTools,
-          workDir,
-          phase.maxTurns,
-          task.identifier,
-          task.title,
-          phase.name,
-          phase.model,
-          task.repoUrl,
-          signal,
-          ctx.mcpConfig,
-          ctx.strictMcpConfig,
-        )
-      : await spawnClaude(
-          prompt,
-          allowedTools,
-          workDir,
-          phase.maxTurns,
-          task.identifier,
-          task.title,
-          phase.name,
-          config.tmuxSession,
-          phase.model,
-          task.repoUrl,
-          signal,
-          ctx.mcpConfig,
-          ctx.strictMcpConfig,
-        );
+    const spawn = await spawnClaudeForPhase(ctx, prompt, allowedTools, phase.name);
 
     if (spawn.timedOut) {
       throw new Error(`Timed out during ${phase.name} phase`);

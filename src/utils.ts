@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import type { CritterTypeConfig } from "./critter-type.js";
+import type { IssueTracker } from "./tracker/types.js";
+import type { Config, SpawnResult } from "./types.js";
 
 export function runCommand(
   command: string,
@@ -106,4 +109,36 @@ export function extractOwnerRepo(repoUrl: string): string | null {
   if (httpsMatch) return httpsMatch[1];
 
   return null;
+}
+
+export function aggregatePhaseResults(
+  results: SpawnResult[],
+): { totalTurns: number; totalInput: number; totalOutput: number; totalCache: number; totalCost: number } {
+  let totalTurns = 0, totalInput = 0, totalOutput = 0, totalCache = 0, totalCost = 0;
+  for (const r of results) {
+    totalTurns += r.numTurns ?? 0;
+    totalInput += r.inputTokens ?? 0;
+    totalOutput += r.outputTokens ?? 0;
+    totalCache += r.cacheReadTokens ?? 0;
+    totalCost += r.costUsd ?? 0;
+  }
+  return { totalTurns, totalInput, totalOutput, totalCache, totalCost };
+}
+
+export function truncateComment(text: string, maxLength = 10000): string {
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength)}\n\n*(truncated)*`;
+}
+
+export function getTracker(
+  critterType: CritterTypeConfig,
+  config: Config,
+  trackers: Map<string, IssueTracker>,
+): IssueTracker {
+  const providerName = critterType.provider ?? config.provider;
+  const tracker = trackers.get(providerName);
+  if (!tracker) {
+    throw new Error(`No tracker configured for provider "${providerName}" (critter type "${critterType.name}")`);
+  }
+  return tracker;
 }

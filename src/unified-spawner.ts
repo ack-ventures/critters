@@ -32,7 +32,7 @@ import {
 } from "./slack.js";
 import type { IssueTracker, TrackerTask } from "./tracker/types.js";
 import type { ActiveCritterDetail, Config, SpawnResult } from "./types.js";
-import { branchName, extractOwnerRepo, formatDuration, formatPhaseStats, runCommand, shortRepoName, tailLines } from "./utils.js";
+import { aggregatePhaseResults, branchName, extractOwnerRepo, formatDuration, formatPhaseStats, getTracker, runCommand, shortRepoName, tailLines, truncateComment } from "./utils.js";
 
 interface QueuedTask {
   task: TrackerTask;
@@ -112,12 +112,7 @@ export class UnifiedSpawner {
   }
 
   private getTracker(critterType: CritterTypeConfig): IssueTracker {
-    const providerName = critterType.provider ?? this.config.provider;
-    const tracker = this.trackers.get(providerName);
-    if (!tracker) {
-      throw new Error(`No tracker configured for provider "${providerName}" (critter type "${critterType.name}")`);
-    }
-    return tracker;
+    return getTracker(critterType, this.config, this.trackers);
   }
 
   isTransientError(error: string): boolean {
@@ -206,11 +201,7 @@ export class UnifiedSpawner {
     const typeConfig = this.config.critterTypes.find((ct) => ct.name === typeName);
     if (!typeConfig) return;
 
-    const currentRunning = this.running.get(typeName) ?? 0;
-
-    while (currentRunning + (this.running.get(typeName) ?? 0) - currentRunning < typeConfig.concurrency
-      && queue.length > 0
-      && !this.stopped) {
+    while (queue.length > 0 && !this.stopped) {
       const runningNow = this.running.get(typeName) ?? 0;
       if (runningNow >= typeConfig.concurrency) break;
 
@@ -242,12 +233,17 @@ export class UnifiedSpawner {
         critterType: typeName,
       });
 
-      this.runTaskWithRetry(item.task, item.critterType).then((result) => {
-        this.running.set(typeName, (this.running.get(typeName) ?? 1) - 1);
-        logTask(item.task.identifier, `Task finished [${typeName}] (queue: ${queue.length}, running: ${this.running.get(typeName) ?? 0})`);
-        item.resolve(result);
-        this.processQueue(typeName);
-      });
+      this.runTaskWithRetry(item.task, item.critterType)
+        .catch((err) => {
+          logTaskError(item.task.identifier, `Unhandled error in task pipeline: ${err}`);
+          return { success: false, error: String(err) } as TaskResult;
+        })
+        .then((result) => {
+          this.running.set(typeName, (this.running.get(typeName) ?? 1) - 1);
+          logTask(item.task.identifier, `Task finished [${typeName}] (queue: ${queue.length}, running: ${this.running.get(typeName) ?? 0})`);
+          item.resolve(result);
+          this.processQueue(typeName);
+        });
     }
   }
 
@@ -437,11 +433,7 @@ export class UnifiedSpawner {
         if (phase.comment) {
           const responseText = phaseResult.data.responseText as string | undefined;
           if (responseText) {
-            const MAX_COMMENT_LENGTH = 10000;
-            const reportComment = responseText.length > MAX_COMMENT_LENGTH
-              ? `${responseText.slice(0, MAX_COMMENT_LENGTH)}\n\n*(truncated)*`
-              : responseText;
-            await tracker.comment(task.id, reportComment);
+            await tracker.comment(task.id, truncateComment(responseText));
             logTask(task.identifier, `Posted ${phase.name} report as comment (${responseText.length} chars)`);
           }
         }
@@ -509,10 +501,7 @@ export class UnifiedSpawner {
         );
 
         // Post as inline comment too
-        const MAX_COMMENT_LENGTH = 10000;
-        let comment = responseText.length > MAX_COMMENT_LENGTH
-          ? `${responseText.slice(0, MAX_COMMENT_LENGTH)}\n\n*(truncated)*`
-          : responseText;
+        let comment = truncateComment(responseText);
         if (url) {
           comment += `\n\n[Full report](${url})`;
         }
@@ -528,11 +517,7 @@ export class UnifiedSpawner {
         logTask(task.identifier, `Uploaded ${logAttachments.length} log files`);
       }
 
-      const totalCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
-      const totalTurns = phaseResults.reduce((sum, r) => sum + (r.numTurns ?? 0), 0);
-      const totalInput = phaseResults.reduce((sum, r) => sum + (r.inputTokens ?? 0), 0);
-      const totalOutput = phaseResults.reduce((sum, r) => sum + (r.outputTokens ?? 0), 0);
-      const totalCache = phaseResults.reduce((sum, r) => sum + (r.cacheReadTokens ?? 0), 0);
+      const { totalTurns, totalInput, totalOutput, totalCache, totalCost } = aggregatePhaseResults(phaseResults);
       recordMetric({
         timestamp: "",
         event: "task_completed",
@@ -644,11 +629,7 @@ export class UnifiedSpawner {
         );
       }
 
-      const totalTurns = phaseResults.reduce((sum, r) => sum + (r.numTurns ?? 0), 0);
-      const totalInput = phaseResults.reduce((sum, r) => sum + (r.inputTokens ?? 0), 0);
-      const totalOutput = phaseResults.reduce((sum, r) => sum + (r.outputTokens ?? 0), 0);
-      const totalCache = phaseResults.reduce((sum, r) => sum + (r.cacheReadTokens ?? 0), 0);
-      const totalCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
+      const { totalTurns, totalInput, totalOutput, totalCache, totalCost } = aggregatePhaseResults(phaseResults);
 
       const metricEvent = isReviewType ? "review_failed" : "task_failed";
       recordMetric({
@@ -689,9 +670,12 @@ export class UnifiedSpawner {
       this.activeWorkDirs.delete(workDir);
       this.activeCritterMap.delete(task.id);
       this.slackNotifier.clearThread(task.id);
-      logTask(task.identifier, "Cleaning up work directory...");
-      cleanupWorkDir(workDir);
-      logTask(task.identifier, "Cleaned up work directory");
+      try {
+        cleanupWorkDir(workDir);
+        logTask(task.identifier, "Cleaned up work directory");
+      } catch (cleanupErr) {
+        logTaskError(task.identifier, `Work directory cleanup failed: ${cleanupErr}`);
+      }
     }
   }
 
@@ -723,8 +707,10 @@ export class UnifiedSpawner {
       const maxAttempts = autoRetry.maxRetries + 1;
 
       logTask(task.identifier, `Auto-retrying (attempt ${nextAttempt}/${maxAttempts}) in ${Math.round(delayMs / 1000)}s after transient failure: ${lastResult.error}`);
-      const tracker = this.getTracker(critterType);
-      await tracker.comment(task.id, `Auto-retrying (attempt ${nextAttempt}/${maxAttempts}) in ${Math.round(delayMs / 1000)}s...\nError: ${lastResult.error}`).catch(() => {});
+      try {
+        const tracker = this.getTracker(critterType);
+        await tracker.comment(task.id, `Auto-retrying (attempt ${nextAttempt}/${maxAttempts}) in ${Math.round(delayMs / 1000)}s...\nError: ${lastResult.error}`);
+      } catch { /* best effort */ }
 
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
@@ -768,11 +754,7 @@ export class UnifiedSpawner {
       logTask(task.identifier, `Uploaded ${logAttachments.length} log files`);
     }
 
-    const totalTurns = phaseResults.reduce((sum, r) => sum + (r.numTurns ?? 0), 0);
-    const totalInput = phaseResults.reduce((sum, r) => sum + (r.inputTokens ?? 0), 0);
-    const totalOutput = phaseResults.reduce((sum, r) => sum + (r.outputTokens ?? 0), 0);
-    const totalCache = phaseResults.reduce((sum, r) => sum + (r.cacheReadTokens ?? 0), 0);
-    const totalCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
+    const { totalTurns, totalInput, totalOutput, totalCache, totalCost } = aggregatePhaseResults(phaseResults);
 
     recordMetric({
       timestamp: "",

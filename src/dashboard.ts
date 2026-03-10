@@ -49,17 +49,17 @@ function getDateKey(ts: string): string {
   }
 }
 
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
 function formatShortDate(dateStr: string): string {
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const parts = dateStr.split("-");
   if (parts.length < 3) return dateStr;
   const monthIdx = parseInt(parts[1], 10) - 1;
   const day = parseInt(parts[2], 10);
-  return `${months[monthIdx] ?? parts[1]} ${day}`;
+  return `${MONTHS[monthIdx] ?? parts[1]} ${day}`;
 }
 
 function chartDateLabel(dateStr: string, prevDateStr: string | null): string {
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const parts = dateStr.split("-");
   if (parts.length < 3) return dateStr;
   const day = parseInt(parts[2], 10);
@@ -68,12 +68,12 @@ function chartDateLabel(dateStr: string, prevDateStr: string | null): string {
 
   // Show month name + day when month changes (or for the first label)
   if (prevDateStr == null) {
-    return `${months[monthIdx] ?? month} ${day}`;
+    return `${MONTHS[monthIdx] ?? month} ${day}`;
   }
 
   const prevParts = prevDateStr.split("-");
   if (prevParts.length >= 2 && prevParts[1] !== month) {
-    return `${months[monthIdx] ?? month} ${day}`;
+    return `${MONTHS[monthIdx] ?? month} ${day}`;
   }
 
   // Same month: just show the day number

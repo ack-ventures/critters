@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { CritterTypeConfig } from "./critter-type.js";
 import { STREAM_FILTER } from "./jq-filter.js";
 import { logTask, logTaskError, logTaskWarn } from "./logger.js";
+import type { PhaseContext } from "./runner/types.js";
 import type { Config, SpawnResult } from "./types.js";
 import { formatDuration, runCommand, shellEscape, shortRepoName, sleep } from "./utils.js";
 
@@ -86,10 +87,7 @@ export async function spawnClaude(
 
   const errLog = `${workDir}/.critter-err-${phase}.log`;
 
-  const mcpArgs = mcpConfig && mcpConfig.length > 0
-    ? mcpConfig.map(p => ` \\\n  --mcp-config ${shellEscape(p)}`).join("")
-    : "";
-  const strictMcpArg = strictMcpConfig ? " \\\n  --strict-mcp-config" : "";
+  const { mcpArgs, strictMcpArg } = buildMcpArgs(mcpConfig, strictMcpConfig, " \\\n  ");
 
   // Write a bash script that streams Claude's output via stream-json + jq
   const currentPath = process.env.PATH || "/usr/local/bin:/usr/bin:/bin";
@@ -298,10 +296,7 @@ export async function spawnClaudeSubprocess(
 
   logTask(identifier, `Spawning Claude subprocess: ${buildPaneLabel(identifier, title, phase, repoShort)}`);
 
-  const subMcpArgs = mcpConfig && mcpConfig.length > 0
-    ? mcpConfig.map(p => ` --mcp-config ${shellEscape(p)}`).join("")
-    : "";
-  const subStrictMcpArg = strictMcpConfig ? " --strict-mcp-config" : "";
+  const { mcpArgs: subMcpArgs, strictMcpArg: subStrictMcpArg } = buildMcpArgs(mcpConfig, strictMcpConfig, " ");
 
   const currentPath = process.env.PATH || "/usr/local/bin:/usr/bin:/bin";
   const bashCmd = [
@@ -349,4 +344,37 @@ export async function spawnClaudeSubprocess(
   }
 
   return { exitCode, stdout: "", stderr, timedOut, numTurns, inputTokens, outputTokens, cacheReadTokens, costUsd };
+}
+
+function buildMcpArgs(
+  mcpConfig: string[] | undefined,
+  strictMcpConfig: boolean | undefined,
+  separator: string,
+): { mcpArgs: string; strictMcpArg: string } {
+  const mcpArgs = mcpConfig && mcpConfig.length > 0
+    ? mcpConfig.map(p => `${separator}--mcp-config ${shellEscape(p)}`).join("")
+    : "";
+  const strictMcpArg = strictMcpConfig ? `${separator}--strict-mcp-config` : "";
+  return { mcpArgs, strictMcpArg };
+}
+
+export async function spawnClaudeForPhase(
+  ctx: PhaseContext,
+  prompt: string,
+  allowedTools: string[],
+  phaseTag: string,
+): Promise<SpawnResult> {
+  const { task, config, workDir, signal } = ctx;
+  if (config.noTmux) {
+    return spawnClaudeSubprocess(
+      prompt, allowedTools, workDir, ctx.phase.maxTurns,
+      task.identifier, task.title, phaseTag, ctx.phase.model,
+      task.repoUrl, signal, ctx.mcpConfig, ctx.strictMcpConfig,
+    );
+  }
+  return spawnClaude(
+    prompt, allowedTools, workDir, ctx.phase.maxTurns,
+    task.identifier, task.title, phaseTag, config.tmuxSession,
+    ctx.phase.model, task.repoUrl, signal, ctx.mcpConfig, ctx.strictMcpConfig,
+  );
 }
