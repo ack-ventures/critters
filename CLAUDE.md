@@ -671,7 +671,8 @@ Only the credentials for providers actually referenced by your `critterTypes` ar
 - Also available via: `bun run build`
 - Release CI builds for `darwin-arm64` and `linux-x64`
 - Bun compiled binaries use virtual paths in `process.argv` (e.g. `/$bunfs/`); use `process.execPath` for the real binary path
-- `--no-tmux` flag runs the daemon without tmux, logging to file instead (rotated at `maxLogSizeMb`)
+- The daemon always logs to `~/.critters/critters.log` (rotated at `maxLogSizeMb`), regardless of whether tmux is used
+- `--no-tmux` flag runs the daemon without tmux, using only file logging (no console output)
 - Auto-update only works when running as a compiled binary (detected by checking `process.execPath` basename isn't `bun`)
 
 ## CLI Commands
@@ -694,7 +695,7 @@ Usage: `critters [command] [flags]`
 | `clean` | Clean up stale work directories (`--all`, `--dry-run`) |
 | `release-notes` | Show release notes for recent versions |
 | `validate` | Validate config file without starting daemon |
-| `update` | Check for and apply binary updates |
+| `update` | Check for and apply binary updates (requires manual daemon restart) |
 | `version` | Print version |
 | `help` | Show help |
 
