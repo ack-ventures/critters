@@ -632,6 +632,7 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 | `src/cli-retry.ts` | `critters retry` CLI command |
 | `src/logs.ts` | `critters logs` CLI command |
 | `src/cli-kickoff.ts` | `critters kickoff` CLI command |
+| `src/cli-restart.ts` | `critters restart` CLI command |
 | `src/cli-clean.ts` | `critters clean` CLI command |
 | `src/cli-tail.ts` | `critters tail` CLI command |
 | `src/init-repo.ts` | `critters init-repo` CLI command |
@@ -683,6 +684,7 @@ Usage: `critters [command] [flags]`
 | `status` | Show daemon status (active/queued critters, uptime, today's stats) |
 | `logs <ID>` | View critter logs (`--phase planning\|execution\|review`, `--follow\|-f`) |
 | `retry <ID>` | Reset a failed critter to Todo for re-pickup (`--force` to override non-failed states) |
+| `restart` | Restart the daemon |
 | `kickoff` | Trigger an immediate poll cycle via the health server |
 | `tail` | Live-stream output from all active critters |
 | `list-types` | Show configured critter types |
@@ -793,6 +795,7 @@ An HTTP server starts on `healthPort` (default 3847, set to 0 to disable).
 | `/metrics` | GET | JSON array of recent metric events (last 100) |
 | `/poll` | POST | Trigger an immediate critter poll cycle |
 | `/review-poll` | POST | Trigger an immediate review poll cycle |
+| `/restart` | POST | Restart the daemon process (re-exec). Requires auth if configured |
 | `/api/v1/auth-check` | GET | JSON `{ required: boolean }` — whether auth is configured |
 | `/api/v1/metadata` | GET | JSON metadata: providers with teams, critter types |
 | `/api/v1/issues` | POST | Create a critter issue. Body: `{ provider, teamId, title, description, critterType }` |

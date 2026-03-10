@@ -44,6 +44,7 @@ Usage: critters [command] [flags]
 Commands:
   (none)      Start the daemon
   retry       Retry a failed critter (reset to Todo)
+  restart     Restart the daemon
   kickoff     Trigger an immediate poll cycle
   status      Show daemon status
   version     Show version
@@ -132,6 +133,12 @@ if (subcommand === "validate") {
 if (subcommand === "kickoff") {
   const { runKickoff } = await import("./cli-kickoff.js");
   await runKickoff();
+  process.exit(0);
+}
+
+if (subcommand === "restart") {
+  const { runRestart } = await import("./cli-restart.js");
+  await runRestart();
   process.exit(0);
 }
 
@@ -344,6 +351,36 @@ async function main() {
     repos: config.repos,
     teamRepos: config.teamRepos,
   };
+  function restartDaemon(): void {
+    log("Restarting daemon...");
+
+    try {
+      // Clean up resources
+      tunnelHandle?.stop();
+      configWatcher.stop();
+      if (titleInterval) clearInterval(titleInterval);
+      healthServer?.stop();
+      watcher.stop();
+
+      // Re-exec: filter out Bun virtual paths (/$bunfs/) from argv
+      const args = process.argv.slice(1).filter((a) => !a.startsWith("/$bunfs/"));
+      const argv = [process.execPath, ...args];
+
+      // Use Bun.spawn with stdio: "inherit" to replace the process.
+      // The new process inherits the tmux pane terminal.
+      const child = Bun.spawn(argv, {
+        stdio: ["inherit", "inherit", "inherit"],
+        env: process.env,
+      });
+      child.unref();
+      process.exit(0);
+    } catch (err) {
+      logError(`Restart failed: ${err instanceof Error ? err.message : String(err)}`);
+      // Fatal — resources are already torn down, cannot recover
+      process.exit(1);
+    }
+  }
+
   if (config.healthPort !== 0) {
     const metricsPath = join(homedir(), ".critters", "metrics.jsonl");
     healthServer = startHealthServer(config.healthPort, () => ({
@@ -357,6 +394,7 @@ async function main() {
     }), metricsPath, {
       triggerPoll: () => watcher.triggerPoll(),
       triggerReviewPoll: () => watcher.triggerPoll(), // unified watcher handles both
+      triggerRestart: () => restartDaemon(),
     }, config.workDir, config.dashboardToken, healthContext);
   }
 

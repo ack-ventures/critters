@@ -291,6 +291,47 @@ export async function checkForUpdate(
     print(`Backup saved to ${backupPath}`);
     renameSync(tempPath, process.execPath);
     print(`Update applied (v${currentVersion} → v${latestVersion}). Will take effect on next restart.`);
+
+    // After successful update, try to restart the daemon if it's running
+    // Only in CLI mode (force=true means `critters update` command)
+    if (force) {
+      try {
+        const { existsSync: exists, readFileSync: readFile } = await import("node:fs");
+        const { homedir: home } = await import("node:os");
+        const { parse: parseYaml } = await import("yaml");
+
+        let healthPort = 3847;
+        let dashboardToken: string | undefined;
+        const candidates = ["./critters.config.yaml", `${home()}/.critters/config.yaml`];
+        for (const candidate of candidates) {
+          if (exists(candidate)) {
+            try {
+              const raw = readFile(candidate, "utf-8");
+              const yaml = parseYaml(raw) as Record<string, unknown>;
+              healthPort = (yaml.healthPort as number) ?? 3847;
+              dashboardToken = (yaml.dashboardToken as string) ?? process.env.DASHBOARD_TOKEN;
+              break;
+            } catch {}
+          }
+        }
+
+        const headers: Record<string, string> = {};
+        if (dashboardToken) {
+          headers["Authorization"] = `Bearer ${dashboardToken}`;
+        }
+
+        const resp = await fetch(`http://localhost:${healthPort}/restart`, {
+          method: "POST",
+          headers,
+          signal: AbortSignal.timeout(5_000),
+        });
+        if (resp.ok) {
+          print("Daemon restart triggered.");
+        }
+      } catch {
+        print("Restart the daemon manually to use the new version.");
+      }
+    }
   } catch (err) {
     try {
       if (existsSync(tempPath)) {
