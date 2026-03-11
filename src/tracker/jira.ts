@@ -44,7 +44,7 @@ export class JiraTracker implements IssueTracker {
           method: "POST",
           body: JSON.stringify({
             jql,
-            fields: ["summary", "description", "labels", "project", "issuelinks"],
+            fields: ["summary", "description", "labels", "project", "issuelinks", "updated"],
             expand: "renderedFields",
           }),
         });
@@ -81,6 +81,7 @@ export class JiraTracker implements IssueTracker {
             labels: issue.fields.labels ?? [],
             ...(blockedBy.length > 0 ? { blockedBy } : {}),
             issueUrl: `https://${this.host}/browse/${issue.key}`,
+            ...(issue.fields.updated ? { updatedAt: new Date(issue.fields.updated) } : {}),
           });
         }
 
@@ -289,6 +290,7 @@ interface JiraIssue {
     project: { id: string; key: string; name: string };
     status?: { name: string };
     issuelinks?: JiraIssueLink[];
+    updated?: string;
   };
   renderedFields?: {
     description?: string; // HTML
