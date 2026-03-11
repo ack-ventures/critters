@@ -1,7 +1,7 @@
 import { statSync } from "node:fs";
 import { checkAuth } from "./auth.js";
 import type { CritterTypeConfig } from "./critter-type.js";
-import { renderDashboard, renderLogPage } from "./dashboard.js";
+import { renderDashboard, renderIssuePage } from "./dashboard.js";
 import { formatToolUse, formatUserEvent, readLogTail, resolveLogFile, resolveWorkDirForIdentifier, stripAnsi } from "./log-resolver.js";
 import { log } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
@@ -98,6 +98,15 @@ export function startHealthServer(
       if (url.pathname === "/metrics") {
         const entries = getRecentMetrics(100);
         return Response.json(entries);
+      }
+
+      if (url.pathname.startsWith("/dashboard/") && url.pathname.length > "/dashboard/".length) {
+        const identifier = decodeURIComponent(url.pathname.slice("/dashboard/".length));
+        const status = getStatus();
+        const html = renderIssuePage(identifier, status, workDir ?? "/tmp/critters-work");
+        return new Response(html, {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
       }
 
       if (url.pathname === "/" || url.pathname === "/dashboard") {
@@ -301,16 +310,15 @@ export function startHealthServer(
         });
       }
 
-      // GET /logs/<identifier> — dedicated log page
+      // GET /logs/<identifier> — redirect to /dashboard/<identifier>
       if (url.pathname.startsWith("/logs/")) {
         const identifier = url.pathname.split("/").filter(Boolean)[1];
         if (!identifier) {
           return new Response("Missing identifier", { status: 400 });
         }
-        const status = getStatus();
-        const html = renderLogPage(identifier, status, workDir ?? "/tmp/critters-work");
-        return new Response(html, {
-          headers: { "Content-Type": "text/html; charset=utf-8" },
+        return new Response(null, {
+          status: 302,
+          headers: { Location: `/dashboard/${encodeURIComponent(identifier)}` },
         });
       }
 
