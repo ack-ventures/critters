@@ -551,6 +551,8 @@ critterTypes:
 | `concurrency` | 2 | Max parallel critters |
 | `timeoutMinutes` | 30 | Total timeout per task (both phases) |
 | `workDir` | /tmp/critters-work | Temp clone directory |
+| `cleanupIntervalMinutes` | 60 | How often periodic work directory cleanup runs (minutes) |
+| `cleanupStaleMinutes` | `max(timeoutMinutes) + 30` | Age threshold (minutes) for considering work directories stale |
 | `triggerLabel` | "Critter" | Label that triggers pickup |
 | `maxPlanningTurns` | 50 | Max Claude turns for planning phase |
 | `maxExecutionTurns` | 75 | Max Claude turns for execution phase |

@@ -130,6 +130,8 @@ export function loadConfig(configPath?: string): Config {
     concurrency: (yaml.concurrency as number) ?? 2,
     timeoutMinutes: (yaml.timeoutMinutes as number) ?? 30,
     workDir: resolvedWorkDir,
+    cleanupIntervalMinutes: (yaml.cleanupIntervalMinutes as number) ?? undefined,
+    cleanupStaleMinutes: (yaml.cleanupStaleMinutes as number) ?? undefined,
     triggerLabel: (yaml.triggerLabel as string) ?? "Critter",
     maxPlanningTurns: (yaml.maxPlanningTurns as number) ?? 50,
     maxExecutionTurns: (yaml.maxExecutionTurns as number) ?? 75,
@@ -195,6 +197,31 @@ export function loadWorkDir(configPath?: string): string {
     return realpathSync(workDir);
   }
   return workDir;
+}
+
+export function loadCleanConfig(configPath?: string): { workDir: string; cleanupStaleMinutes?: number; healthPort: number } {
+  let resolved: string | undefined;
+  try {
+    resolved = resolveConfigPath(configPath);
+  } catch {
+    return { workDir: "/tmp/critters-work", healthPort: 3847 };
+  }
+  const raw = readFileSync(resolved, "utf-8");
+  const yaml = parseYaml(raw) as Record<string, unknown>;
+  const workDir = (yaml.workDir as string) ?? "/tmp/critters-work";
+  validateWorkDir(workDir);
+  if (existsSync(workDir)) {
+    return {
+      workDir: realpathSync(workDir),
+      cleanupStaleMinutes: (yaml.cleanupStaleMinutes as number) ?? undefined,
+      healthPort: (yaml.healthPort as number) ?? 3847,
+    };
+  }
+  return {
+    workDir,
+    cleanupStaleMinutes: (yaml.cleanupStaleMinutes as number) ?? undefined,
+    healthPort: (yaml.healthPort as number) ?? 3847,
+  };
 }
 
 function parseCritterTypes(yaml: Record<string, unknown>, config: Config): CritterTypeConfig[] {
@@ -303,6 +330,12 @@ function validateConfig(config: Config): void {
   }
   if (!/^[a-zA-Z0-9._-]+$/.test(config.branchPrefix)) {
     throw new Error(`Invalid config: branchPrefix must match /^[a-zA-Z0-9._-]+$/, got "${config.branchPrefix}"`);
+  }
+  if (config.cleanupIntervalMinutes != null && config.cleanupIntervalMinutes <= 0) {
+    throw new Error(`Invalid config: cleanupIntervalMinutes must be > 0, got ${config.cleanupIntervalMinutes}`);
+  }
+  if (config.cleanupStaleMinutes != null && config.cleanupStaleMinutes <= 0) {
+    throw new Error(`Invalid config: cleanupStaleMinutes must be > 0, got ${config.cleanupStaleMinutes}`);
   }
   if (config.costAlertThreshold != null && config.costAlertThreshold <= 0) {
     throw new Error(`Invalid config: costAlertThreshold must be > 0, got ${config.costAlertThreshold}`);

@@ -131,13 +131,13 @@ export class UnifiedSpawner {
   }
 
   cleanupStale(): void {
-    const maxTimeout = Math.max(...this.config.critterTypes.map(ct => ct.timeoutMinutes));
-    const maxAgeMinutes = maxTimeout + 30;
+    const maxAgeMinutes = this.config.cleanupStaleMinutes
+      ?? Math.max(...this.config.critterTypes.map(ct => ct.timeoutMinutes)) + 30;
     cleanupStaleWorkDirs(this.config.workDir, this.activeWorkDirs, maxAgeMinutes);
   }
 
   startPeriodicCleanup(): void {
-    const intervalMs = 60 * 60 * 1000;
+    const intervalMs = (this.config.cleanupIntervalMinutes ?? 60) * 60 * 1000;
     this.cleanupInterval = setInterval(() => {
       log("Running periodic work directory cleanup...");
       this.cleanupStale();

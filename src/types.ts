@@ -34,6 +34,8 @@ export interface Config {
   concurrency: number;
   timeoutMinutes: number;
   workDir: string;
+  cleanupIntervalMinutes?: number;
+  cleanupStaleMinutes?: number;
   triggerLabel: string;
   maxPlanningTurns: number;
   maxExecutionTurns: number;

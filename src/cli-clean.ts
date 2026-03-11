@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { parse as parseYaml } from "yaml";
-import { loadWorkDir, resolveConfigPath } from "./config.js";
+import { loadCleanConfig, resolveConfigPath } from "./config.js";
 import { loadEnvFallback } from "./env.js";
 import { deleteRemoteBranch } from "./git.js";
 import { createTracker } from "./tracker/index.js";
@@ -30,6 +30,22 @@ function formatSize(bytes: number): string {
   return `${bytes} B`;
 }
 
+async function getActiveWorkDirs(healthPort: number): Promise<Set<string>> {
+  const active = new Set<string>();
+  try {
+    const resp = await fetch(`http://localhost:${healthPort}/healthz`, { signal: AbortSignal.timeout(3000) });
+    if (resp.ok) {
+      const data = await resp.json() as { activeCritterDetails?: Array<{ workDir?: string | null }> };
+      for (const d of data.activeCritterDetails ?? []) {
+        if (d.workDir) active.add(d.workDir);
+      }
+    }
+  } catch {
+    // Daemon not running or unreachable — no protection available
+  }
+  return active;
+}
+
 export async function runClean(args: string[]): Promise<void> {
   const dryRun = args.includes("--dry-run");
   const configIdx = args.indexOf("--config");
@@ -42,7 +58,8 @@ export async function runClean(args: string[]): Promise<void> {
 
   // Existing directory cleanup logic
   const all = args.includes("--all");
-  const workDir = loadWorkDir(configPath);
+  const cleanConfig = loadCleanConfig(configPath);
+  const workDir = cleanConfig.workDir;
 
   if (!existsSync(workDir)) {
     console.log(`No work directory found at ${workDir}`);
@@ -57,11 +74,16 @@ export async function runClean(args: string[]): Promise<void> {
 
   console.log(`Work directory: ${workDir}\n`);
 
-  const STALE_THRESHOLD_MS = 60 * 60_000; // 60 minutes
+  const staleThresholdMs = (cleanConfig.cleanupStaleMinutes ?? 60) * 60_000;
   let totalFreed = 0;
   let cleanedCount = 0;
 
-  const dirs: { name: string; ageMs: number; size: number; stale: boolean }[] = [];
+  // Query the daemon's health endpoint for active work directories
+  const activeWorkDirs = cleanConfig.healthPort > 0
+    ? await getActiveWorkDirs(cleanConfig.healthPort)
+    : new Set<string>();
+
+  const dirs: { name: string; ageMs: number; size: number; stale: boolean; active: boolean }[] = [];
 
   for (const entry of entries) {
     const fullPath = `${workDir}/${entry}`;
@@ -71,8 +93,9 @@ export async function runClean(args: string[]): Promise<void> {
       const ageMs = Date.now() - stats.mtimeMs;
       console.log(`  Scanning ${entry}...`);
       const size = getDirSize(fullPath);
-      const stale = all || ageMs >= STALE_THRESHOLD_MS;
-      dirs.push({ name: entry, ageMs, size, stale });
+      const isActive = activeWorkDirs.has(fullPath);
+      const stale = isActive ? false : (all || ageMs >= staleThresholdMs);
+      dirs.push({ name: entry, ageMs, size, stale, active: isActive });
     } catch {
       console.warn(`  Warning: could not stat ${entry}, skipping`);
     }
@@ -84,7 +107,7 @@ export async function runClean(args: string[]): Promise<void> {
   }
 
   for (const dir of dirs) {
-    const label = dir.stale ? "stale" : "active";
+    const label = dir.active ? "active (in-use)" : dir.stale ? "stale" : "active";
     console.log(`  ${dir.name}  ${formatDuration(dir.ageMs)}   ${formatSize(dir.size)}  ${label}`);
   }
 
