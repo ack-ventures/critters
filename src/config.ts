@@ -199,28 +199,31 @@ export function loadWorkDir(configPath?: string): string {
   return workDir;
 }
 
-export function loadCleanConfig(configPath?: string): { workDir: string; cleanupStaleMinutes?: number; healthPort: number } {
+export function loadCleanConfig(configPath?: string): { workDir: string; cleanupStaleMinutes?: number; healthPort: number; tmuxSession: string } {
   let resolved: string | undefined;
   try {
     resolved = resolveConfigPath(configPath);
   } catch {
-    return { workDir: "/tmp/critters-work", healthPort: 3847 };
+    return { workDir: "/tmp/critters-work", healthPort: 3847, tmuxSession: "critters" };
   }
   const raw = readFileSync(resolved, "utf-8");
   const yaml = parseYaml(raw) as Record<string, unknown>;
   const workDir = (yaml.workDir as string) ?? "/tmp/critters-work";
   validateWorkDir(workDir);
+  const tmuxSession = (yaml.tmuxSession as string) ?? "critters";
   if (existsSync(workDir)) {
     return {
       workDir: realpathSync(workDir),
       cleanupStaleMinutes: (yaml.cleanupStaleMinutes as number) ?? undefined,
       healthPort: (yaml.healthPort as number) ?? 3847,
+      tmuxSession,
     };
   }
   return {
     workDir,
     cleanupStaleMinutes: (yaml.cleanupStaleMinutes as number) ?? undefined,
     healthPort: (yaml.healthPort as number) ?? 3847,
+    tmuxSession,
   };
 }
 

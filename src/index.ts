@@ -57,7 +57,7 @@ Commands:
   tail        Live-stream output from all active critters
   init-repo   Scaffold .critters.yaml in current repo
   prompt-help Launch Claude to help design critter types and prompts
-  clean       Clean up stale work directories (--branches for remote branches)
+  clean       Clean up stale work directories (--branches, --panes)
   validate    Validate config file without starting daemon
   help        Show this help
 
@@ -71,6 +71,7 @@ Flags:
 
 Clean flags:
   --branches   Clean up stale critter branches from remotes
+  --panes      Clean up stale tmux panes from failed critters
   --all        Remove all work directories (not just stale ones)
   --dry-run    Show what would be deleted without deleting
 
@@ -348,6 +349,17 @@ async function main() {
   const spawner = new UnifiedSpawner(config, trackers);
   spawner.cleanupStale();
   spawner.startPeriodicCleanup();
+
+  // Clean up stale tmux panes from previous daemon runs
+  if (!noTmux) {
+    const { cleanupStalePanes, killStalePanes } = await import("./claude.js");
+    const stalePanes = await cleanupStalePanes(config.tmuxSession, spawner.getActiveWorkDirs(), mainPaneId);
+    if (stalePanes.length > 0) {
+      const result = await killStalePanes(config.tmuxSession, stalePanes);
+      log(`Cleaned up ${result.killed} stale tmux pane(s)`);
+      for (const pane of stalePanes) log(`  Killed pane ${pane.paneId}: ${pane.title} (${pane.reason})`);
+    }
+  }
 
   let lastPollAt: string | null = null;
   const updatePollTime = () => { lastPollAt = new Date().toISOString(); };

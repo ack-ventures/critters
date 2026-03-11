@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { parse as parseYaml } from "yaml";
+import { cleanupStalePanes, killStalePanes } from "./claude.js";
 import { loadCleanConfig, resolveConfigPath } from "./config.js";
 import { loadEnvFallback } from "./env.js";
 import { deleteRemoteBranch } from "./git.js";
@@ -46,6 +47,35 @@ async function getActiveWorkDirs(healthPort: number): Promise<Set<string>> {
   return active;
 }
 
+async function cleanStaleTmuxPanes(configPath: string | undefined, dryRun: boolean): Promise<void> {
+  const cleanConfig = loadCleanConfig(configPath);
+  const tmuxSession = cleanConfig.tmuxSession;
+
+  // Get active work dirs from the daemon's health endpoint (if running)
+  const activeWorkDirs = cleanConfig.healthPort > 0
+    ? await getActiveWorkDirs(cleanConfig.healthPort)
+    : new Set<string>();
+
+  const stalePanes = await cleanupStalePanes(tmuxSession, activeWorkDirs);
+
+  if (stalePanes.length === 0) {
+    console.log("No stale tmux panes found");
+    return;
+  }
+
+  for (const pane of stalePanes) {
+    console.log(`  ${pane.paneId}  ${pane.title}  (${pane.reason})`);
+  }
+
+  if (dryRun) {
+    console.log(`\nWould kill ${stalePanes.length} stale tmux pane(s)`);
+    return;
+  }
+
+  const result = await killStalePanes(tmuxSession, stalePanes);
+  console.log(`\nKilled ${result.killed} stale tmux pane(s)${result.failed > 0 ? ` (${result.failed} failed)` : ""}`);
+}
+
 export async function runClean(args: string[]): Promise<void> {
   const dryRun = args.includes("--dry-run");
   const configIdx = args.indexOf("--config");
@@ -53,6 +83,11 @@ export async function runClean(args: string[]): Promise<void> {
 
   if (args.includes("--branches")) {
     await cleanStaleBranches(configPath, dryRun);
+    return;
+  }
+
+  if (args.includes("--panes")) {
+    await cleanStaleTmuxPanes(configPath, dryRun);
     return;
   }
 
