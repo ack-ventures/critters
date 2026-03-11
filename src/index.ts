@@ -9,6 +9,7 @@ import { loadConfig, resolveConfigPath } from "./config.js";
 import { ConfigWatcher, diffConfigs } from "./config-watcher.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import { loadEnvFallback } from "./env.js";
+import { checkDiskSpace } from "./git.js";
 import { resetMetadataCache, startHealthServer } from "./health.js";
 import { runInit } from "./init.js";
 import { runInitRepo } from "./init-repo.js";
@@ -338,6 +339,13 @@ async function main() {
 
   // Verify required CLI tools are available
   await checkPrerequisites();
+
+  // Check disk space at startup (warning only)
+  try {
+    checkDiskSpace(config.workDir, config.minDiskSpaceMb * 2);
+  } catch {
+    log(`Warning: Low disk space on ${config.workDir} — below ${config.minDiskSpaceMb * 2}MB (2x minDiskSpaceMb). Critters may fail to clone repos.`);
+  }
 
   initFileLogging(config.maxLogSizeMb);
 
