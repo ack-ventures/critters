@@ -370,16 +370,25 @@ async function main() {
 
       // Re-exec: filter out Bun virtual paths (/$bunfs/) from argv
       const args = process.argv.slice(1).filter((a) => !a.startsWith("/$bunfs/"));
-      const argv = [process.execPath, ...args];
 
-      // Use Bun.spawn with stdio: "inherit" to replace the process.
-      // The new process inherits the tmux pane terminal.
-      const child = Bun.spawn(argv, {
-        stdio: ["inherit", "inherit", "inherit"],
-        env: process.env,
-      });
-      child.unref();
-      process.exit(0);
+      if (process.env.TMUX_PANE) {
+        // In tmux: use respawn-pane to atomically restart in the same pane.
+        // Without this, the parent exit causes tmux to close the pane,
+        // killing the child process before it can start.
+        const cmd = [process.execPath, ...args].map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ");
+        Bun.spawnSync(["tmux", "respawn-pane", "-k", "-t", process.env.TMUX_PANE, cmd]);
+        // respawn-pane tells the tmux server to kill us and restart —
+        // exit cleanly in case SIGTERM hasn't arrived yet
+        process.exit(0);
+      } else {
+        // Non-tmux: spawn detached child so it survives parent exit
+        const child = Bun.spawn([process.execPath, ...args], {
+          stdio: ["inherit", "inherit", "inherit"],
+          env: process.env,
+        });
+        child.unref();
+        process.exit(0);
+      }
     } catch (err) {
       logError(`Restart failed: ${err instanceof Error ? err.message : String(err)}`);
       // Fatal — resources are already torn down, cannot recover
