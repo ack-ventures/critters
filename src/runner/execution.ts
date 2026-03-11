@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { spawnClaudeForPhase } from "../claude.js";
 import { autoCommit, getDefaultBranch, hasCommitsOnBranch, hasUncommittedChanges } from "../git.js";
-import { logTask, logTaskError } from "../logger.js";
+import { logTask, logTaskError, logTaskWarn } from "../logger.js";
 import { buildExecutionPrompt, getExecutionAllowedTools } from "../prompt.js";
 import { buildPromptVars, resolveSkills, resolveTools } from "../prompt-template.js";
 import { withRetry } from "../retry.js";
@@ -59,7 +59,45 @@ export class ExecutionPhaseRunner implements PhaseRunner {
     // Detect PR
     const prUrl = await detectPr(workDir, branch, task.identifier);
 
+    // Verify PR targets the correct base branch
+    if (prUrl) {
+      await verifyPrBaseBranch(workDir, prUrl, defaultBranch, task.identifier);
+    }
+
     return { spawn, data: { prUrl } };
+  }
+}
+
+async function verifyPrBaseBranch(
+  workDir: string,
+  prUrl: string,
+  expectedBase: string,
+  identifier: string,
+): Promise<void> {
+  try {
+    const { code, stdout } = await runCommand(
+      "gh",
+      ["pr", "view", prUrl, "--json", "baseRefName"],
+      { cwd: workDir },
+    );
+    if (code !== 0) return;
+
+    const { baseRefName } = JSON.parse(stdout);
+    if (baseRefName && baseRefName !== expectedBase) {
+      logTaskWarn(identifier, `PR targets "${baseRefName}" instead of "${expectedBase}", retargeting...`);
+      const editResult = await runCommand(
+        "gh",
+        ["pr", "edit", prUrl, "--base", expectedBase],
+        { cwd: workDir },
+      );
+      if (editResult.code === 0) {
+        logTask(identifier, `Retargeted PR to ${expectedBase}`);
+      } else {
+        logTaskError(identifier, `Failed to retarget PR: ${editResult.stderr}`);
+      }
+    }
+  } catch (err) {
+    logTaskError(identifier, `PR base branch verification failed: ${err}`);
   }
 }
 
