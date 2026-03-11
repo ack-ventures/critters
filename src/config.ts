@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { parse as parseYaml } from "yaml";
 import { type CritterTypeConfig, parseCritterTypes as parseCritterTypesFromYaml, synthesizeDefaultTypes, validateCritterType } from "./critter-type.js";
 import { log } from "./logger.js";
-import type { AutoRetryConfig, Config, RepoConfig, TunnelConfig } from "./types.js";
+import type { AutoRetryConfig, CircuitBreakerConfig, Config, RepoConfig, TunnelConfig } from "./types.js";
 
 export function validateWorkDir(workDir: string): void {
   const resolved = workDir.startsWith("/") ? workDir : `${process.cwd()}/${workDir}`;
@@ -125,6 +125,14 @@ export function loadConfig(configPath?: string): Config {
 
   const tunnel = yaml.tunnel as TunnelConfig | undefined;
 
+  const circuitBreakerRaw = yaml.circuitBreaker as Record<string, unknown> | undefined;
+  const circuitBreaker: CircuitBreakerConfig | undefined = circuitBreakerRaw
+    ? {
+        failureThreshold: (circuitBreakerRaw.failureThreshold as number) ?? undefined,
+        maxBackoffMinutes: (circuitBreakerRaw.maxBackoffMinutes as number) ?? undefined,
+      }
+    : undefined;
+
   const provider = ((yaml.provider as string) ?? "linear") as "linear" | "jira";
 
   const config: Config = {
@@ -167,6 +175,7 @@ export function loadConfig(configPath?: string): Config {
     hooks,
     autoRetry,
     tunnel,
+    circuitBreaker,
     mcpConfig: (yaml.mcpConfig as string | string[]) ?? undefined,
     strictMcpConfig: (yaml.strictMcpConfig as boolean) ?? undefined,
     linearWebhookSecret,
@@ -356,6 +365,14 @@ function validateConfig(config: Config): void {
     }
     if (config.autoRetry.maxDelaySeconds < config.autoRetry.baseDelaySeconds) {
       throw new Error(`Invalid config: autoRetry.maxDelaySeconds must be >= baseDelaySeconds, got ${config.autoRetry.maxDelaySeconds}`);
+    }
+  }
+  if (config.circuitBreaker) {
+    if (config.circuitBreaker.failureThreshold != null && config.circuitBreaker.failureThreshold < 1) {
+      throw new Error(`Invalid config: circuitBreaker.failureThreshold must be >= 1, got ${config.circuitBreaker.failureThreshold}`);
+    }
+    if (config.circuitBreaker.maxBackoffMinutes != null && config.circuitBreaker.maxBackoffMinutes <= 0) {
+      throw new Error(`Invalid config: circuitBreaker.maxBackoffMinutes must be > 0, got ${config.circuitBreaker.maxBackoffMinutes}`);
     }
   }
   if (config.slackBotToken && !config.slackChannel) {

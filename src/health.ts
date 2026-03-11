@@ -21,6 +21,12 @@ export interface HealthStatus {
   perType: Record<string, { active: number; queued: number }>;
   lastPollAt: string | null;
   activeCritterDetails: ActiveCritterDetail[];
+  circuitBreakers?: Record<string, {
+    state: string;
+    consecutiveFailures: number;
+    lastFailureAt: string | null;
+    nextRetryAt: string | null;
+  }>;
 }
 
 let cachedSummary: { totalTasks: number; succeeded: number; failed: number; totalCost: number; avgCost: number } | null = null;
@@ -87,6 +93,7 @@ export function startHealthServer(
           queuedReviews: status.queuedReviews,
           perType: status.perType,
           lastPollAt: status.lastPollAt,
+          circuitBreakers: status.circuitBreakers ?? {},
           metrics: computeMetricsSummary(),
           activeCritterDetails: status.activeCritterDetails.map((d) => ({
             identifier: d.identifier,
