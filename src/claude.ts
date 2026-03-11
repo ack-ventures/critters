@@ -272,6 +272,33 @@ function parseClaudeJsonLog(filePath: string, identifier: string): { numTurns?: 
   return {};
 }
 
+/**
+ * Read partial cost from a Claude stream-json output file.
+ * Returns the total_cost_usd from the last result event, or 0 if none found.
+ * Safe to call on partially-written files.
+ */
+export function readPartialCost(filePath: string): number {
+  if (!existsSync(filePath)) return 0;
+  try {
+    const content = readFileSync(filePath, "utf-8");
+    const lines = content.trim().split("\n").filter(Boolean);
+    let cost = 0;
+    for (const line of lines) {
+      try {
+        const obj = JSON.parse(line);
+        if (obj.type === "result" && typeof obj.total_cost_usd === "number") {
+          cost = obj.total_cost_usd;
+        }
+      } catch {
+        // Truncated line — skip
+      }
+    }
+    return cost;
+  } catch {
+    return 0;
+  }
+}
+
 export async function spawnClaudeSubprocess(
   prompt: string,
   allowedTools: string[],

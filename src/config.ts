@@ -162,6 +162,7 @@ export function loadConfig(configPath?: string): Config {
     slackBotToken,
     slackChannel,
     costAlertThreshold: (yaml.costAlertThreshold as number) ?? undefined,
+    costBudget: (yaml.costBudget as number) ?? undefined,
     hooks,
     autoRetry,
     tunnel,
@@ -342,6 +343,9 @@ function validateConfig(config: Config): void {
   }
   if (config.costAlertThreshold != null && config.costAlertThreshold <= 0) {
     throw new Error(`Invalid config: costAlertThreshold must be > 0, got ${config.costAlertThreshold}`);
+  }
+  if (config.costBudget != null && config.costBudget <= 0) {
+    throw new Error(`Invalid config: costBudget must be > 0, got ${config.costBudget}`);
   }
   if (config.autoRetry) {
     if (config.autoRetry.maxRetries < 1) {

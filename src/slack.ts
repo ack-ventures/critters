@@ -192,6 +192,16 @@ export function formatTimeoutWarning(
   return `*${identifier}* — ${title}\n⚠️ Running for ${elapsedMinutes}/${timeoutMinutes} minutes`;
 }
 
+export function formatCostBudgetExceeded(
+  identifier: string,
+  title: string,
+  costUsd: number,
+  budget: number,
+  currentPhase: string,
+): string {
+  return `*${identifier}* — ${title}\n:no_entry: Killed: cost budget exceeded ($${costUsd.toFixed(2)} spent, $${budget.toFixed(2)} budget) — killed during phase: ${currentPhase}`;
+}
+
 export function formatCostAlert(
   identifier: string,
   title: string,

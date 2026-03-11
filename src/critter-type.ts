@@ -35,6 +35,7 @@ export interface CritterTypeConfig {
   provider?: "linear" | "jira";
   mcpConfig?: string | string[];
   strictMcpConfig?: boolean;
+  costBudget?: number;
 }
 
 /**
@@ -119,6 +120,9 @@ export function validateCritterType(ct: CritterTypeConfig): void {
   if (ct.timeoutMinutes <= 0) {
     throw new Error(`Critter type "${ct.name}": timeoutMinutes must be > 0`);
   }
+  if (ct.costBudget != null && ct.costBudget <= 0) {
+    throw new Error(`Critter type "${ct.name}": costBudget must be > 0`);
+  }
   for (const phase of ct.phases) {
     if (!phase.name || !phase.prompt || !phase.model || phase.maxTurns <= 0) {
       throw new Error(`Critter type "${ct.name}", phase "${phase.name}": invalid phase config`);
@@ -188,6 +192,7 @@ export function parseCritterType(name: string, raw: Record<string, unknown>): Cr
     provider: raw.provider as "linear" | "jira" | undefined,
     mcpConfig: raw.mcpConfig as string | string[] | undefined,
     strictMcpConfig: raw.strictMcpConfig as boolean | undefined,
+    costBudget: raw.costBudget as number | undefined,
   };
 
   validateCritterType(ct);

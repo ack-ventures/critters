@@ -175,6 +175,7 @@ critterTypes:
 | `enrichment` | no | — | `extractPrUrl` to extract PR URL from issue comments (for review types) |
 | `mcpConfig` | no | global `mcpConfig` | Path(s) to MCP config JSON file(s) — fully replaces global |
 | `strictMcpConfig` | no | global `strictMcpConfig` | Per-type override for strict MCP config mode |
+| `costBudget` | no | global `costBudget` | Cost (USD) per task that triggers a kill (overrides global) |
 
 ### Phases
 
@@ -575,6 +576,7 @@ critterTypes:
 | `jiraStatusMap` | {} | Map critter status names to Jira status names (e.g., `"Todo": "To Do"`) |
 | `hooks` | {} | Shell commands run on lifecycle events |
 | `costAlertThreshold` | — | Cost (USD) per task that triggers a Slack alert |
+| `costBudget` | — | Cost (USD) per task that triggers a kill. Per-type override available via `critterTypes.<name>.costBudget` |
 | `mcpConfig` | — | Path(s) to MCP config JSON file(s), applied to all critters |
 | `strictMcpConfig` | false | When true, passes `--strict-mcp-config` to prevent inheriting operator's MCP servers |
 | `metricsRetentionDays` | 90 | Days to retain metrics data before pruning |
