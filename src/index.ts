@@ -47,6 +47,7 @@ Commands:
   restart     Restart the daemon
   kickoff     Trigger an immediate poll cycle
   status      Show daemon status
+  history     Show past critter runs (--last N, --failed, --type, --json)
   version     Show version
   release-notes Show release notes for recent versions
   update      Check for and apply updates
@@ -76,6 +77,12 @@ Clean flags:
 Logs flags:
   --phase planning|execution|review  Show specific phase (default: most recent)
   --follow, -f                       Tail mode (stream new output)
+
+History flags:
+  --last N          Number of runs to show (default: 20)
+  --failed          Show only failed runs
+  --type NAME       Filter by critter type
+  --json            Output as JSON array
 
 Tail flags:
   --type NAME  Filter to a specific critter type`);
@@ -165,6 +172,12 @@ if (subcommand === "clean") {
 if (subcommand === "tail") {
   const { tailCommand } = await import("./cli-tail.js");
   await tailCommand(Bun.argv.slice(3));
+  process.exit(0);
+}
+
+if (subcommand === "history") {
+  const { runHistory } = await import("./cli-history.js");
+  await runHistory(Bun.argv.slice(3));
   process.exit(0);
 }
 
