@@ -19,25 +19,32 @@ export async function shallowClone(
         : ["clone", "--depth", String(depth), source, targetDir];
       logTask(identifier, `Cloning ${source} → ${targetDir} (depth ${depth}${localPath ? ", local" : ""})`);
       const { code, stderr } = await runCommand("git", args, cwd ? { cwd } : undefined);
-      if (localPath && code === 0) {
-        // Point origin back to the remote URL and sync to the default branch
+      if (code !== 0) {
+        throw new Error(`git clone failed: ${stderr}`);
+      }
+
+      if (localPath) {
+        // Point origin back to the remote URL and fetch latest
         await runCommand("git", ["remote", "set-url", "origin", repoUrl], { cwd: targetDir });
         logTask(identifier, "Fetching latest from remote...");
         const fetch = await runCommand("git", ["fetch", "--depth", String(depth), "origin"], { cwd: targetDir });
-        if (fetch.code === 0) {
-          // Update origin/HEAD from the remote (local clone leaves it pointing to the local repo's branch)
-          await runCommand("git", ["remote", "set-head", "origin", "--auto"], { cwd: targetDir });
-          const headRef = await runCommand("git", ["symbolic-ref", "refs/remotes/origin/HEAD"], { cwd: targetDir });
-          const defaultBranch = headRef.code === 0
-            ? headRef.stdout.trim().replace("refs/remotes/origin/", "")
-            : "main";
-          await runCommand("git", ["checkout", "-B", defaultBranch, `origin/${defaultBranch}`], { cwd: targetDir });
-        } else {
+        if (fetch.code !== 0) {
           logTaskWarn(identifier, `git fetch from remote failed (non-fatal): ${fetch.stderr}`);
         }
       }
-      if (code !== 0) {
-        throw new Error(`git clone failed: ${stderr}`);
+
+      // Ensure origin/HEAD is set from the remote (shallow/local clones may not have it)
+      await runCommand("git", ["remote", "set-head", "origin", "--auto"], { cwd: targetDir });
+
+      // Verify we're on the default branch (local clones inherit whatever was checked out)
+      const headRef = await runCommand("git", ["symbolic-ref", "refs/remotes/origin/HEAD"], { cwd: targetDir });
+      const defaultBranch = headRef.code === 0
+        ? headRef.stdout.trim().replace("refs/remotes/origin/", "")
+        : "main";
+      const { stdout: currentRef } = await runCommand("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: targetDir });
+      if (currentRef.trim() !== defaultBranch) {
+        logTask(identifier, `Switching from "${currentRef.trim()}" to default branch "${defaultBranch}"`);
+        await runCommand("git", ["checkout", "-B", defaultBranch, `origin/${defaultBranch}`], { cwd: targetDir });
       }
     },
     {
@@ -69,7 +76,13 @@ export async function createBranch(
     logTaskWarn(identifier, `On branch "${currentBranch}" instead of "${defaultBranch}", switching before branching`);
     const { code: switchCode, stderr: switchErr } = await runCommand("git", ["checkout", defaultBranch], { cwd: workDir });
     if (switchCode !== 0) {
-      logTaskWarn(identifier, `Could not switch to ${defaultBranch}: ${switchErr}`);
+      // Try fetching the default branch and retrying
+      logTaskWarn(identifier, `Could not switch to ${defaultBranch}, fetching from remote...`);
+      await runCommand("git", ["fetch", "origin", defaultBranch], { cwd: workDir });
+      const retry = await runCommand("git", ["checkout", "-B", defaultBranch, `origin/${defaultBranch}`], { cwd: workDir });
+      if (retry.code !== 0) {
+        throw new Error(`Cannot switch to default branch "${defaultBranch}" before creating feature branch: ${switchErr}`);
+      }
     }
   }
 
