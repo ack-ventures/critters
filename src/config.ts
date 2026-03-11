@@ -147,6 +147,7 @@ export function loadConfig(configPath?: string): Config {
     reviewTimeoutMinutes: (yaml.reviewTimeoutMinutes as number) ?? 15,
     maxReviewTurns: (yaml.maxReviewTurns as number) ?? 30,
     maxLogSizeMb: (yaml.maxLogSizeMb as number) ?? 10,
+    minDiskSpaceMb: typeof yaml.minDiskSpaceMb === "number" ? yaml.minDiskSpaceMb : 1024,
     healthPort: (yaml.healthPort as number) ?? 3847,
     dashboardToken,
     metricsRetentionDays: (yaml.metricsRetentionDays as number) ?? 90,
@@ -321,6 +322,9 @@ function validateConfig(config: Config): void {
   }
   if (config.maxLogSizeMb <= 0) {
     throw new Error(`Invalid config: maxLogSizeMb must be > 0, got ${config.maxLogSizeMb}`);
+  }
+  if (config.minDiskSpaceMb <= 0) {
+    throw new Error(`Invalid config: minDiskSpaceMb must be > 0, got ${config.minDiskSpaceMb}`);
   }
   if (config.metricsRetentionDays < 1) {
     throw new Error(`Invalid config: metricsRetentionDays must be >= 1, got ${config.metricsRetentionDays}`);

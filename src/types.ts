@@ -54,6 +54,7 @@ export interface Config {
   reviewTimeoutMinutes: number;
   maxReviewTurns: number;
   maxLogSizeMb: number;
+  minDiskSpaceMb: number;
   healthPort: number;
   dashboardToken?: string;
   metricsRetentionDays: number;

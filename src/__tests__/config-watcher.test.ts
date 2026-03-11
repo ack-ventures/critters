@@ -28,6 +28,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
 		reviewTimeoutMinutes: 15,
 		maxReviewTurns: 30,
 		maxLogSizeMb: 10,
+		minDiskSpaceMb: 1024,
 		healthPort: 3847,
 		metricsRetentionDays: 90,
 		provider: "linear",

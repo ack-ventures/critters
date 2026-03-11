@@ -304,6 +304,26 @@ defaultAllowedTools:
     expect(result.warnings.length).toBeGreaterThanOrEqual(5);
   });
 
+  test("minDiskSpaceMb <= 0 collects error", () => {
+    const path = writeYaml(`
+minDiskSpaceMb: -1
+defaultAllowedTools:
+  - "Read"
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors.some((e) => e.includes("minDiskSpaceMb must be > 0"))).toBe(true);
+  });
+
+  test("non-numeric minDiskSpaceMb is ignored (no error)", () => {
+    const path = writeYaml(`
+minDiskSpaceMb: "abc"
+defaultAllowedTools:
+  - "Read"
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors.some((e) => e.includes("minDiskSpaceMb"))).toBe(false);
+  });
+
   test("reviewConcurrency and reviewTimeoutMinutes warn", () => {
     const path = writeYaml(`
 reviewConcurrency: 8

@@ -106,8 +106,29 @@ teamRepos:
     expect(config.reviewTimeoutMinutes).toBe(15);
     expect(config.maxReviewTurns).toBe(30);
     expect(config.maxLogSizeMb).toBe(10);
+    expect(config.minDiskSpaceMb).toBe(1024);
     expect(config.healthPort).toBe(3847);
     expect(config.metricsRetentionDays).toBe(90);
+  });
+
+  test("parses minDiskSpaceMb from YAML", () => {
+    const yaml = `
+defaultAllowedTools:
+  - "Read"
+minDiskSpaceMb: 2048
+`;
+    const config = loadConfig(writeYaml(yaml));
+    expect(config.minDiskSpaceMb).toBe(2048);
+  });
+
+  test("ignores non-numeric minDiskSpaceMb and uses default", () => {
+    const yaml = `
+defaultAllowedTools:
+  - "Read"
+minDiskSpaceMb: "abc"
+`;
+    const config = loadConfig(writeYaml(yaml));
+    expect(config.minDiskSpaceMb).toBe(1024);
   });
 
   test("throws when config file does not exist", () => {

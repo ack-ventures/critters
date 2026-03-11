@@ -41,6 +41,7 @@ function makeConfig(hooks?: Config["hooks"]): Config {
     reviewTimeoutMinutes: 15,
     maxReviewTurns: 30,
     maxLogSizeMb: 10,
+    minDiskSpaceMb: 1024,
     healthPort: 0,
     metricsRetentionDays: 90,
     linearApiKey: "test-key",

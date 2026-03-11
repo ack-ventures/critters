@@ -1,7 +1,18 @@
-import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, readdirSync, rmSync, statfsSync, statSync } from "node:fs";
+import { dirname } from "node:path";
 import { log, logTask, logTaskError, logTaskWarn } from "./logger.js";
 import { withRetry } from "./retry.js";
 import { runCommand } from "./utils.js";
+
+export function checkDiskSpace(workDir: string, minDiskSpaceMb: number): void {
+  const stats = statfsSync(workDir);
+  const availableMb = Math.floor((stats.bsize * stats.bavail) / (1024 * 1024));
+  if (availableMb < minDiskSpaceMb) {
+    throw new Error(
+      `Insufficient disk space: ${availableMb}MB available, ${minDiskSpaceMb}MB required on ${workDir}`
+    );
+  }
+}
 
 export async function shallowClone(
   repoUrl: string,
@@ -10,7 +21,14 @@ export async function shallowClone(
   cwd?: string,
   depth: number = 1,
   localPath?: string,
+  minDiskSpaceMb?: number,
 ): Promise<void> {
+  // Check disk space before attempting clone
+  if (minDiskSpaceMb != null) {
+    const checkDir = cwd ?? dirname(targetDir);
+    checkDiskSpace(checkDir, minDiskSpaceMb);
+  }
+
   await withRetry(
     async () => {
       const source = localPath ?? repoUrl;

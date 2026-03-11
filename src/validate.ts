@@ -96,6 +96,11 @@ export function validateConfigFile(configPath?: string): { errors: string[]; war
     errors.push(`Invalid config: maxLogSizeMb must be > 0, got ${maxLogSizeMb}`);
   }
 
+  const minDiskSpaceMb = (yaml.minDiskSpaceMb as number) ?? 1024;
+  if (typeof yaml.minDiskSpaceMb === "number" && minDiskSpaceMb <= 0) {
+    errors.push(`Invalid config: minDiskSpaceMb must be > 0, got ${minDiskSpaceMb}`);
+  }
+
   const healthPort = (yaml.healthPort as number) ?? 3847;
   if (typeof yaml.healthPort === "number" && healthPort !== 0 && (healthPort < 1024 || healthPort > 65535)) {
     errors.push(`Invalid config: healthPort must be 0 (disabled) or 1024-65535, got ${healthPort}`);
