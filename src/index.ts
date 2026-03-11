@@ -673,18 +673,32 @@ async function main() {
   } // end if (!noWatch && !dryRun)
 
   // Signal handlers
+  let shuttingDown = false;
+
   const shutdown = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+
     log("Shutting down...");
     tunnelHandle?.stop();
     configWatcher?.stop();
     if (titleInterval) clearInterval(titleInterval);
     healthServer?.stop();
     watcher.stop();
-    // Give running tasks a moment to clean up
+
+    // Graceful exit: give running tasks a moment to clean up
     setTimeout(() => {
       log("Exiting");
       process.exit(0);
     }, 6000);
+
+    // Hard fallback: if the event loop is stuck (open handles, blocked I/O),
+    // force exit after 10s. unref() ensures this timer alone won't keep the
+    // process alive, but if other handles do, it will still fire and kill us.
+    setTimeout(() => {
+      log("Forced exit (shutdown timeout)");
+      process.exit(1);
+    }, 10_000).unref();
   };
 
   process.on("SIGINT", shutdown);
