@@ -4,9 +4,13 @@ import { log, logTask, logTaskError, logTaskWarn } from "./logger.js";
 import { withRetry } from "./retry.js";
 import { runCommand } from "./utils.js";
 
+export function getAvailableSpaceMb(path: string): number {
+  const stats = statfsSync(path);
+  return Math.floor((stats.bsize * stats.bavail) / (1024 * 1024));
+}
+
 export function checkDiskSpace(workDir: string, minDiskSpaceMb: number): void {
-  const stats = statfsSync(workDir);
-  const availableMb = Math.floor((stats.bsize * stats.bavail) / (1024 * 1024));
+  const availableMb = getAvailableSpaceMb(workDir);
   if (availableMb < minDiskSpaceMb) {
     throw new Error(
       `Insufficient disk space: ${availableMb}MB available, ${minDiskSpaceMb}MB required on ${workDir}`
