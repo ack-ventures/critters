@@ -364,30 +364,93 @@ If a status isn't in the map, the name is used as-is.
 | **Status transitions** | Set status directly | Uses Jira transitions API (finds matching transition automatically) |
 | **Blockers** | Native blocking relationships | Detected via "is blocked by" issue links |
 
-## MCP configuration
+## MCP Servers
 
-### Global MCP config
+MCP (Model Context Protocol) servers are external tool servers that Claude Code can connect to, giving critters access to additional capabilities like databases, APIs, or custom tooling. Critters passes `--mcp-config` flags to the `claude` CLI, which handles the actual server connections.
+
+### Global config
+
+To enable MCP servers for all critter types, set `mcpConfig` at the top level:
 
 ```yaml
 mcpConfig: ~/.critters/mcp.json
-# or multiple files:
+strictMcpConfig: false  # default
+```
+
+### MCP config JSON format
+
+The config file uses the standard Claude Code MCP format. Critters doesn't interpret the file — it passes the path directly to `claude --mcp-config`.
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "npx",
+      "args": ["-y", "@example/mcp-server"],
+      "env": {
+        "API_KEY": "..."
+      }
+    }
+  }
+}
+```
+
+Each entry under `mcpServers` defines a server by its launch command, arguments, and optional environment variables. See the [Claude Code MCP documentation](https://docs.anthropic.com/en/docs/claude-code/mcp) for the full format specification.
+
+### Multiple config files
+
+You can pass multiple MCP config files. Each becomes a separate `--mcp-config` flag:
+
+```yaml
 mcpConfig:
   - ~/.critters/mcp-base.json
   - ~/.critters/mcp-extra.json
 ```
 
-Path(s) to MCP config JSON file(s), passed to every critter via `--mcp-config`.
+This is useful for separating concerns — e.g., a base file with common servers and an extra file for specialized tools.
 
 ### Per-type override
+
+Each critter type can specify its own MCP config, which **fully replaces** the global config (configs are not merged):
 
 ```yaml
 critterTypes:
   code-audit:
-    mcpConfig: ~/.critters/mcp-audit.json  # fully replaces global
-    strictMcpConfig: true                   # prevents inheriting operator's MCP servers
+    mcpConfig: ~/.critters/mcp-audit.json
+    strictMcpConfig: true
+    # ...
 ```
 
-When `strictMcpConfig` is true, `--strict-mcp-config` is passed to prevent inheriting the operator's MCP servers.
+If a type needs both global and extra servers, it must list all files explicitly:
+
+```yaml
+critterTypes:
+  code-audit:
+    mcpConfig:
+      - ~/.critters/mcp-base.json
+      - ~/.critters/mcp-audit.json
+    # ...
+```
+
+### Strict mode
+
+When `strictMcpConfig` is `true`, critters passes `--strict-mcp-config` to prevent Claude Code from inheriting MCP servers from the operator's own configuration. This ensures critters only use the servers you explicitly configure.
+
+```yaml
+strictMcpConfig: true
+```
+
+Can be set globally or per-type. Per-type takes precedence over global. Default is `false`.
+
+### Path resolution
+
+- `~` is expanded to the home directory
+- Absolute paths are used as-is
+- Relative paths resolve against the daemon's working directory
+
+### Resolution behavior
+
+MCP config is resolved once per task at spawn time (not per phase). The same config applies to all phases of a task. Per-type config takes precedence over global — if a critter type defines `mcpConfig`, the global value is ignored entirely.
 
 ## Model guidance
 
