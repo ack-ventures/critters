@@ -139,6 +139,7 @@ export function loadConfig(configPath?: string): Config {
     tmuxSession: (yaml.tmuxSession as string) ?? "critters",
     branchPrefix: (yaml.branchPrefix as string) ?? "critter",
     noTmux: false,
+    jsonLogs: (yaml.jsonLogs as boolean) ?? undefined,
     planningModel: (yaml.planningModel as string) ?? "opus",
     executionModel: (yaml.executionModel as string) ?? "opus",
     reviewTriggerLabel: (yaml.reviewTriggerLabel as string) ?? "Critter Review",

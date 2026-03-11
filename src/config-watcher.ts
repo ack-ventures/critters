@@ -120,6 +120,11 @@ export function diffConfigs(oldConfig: Config, newConfig: Config): string {
 		changes.push("updated teamRepos");
 	}
 
+	// JSON logs
+	if (oldConfig.jsonLogs !== newConfig.jsonLogs) {
+		changes.push(`jsonLogs ${oldConfig.jsonLogs ?? false} → ${newConfig.jsonLogs ?? false}`);
+	}
+
 	// Hooks
 	const oldHooks = JSON.stringify(oldConfig.hooks ?? {});
 	const newHooks = JSON.stringify(newConfig.hooks ?? {});

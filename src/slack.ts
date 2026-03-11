@@ -1,4 +1,4 @@
-import { logError } from "./logger.js";
+import { logError, logTaskError } from "./logger.js";
 import { withRetry } from "./retry.js";
 
 export interface SlackNotifierConfig {
@@ -23,15 +23,18 @@ export class SlackNotifier {
     return !!(this.botToken && this.channel) || !!this.webhookUrl;
   }
 
-  async notify(issueId: string, message: string): Promise<void> {
+  async notify(issueId: string, message: string, identifier?: string): Promise<void> {
+    const logErr = identifier
+      ? (msg: string) => logTaskError(identifier, msg)
+      : (msg: string) => logError(msg);
     try {
       if (this.botToken && this.channel) {
-        await this.sendViaWebApi(issueId, message);
+        await this.sendViaWebApi(issueId, message, identifier);
       } else if (this.webhookUrl) {
-        await this.sendViaWebhook(message);
+        await this.sendViaWebhook(message, identifier);
       }
     } catch (err) {
-      logError(`Slack notification failed: ${err}`);
+      logErr(`Slack notification failed: ${err}`);
     }
   }
 
@@ -39,8 +42,11 @@ export class SlackNotifier {
     this.threadMap.delete(issueId);
   }
 
-  private async sendViaWebApi(issueId: string, message: string): Promise<void> {
+  private async sendViaWebApi(issueId: string, message: string, identifier?: string): Promise<void> {
     const channel = this.channel as string;
+    const logErr = identifier
+      ? (msg: string) => logTaskError(identifier, msg)
+      : (msg: string) => logError(msg);
     await withRetry(
       async () => {
         const threadTs = this.threadMap.get(issueId);
@@ -74,14 +80,17 @@ export class SlackNotifier {
         maxRetries: 2,
         baseDelayMs: 1000,
         onRetry: (_error, attempt, delayMs) => {
-          logError(`Slack notification failed, retrying in ${Math.round(delayMs)}ms... (attempt ${attempt + 1}/2)`);
+          logErr(`Slack notification failed, retrying in ${Math.round(delayMs)}ms... (attempt ${attempt + 1}/2)`);
         },
       },
     );
   }
 
-  private async sendViaWebhook(message: string): Promise<void> {
+  private async sendViaWebhook(message: string, identifier?: string): Promise<void> {
     const webhookUrl = this.webhookUrl as string;
+    const logErr = identifier
+      ? (msg: string) => logTaskError(identifier, msg)
+      : (msg: string) => logError(msg);
     await withRetry(
       async () => {
         const response = await fetch(webhookUrl, {
@@ -98,7 +107,7 @@ export class SlackNotifier {
         maxRetries: 2,
         baseDelayMs: 1000,
         onRetry: (_error, attempt, delayMs) => {
-          logError(`Slack notification failed, retrying in ${Math.round(delayMs)}ms... (attempt ${attempt + 1}/2)`);
+          logErr(`Slack notification failed, retrying in ${Math.round(delayMs)}ms... (attempt ${attempt + 1}/2)`);
         },
       },
     );

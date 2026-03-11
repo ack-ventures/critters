@@ -16,6 +16,10 @@ export function disableJsonLogs(): void {
   jsonMode = false;
 }
 
+export function isJsonMode(): boolean {
+  return jsonMode;
+}
+
 export function rotateFileIfNeeded(filePath: string, maxSizeMb: number, maxFiles: number = 3): void {
   try {
     const size = Bun.file(filePath).size;
@@ -194,6 +198,10 @@ function writeLog(level: string, message: string, args: unknown[]): void {
 
 export function log(message: string, ...args: unknown[]): void {
   writeLog("", message, args);
+}
+
+export function logWarn(message: string, ...args: unknown[]): void {
+  writeLog("WARN: ", message, args);
 }
 
 export function logError(message: string, ...args: unknown[]): void {
