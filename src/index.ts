@@ -68,6 +68,7 @@ Flags:
   --config PATH   Use a custom config file
   --type NAME     Filter to a specific critter type (use with --dry-run)
   --json-logs     Output structured JSON logs (one object per line)
+  --no-watch      Disable config file watching (no hot-reload)
 
 Clean flags:
   --branches   Clean up stale critter branches from remotes
@@ -204,6 +205,7 @@ async function main() {
   });
 
   const noTmux = Bun.argv.includes("--no-tmux");
+  const noWatch = Bun.argv.includes("--no-watch");
   const skipUpdate = Bun.argv.includes("--skip-update");
   const dryRun = Bun.argv.includes("--dry-run");
   const jsonLogs = Bun.argv.includes("--json-logs");
@@ -376,7 +378,7 @@ async function main() {
     try {
       // Clean up resources
       tunnelHandle?.stop();
-      configWatcher.stop();
+      configWatcher?.stop();
       if (titleInterval) clearInterval(titleInterval);
       healthServer?.stop();
       watcher.stop();
@@ -454,9 +456,11 @@ async function main() {
   }
 
   // Config hot-reload watcher
-  const immutableFields = ["workDir", "healthPort", "tmuxSession", "dashboardToken"] as const;
+  const immutableFields = ["workDir", "healthPort", "tmuxSession", "dashboardToken", "metricsRetentionDays"] as const;
+  let configWatcher: ConfigWatcher | null = null;
+  if (!noWatch && !dryRun) {
   const resolvedPath = resolveConfigPath(configPath);
-  const configWatcher = new ConfigWatcher(resolvedPath, (newConfig) => {
+  configWatcher = new ConfigWatcher(resolvedPath, (newConfig) => {
     // Preserve runtime flag
     newConfig.noTmux = config.noTmux;
 
@@ -472,6 +476,11 @@ async function main() {
     if (newConfig.tunnel?.enabled !== config.tunnel?.enabled) {
       log("Warning: 'tunnel.enabled' cannot be changed at runtime — restart the daemon to apply");
       newConfig.tunnel = config.tunnel;
+    }
+
+    // Warn if default provider changed
+    if (newConfig.provider !== config.provider) {
+      log(`Warning: default 'provider' changed (${config.provider} → ${newConfig.provider}) — new trackers created, but restart recommended for clean state`);
     }
 
     // Check if new providers are needed
@@ -518,12 +527,13 @@ async function main() {
     });
   });
   configWatcher.start();
+  } // end if (!noWatch && !dryRun)
 
   // Signal handlers
   const shutdown = () => {
     log("Shutting down...");
     tunnelHandle?.stop();
-    configWatcher.stop();
+    configWatcher?.stop();
     if (titleInterval) clearInterval(titleInterval);
     healthServer?.stop();
     watcher.stop();
