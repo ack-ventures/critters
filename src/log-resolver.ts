@@ -193,6 +193,46 @@ export function formatUserEvent(obj: Record<string, unknown>): string | null {
   return null;
 }
 
+export function extractPhaseResult(logFile: string): {
+  costUsd?: number;
+  numTurns?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+} | null {
+  try {
+    const content = readFileSync(logFile, "utf-8");
+    const allLines = content.split("\n").filter((l) => l.trim());
+    // Scan last ~10 lines for the result event
+    const tail = allLines.slice(-10);
+    for (const line of tail) {
+      try {
+        const obj = JSON.parse(line);
+        if (obj.type === "result") {
+          let inputTokens = 0;
+          let outputTokens = 0;
+          let cacheReadTokens = 0;
+          if (obj.modelUsage && typeof obj.modelUsage === "object") {
+            for (const model of Object.values(obj.modelUsage) as Record<string, number>[]) {
+              inputTokens += (model.inputTokens ?? 0) + (model.cacheCreationInputTokens ?? 0);
+              outputTokens += model.outputTokens ?? 0;
+              cacheReadTokens += model.cacheReadInputTokens ?? 0;
+            }
+          }
+          return {
+            costUsd: typeof obj.total_cost_usd === "number" ? obj.total_cost_usd : undefined,
+            numTurns: typeof obj.num_turns === "number" ? obj.num_turns : undefined,
+            inputTokens: inputTokens || undefined,
+            outputTokens: outputTokens || undefined,
+            cacheReadTokens: cacheReadTokens || undefined,
+          };
+        }
+      } catch {}
+    }
+  } catch {}
+  return null;
+}
+
 export function readLogTail(logFile: string, lines: number): string {
   try {
     const content = readFileSync(logFile, "utf-8");
