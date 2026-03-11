@@ -1,15 +1,16 @@
 import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import type { IssueTracker, IssueTrackerIssue } from "../tracker/types.js";
+import type { IssueTracker, IssueTrackerIssue, TrackerTask } from "../tracker/types.js";
 
 // Mock tracker
 const mockFindIssueByIdentifier = mock<() => Promise<IssueTrackerIssue | null>>(() => Promise.resolve(null));
+const mockFindIssues = mock<() => Promise<TrackerTask[]>>(() => Promise.resolve([]));
 const mockUpdateStatus = mock(() => Promise.resolve());
 const mockComment = mock(() => Promise.resolve());
 
 const mockTracker: IssueTracker = {
   provider: "linear",
   init: mock(() => Promise.resolve()),
-  findIssues: mock(() => Promise.resolve([])),
+  findIssues: mockFindIssues,
   findIssueByIdentifier: mockFindIssueByIdentifier,
   updateStatus: mockUpdateStatus,
   comment: mockComment,
@@ -30,7 +31,7 @@ mock.module("../tracker/index.js", () => ({
 // Ensure LINEAR_API_KEY is set so loadConfig() works
 process.env.LINEAR_API_KEY = process.env.LINEAR_API_KEY || "test-key";
 
-const { runRetry } = await import("../cli-retry.js");
+const { runRetry, runRetryAllFailed, parseDuration } = await import("../cli-retry.js");
 
 function makeIssue(opts: {
   id?: string;
@@ -53,6 +54,8 @@ let consoleLogSpy: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
   mockFindIssueByIdentifier.mockReset();
+  mockFindIssues.mockReset();
+  mockFindIssues.mockResolvedValue([]);
   mockUpdateStatus.mockReset();
   mockComment.mockReset();
 
@@ -174,5 +177,146 @@ describe("runRetry", () => {
       expect.stringContaining("already in Todo"),
     );
     expect(mockUpdateStatus).not.toHaveBeenCalled();
+  });
+});
+
+function makeTrackerTask(opts?: {
+  id?: string;
+  identifier?: string;
+  title?: string;
+  updatedAt?: Date;
+}): TrackerTask {
+  return {
+    id: opts?.id ?? "task-1",
+    identifier: opts?.identifier ?? "ACK-101",
+    title: opts?.title ?? "Test task",
+    description: "",
+    repoUrl: "",
+    group: "Team",
+    groupId: "team-1",
+    labels: ["Critter"],
+    updatedAt: opts?.updatedAt ?? new Date(),
+  };
+}
+
+describe("parseDuration", () => {
+  test("parses hours", () => {
+    expect(parseDuration("24h")).toBe(24 * 3600000);
+  });
+
+  test("parses days", () => {
+    expect(parseDuration("3d")).toBe(3 * 86400000);
+  });
+
+  test("parses weeks", () => {
+    expect(parseDuration("1w")).toBe(604800000);
+  });
+
+  test("returns null for invalid format", () => {
+    expect(parseDuration("abc")).toBeNull();
+    expect(parseDuration("24m")).toBeNull();
+    expect(parseDuration("")).toBeNull();
+  });
+});
+
+describe("runRetryAllFailed", () => {
+  test("finds and retries all failed issues", async () => {
+    const task1 = makeTrackerTask({ id: "t1", identifier: "ACK-101", title: "Task one" });
+    const task2 = makeTrackerTask({ id: "t2", identifier: "ACK-102", title: "Task two" });
+    mockFindIssues.mockResolvedValueOnce([task1, task2]);
+
+    await runRetryAllFailed({ dryRun: false });
+
+    expect(mockUpdateStatus).toHaveBeenCalledTimes(2);
+    expect(mockUpdateStatus).toHaveBeenCalledWith("t1", "Todo", "team-1");
+    expect(mockUpdateStatus).toHaveBeenCalledWith("t2", "Todo", "team-1");
+    expect(mockComment).toHaveBeenCalledTimes(2);
+    expect(mockComment).toHaveBeenCalledWith("t1", "Bulk retry triggered via CLI");
+    expect(mockComment).toHaveBeenCalledWith("t2", "Bulk retry triggered via CLI");
+  });
+
+  test("dry run doesn't mutate", async () => {
+    const task1 = makeTrackerTask({ id: "t1", identifier: "ACK-101" });
+    mockFindIssues.mockResolvedValueOnce([task1]);
+
+    await runRetryAllFailed({ dryRun: true });
+
+    expect(mockUpdateStatus).not.toHaveBeenCalled();
+    expect(mockComment).not.toHaveBeenCalled();
+    expect(consoleLogSpy).toHaveBeenCalledWith("Dry run — no changes made.");
+  });
+
+  test("--since filters by updatedAt", async () => {
+    const recent = makeTrackerTask({
+      id: "t1",
+      identifier: "ACK-101",
+      updatedAt: new Date(Date.now() - 3600000), // 1 hour ago
+    });
+    const old = makeTrackerTask({
+      id: "t2",
+      identifier: "ACK-102",
+      updatedAt: new Date(Date.now() - 86400000 * 5), // 5 days ago
+    });
+    mockFindIssues.mockResolvedValueOnce([recent, old]);
+
+    await runRetryAllFailed({ dryRun: false, since: "24h" });
+
+    expect(mockUpdateStatus).toHaveBeenCalledTimes(1);
+    expect(mockUpdateStatus).toHaveBeenCalledWith("t1", "Todo", "team-1");
+  });
+
+  test("no failed issues found", async () => {
+    mockFindIssues.mockResolvedValueOnce([]);
+
+    await runRetryAllFailed({ dryRun: false });
+
+    expect(consoleLogSpy).toHaveBeenCalledWith("No failed critters found.");
+    expect(mockUpdateStatus).not.toHaveBeenCalled();
+  });
+
+  test("individual failure doesn't stop batch", async () => {
+    const task1 = makeTrackerTask({ id: "t1", identifier: "ACK-101" });
+    const task2 = makeTrackerTask({ id: "t2", identifier: "ACK-102" });
+    mockFindIssues.mockResolvedValueOnce([task1, task2]);
+    mockUpdateStatus.mockRejectedValueOnce(new Error("API error"));
+    mockUpdateStatus.mockResolvedValueOnce(undefined);
+
+    await runRetryAllFailed({ dryRun: false });
+
+    expect(mockUpdateStatus).toHaveBeenCalledTimes(2);
+    expect(consoleLogSpy).toHaveBeenCalledWith("Retried 1/2 critters.");
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Failed to retry ACK-101"),
+    );
+  });
+
+  test("invalid --since format", async () => {
+    await expect(runRetryAllFailed({ dryRun: false, since: "bad" })).rejects.toThrow("process.exit called");
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid --since format'),
+    );
+  });
+
+  test("includes issues without updatedAt when --since is set", async () => {
+    const noDate = makeTrackerTask({ id: "t1", identifier: "ACK-101" });
+    delete (noDate as unknown as Record<string, unknown>).updatedAt;
+    mockFindIssues.mockResolvedValueOnce([noDate]);
+
+    await runRetryAllFailed({ dryRun: false, since: "24h" });
+
+    expect(mockUpdateStatus).toHaveBeenCalledTimes(1);
+    expect(mockUpdateStatus).toHaveBeenCalledWith("t1", "Todo", "team-1");
+  });
+
+  test("deduplicates across types by provider+identifier", async () => {
+    // findIssues will be called once per critter type — default config has create + review
+    // Both might return the same issue. Ensure it's only retried once.
+    const task = makeTrackerTask({ id: "t1", identifier: "ACK-101" });
+    mockFindIssues.mockResolvedValue([task]);
+
+    await runRetryAllFailed({ dryRun: false });
+
+    // Should be deduped to 1 regardless of how many types matched
+    expect(mockUpdateStatus).toHaveBeenCalledTimes(1);
   });
 });

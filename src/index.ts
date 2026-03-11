@@ -43,7 +43,7 @@ Usage: critters [command] [flags]
 
 Commands:
   (none)      Start the daemon
-  retry       Retry a failed critter (reset to Todo)
+  retry       Retry a failed critter (or --all-failed for bulk retry)
   restart     Restart the daemon
   kickoff     Trigger an immediate poll cycle
   status      Show daemon status
@@ -86,6 +86,12 @@ History flags:
   --type NAME       Filter by critter type
   --json            Output as JSON array
 
+Retry flags:
+  --all-failed             Retry all failed critters
+  --since <duration>       Filter to issues updated within duration (e.g. 24h, 3d, 1w)
+  --type <name>            Filter to a specific critter type
+  --dry-run                Show what would be retried without making changes
+
 Tail flags:
   --type NAME  Filter to a specific critter type`);
   process.exit(0);
@@ -113,9 +119,21 @@ if (subcommand === "logs") {
 }
 
 if (subcommand === "retry") {
+  const allFailed = Bun.argv.includes("--all-failed");
+  if (allFailed) {
+    const dryRun = Bun.argv.includes("--dry-run");
+    const sinceIdx = Bun.argv.indexOf("--since");
+    const since = sinceIdx !== -1 ? Bun.argv[sinceIdx + 1] : undefined;
+    const typeIdx = Bun.argv.indexOf("--type");
+    const typeName = typeIdx !== -1 ? Bun.argv[typeIdx + 1] : undefined;
+    const { runRetryAllFailed } = await import("./cli-retry.js");
+    await runRetryAllFailed({ dryRun, since, typeName });
+    process.exit(0);
+  }
+
   const identifier = Bun.argv[3];
   if (!identifier) {
-    console.error("Usage: critters retry <issue-identifier> [--force]\n\nExample: critters retry ACK-101");
+    console.error("Usage: critters retry <issue-identifier> [--force]\n       critters retry --all-failed [--since <duration>] [--type <name>] [--dry-run]\n\nExample: critters retry ACK-101");
     process.exit(1);
   }
   const force = Bun.argv.includes("--force");

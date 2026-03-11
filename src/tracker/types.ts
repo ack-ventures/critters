@@ -65,6 +65,8 @@ export interface TrackerTask {
   prBranch?: string;
   /** URL to the issue in the tracker (Linear or Jira) */
   issueUrl?: string;
+  /** When the issue was last updated (used for --since filtering) */
+  updatedAt?: Date;
 }
 
 export interface ProviderConfig {
