@@ -634,8 +634,11 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 | `src/metrics.ts` | Metrics recording and retrieval (JSONL) |
 | `src/status.ts` | `critters status` CLI command |
 | `src/hooks.ts` | Shell hook execution on lifecycle events |
+| `src/circuit-breaker.ts` | Circuit breaker for tracker API resilience |
+| `src/config-watcher.ts` | File watcher for hot-reload config changes |
 | `src/retry.ts` | Retry logic with exponential backoff |
 | `src/cli-retry.ts` | `critters retry` CLI command |
+| `src/cli-history.ts` | `critters history` CLI command |
 | `src/logs.ts` | `critters logs` CLI command |
 | `src/cli-kickoff.ts` | `critters kickoff` CLI command |
 | `src/cli-restart.ts` | `critters restart` CLI command |
@@ -693,7 +696,8 @@ Usage: `critters [command] [flags]`
 | *(none)* | Start the daemon |
 | `status` | Show daemon status (active/queued critters, uptime, today's stats) |
 | `logs <ID>` | View critter logs (`--phase planning\|execution\|review`, `--follow\|-f`) |
-| `retry <ID>` | Reset a failed critter to Todo for re-pickup (`--force` to override non-failed states) |
+| `retry <ID>` | Reset a failed critter to Todo for re-pickup (`--force` to override non-failed states, `--all-failed` to retry all failed) |
+| `history` | Show completed critter history (recent tasks, outcomes, durations) |
 | `restart` | Restart the daemon |
 | `kickoff` | Trigger an immediate poll cycle via the health server |
 | `tail` | Live-stream output from all active critters |

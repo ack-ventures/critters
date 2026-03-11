@@ -53,6 +53,9 @@ When the config file changes, a diff summary is logged showing what was updated.
 | `jiraStatusMap` | object | `{}` | Map critter status names to Jira workflow status names |
 | `hooks` | object | `{}` | Shell commands run on lifecycle events |
 | `costAlertThreshold` | number | *(none)* | Cost (USD) per task that triggers a Slack alert. Must be > 0 |
+| `costBudget` | number | *(none)* | Cost (USD) per task that triggers a kill. Per-type override available via `critterTypes.<name>.costBudget`. Must be > 0 |
+| `linearWebhookSecret` | string | *(none)* | Linear webhook signing secret (env: `LINEAR_WEBHOOK_SECRET`). Enables `/webhook/linear` endpoint for near-instant issue pickup |
+| `jiraWebhookSecret` | string | *(none)* | Jira webhook secret (env: `JIRA_WEBHOOK_SECRET`). Enables `/webhook/jira` endpoint for near-instant issue pickup |
 | `metricsRetentionDays` | number | 90 | Days to retain metrics data before pruning (minimum 1) |
 | `mcpConfig` | string \| string[] | *(none)* | Path(s) to MCP config JSON file(s), applied to all critters |
 | `strictMcpConfig` | boolean | `false` | When true, passes `--strict-mcp-config` to prevent inheriting operator's MCP servers |
