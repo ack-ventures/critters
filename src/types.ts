@@ -72,6 +72,7 @@ export interface Config {
   slackBotToken?: string;
   slackChannel?: string;
   costAlertThreshold?: number;
+  costBudget?: number;
   hooks?: {
     onTaskStarted?: string;
     onPrCreated?: string;

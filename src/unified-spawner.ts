@@ -1,5 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { resolveMcpConfig } from "./claude.js";
+import { readPartialCost, resolveMcpConfig } from "./claude.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import {
   autoCommit,
@@ -12,6 +12,7 @@ import {
   shallowClone,
 } from "./git.js";
 import { triggerHook } from "./hooks.js";
+import { phaseFileTag } from "./log-resolver.js";
 import { log, logTask, logTaskError } from "./logger.js";
 import { recordMetric } from "./metrics.js";
 import { loadRepoConfig } from "./repo-config.js";
@@ -20,6 +21,7 @@ import { getPhaseRunner } from "./runner/index.js";
 import type { PhaseContext } from "./runner/types.js";
 import {
   formatCostAlert,
+  formatCostBudgetExceeded,
   formatFailure,
   formatPlanningComplete,
   formatReviewFailure,
@@ -289,6 +291,13 @@ export class UnifiedSpawner {
 
     const phaseResults: SpawnResult[] = [];
 
+    // Resolve effective cost budget
+    const effectiveCostBudget = critterType.costBudget ?? this.config.costBudget;
+    let costBudgetExceeded = false;
+    let costBudgetSpent = 0;
+    let costBudgetLimit = 0;
+    let costBudgetPhase = "";
+
     try {
       // Ensure work dir base exists
       if (!existsSync(this.config.workDir)) {
@@ -423,7 +432,33 @@ export class UnifiedSpawner {
           }, task.identifier);
         }
 
-        const phaseResult = await runner.run(ctx);
+        // Cost monitoring interval (30s) — checks accumulated cost during phase execution
+        let costMonitorInterval: Timer | undefined;
+        if (effectiveCostBudget != null) {
+          const phaseTag = phaseFileTag(phase.name);
+          const outputFile = `${workDir}/.critter-output-${phaseTag}.json`;
+          costMonitorInterval = setInterval(() => {
+            const currentPhaseCost = readPartialCost(outputFile);
+            const completedPhaseCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
+            const totalCost = completedPhaseCost + currentPhaseCost;
+            if (totalCost > effectiveCostBudget) {
+              logTask(task.identifier, `Cost budget exceeded: $${totalCost.toFixed(2)} spent, $${effectiveCostBudget.toFixed(2)} budget`);
+              costBudgetExceeded = true;
+              costBudgetSpent = totalCost;
+              costBudgetLimit = effectiveCostBudget;
+              costBudgetPhase = phase.name;
+              abortController.abort();
+            }
+          }, 30_000);
+          costMonitorInterval.unref();
+        }
+
+        let phaseResult: Awaited<ReturnType<typeof runner.run>>;
+        try {
+          phaseResult = await runner.run(ctx);
+        } finally {
+          if (costMonitorInterval) clearInterval(costMonitorInterval);
+        }
         phaseResults.push(phaseResult.spawn);
         phaseDataList.push(phaseResult.data);
 
@@ -473,6 +508,18 @@ export class UnifiedSpawner {
               formatCostAlert(task.identifier, task.title, accumulatedCost, this.config.costAlertThreshold, phase.name),
               task.identifier,
             );
+          }
+        }
+
+        // Between-phase cost budget check
+        if (effectiveCostBudget != null && !costBudgetExceeded) {
+          const accumulatedCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
+          if (accumulatedCost > effectiveCostBudget) {
+            costBudgetExceeded = true;
+            costBudgetSpent = accumulatedCost;
+            costBudgetLimit = effectiveCostBudget;
+            costBudgetPhase = phase.name;
+            throw new Error(`Cost budget exceeded ($${accumulatedCost.toFixed(2)} spent, $${effectiveCostBudget.toFixed(2)} budget)`);
           }
         }
 
@@ -545,9 +592,11 @@ export class UnifiedSpawner {
 
       return { success: true };
     } catch (err) {
-      const error = timedOut
-        ? `Timed out after ${critterType.timeoutMinutes} minutes`
-        : (err instanceof Error ? err.message : String(err));
+      const error = costBudgetExceeded
+        ? `Cost budget exceeded ($${costBudgetSpent.toFixed(2)} spent, $${costBudgetLimit.toFixed(2)} budget)`
+        : timedOut
+          ? `Timed out after ${critterType.timeoutMinutes} minutes`
+          : (err instanceof Error ? err.message : String(err));
       logTaskError(task.identifier, error);
 
       // Auto-retry: skip heavy failure handling if this will be retried
@@ -610,9 +659,11 @@ export class UnifiedSpawner {
       }
 
       try {
-        let failComment = timedOut
-          ? `Critter timed out after ${critterType.timeoutMinutes} minutes.`
-          : `${isReviewType ? "Review critter" : "Critter"} failed after ${totalDuration}: ${error}`;
+        let failComment = costBudgetExceeded
+          ? `Killed: cost budget exceeded ($${costBudgetSpent.toFixed(2)} spent, $${costBudgetLimit.toFixed(2)} budget)`
+          : timedOut
+            ? `Critter timed out after ${critterType.timeoutMinutes} minutes.`
+            : `${isReviewType ? "Review critter" : "Critter"} failed after ${totalDuration}: ${error}`;
         failComment += salvageInfo;
         if (attachmentUrls.length > 0) {
           failComment += `\n\nAttached logs:\n${attachmentUrls.map((a) => `- [${a.name}](${a.url})`).join("\n")}`;
@@ -627,7 +678,12 @@ export class UnifiedSpawner {
       }
 
       // Slack notification
-      if (isReviewType) {
+      if (costBudgetExceeded) {
+        await this.slackNotifier.notify(
+          task.id,
+          formatCostBudgetExceeded(task.identifier, task.title, costBudgetSpent, costBudgetLimit, costBudgetPhase),
+        );
+      } else if (isReviewType) {
         await this.slackNotifier.notify(
           task.id,
           formatReviewFailure(task.identifier, task.title, error, totalDuration),
