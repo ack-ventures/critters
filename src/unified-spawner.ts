@@ -171,6 +171,10 @@ export class UnifiedSpawner {
     return result;
   }
 
+  getActiveWorkDirs(): Set<string> {
+    return new Set(this.activeWorkDirs);
+  }
+
   getActiveDetails(): ActiveCritterDetail[] {
     return Array.from(this.activeCritterMap.values());
   }

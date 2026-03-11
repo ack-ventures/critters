@@ -358,6 +358,130 @@ function buildMcpArgs(
   return { mcpArgs, strictMcpArg };
 }
 
+// ── Stale pane cleanup ───────────────────────────────────────────────────────
+
+/** Regex to detect critter-titled tmux panes. Captures the issue identifier. */
+const CRITTER_PANE_TITLE_RE = /^([A-Z]+-\d+): .+ \/ (plan|exec|review|[\w-]+)/;
+
+interface ParsedPane {
+  paneId: string;
+  pid: string;
+  command: string;
+  title: string;
+  identifier: string | null;
+}
+
+/** Parse tmux list-panes output into structured objects. Pure function, unit-testable. */
+export function parsePaneList(output: string): ParsedPane[] {
+  const panes: ParsedPane[] = [];
+  for (const line of output.trim().split("\n")) {
+    if (!line.trim()) continue;
+    // Format: "#{pane_id} #{pane_pid} #{pane_current_command} #{pane_title}"
+    // pane_title may contain spaces, so split into at most 4 parts
+    const parts = line.split(" ");
+    if (parts.length < 4) continue;
+    const [paneId, pid, command, ...titleParts] = parts;
+    const title = titleParts.join(" ");
+    const match = title.match(CRITTER_PANE_TITLE_RE);
+    panes.push({
+      paneId,
+      pid,
+      command,
+      title,
+      identifier: match ? match[1] : null,
+    });
+  }
+  return panes;
+}
+
+export interface StalePane {
+  paneId: string;
+  title: string;
+  reason: string;
+}
+
+/**
+ * Identify orphaned critter tmux panes.
+ * A pane is orphaned if it has a critter-style title but its identifier
+ * has no corresponding entry in activeWorkDirs.
+ */
+export async function cleanupStalePanes(
+  tmuxSession: string,
+  activeWorkDirs: Set<string>,
+  mainPaneId?: string,
+): Promise<StalePane[]> {
+  // Check if session exists
+  const hasSession = await runCommand("tmux", ["has-session", "-t", tmuxSession]);
+  if (hasSession.code !== 0) return [];
+
+  // List all panes
+  const listResult = await runCommand("tmux", [
+    "list-panes", "-t", tmuxSession, "-F",
+    "#{pane_id} #{pane_pid} #{pane_current_command} #{pane_title}",
+  ]);
+  if (listResult.code !== 0) return [];
+
+  const panes = parsePaneList(listResult.stdout);
+
+  // Build set of active identifiers from work dir names
+  // Work dirs look like: /tmp/critters-work/ACK-123-1234567890 or review-ACK-123-1234567890
+  const activeIdentifiers = new Set<string>();
+  for (const dir of activeWorkDirs) {
+    const basename = dir.split("/").pop() ?? "";
+    const match = basename.replace(/^review-/, "").match(/^([A-Z]+-\d+)/);
+    if (match) activeIdentifiers.add(match[1]);
+  }
+
+  const stalePanes: StalePane[] = [];
+  for (const pane of panes) {
+    // Skip main pane
+    if (mainPaneId && pane.paneId === mainPaneId) continue;
+    // Skip panes with non-critter titles (user-created)
+    if (!pane.identifier) continue;
+    // Skip panes whose title starts with "Critters " (main daemon pane)
+    if (pane.title.startsWith("Critters ")) continue;
+    // Skip panes for actively-tracked critters
+    if (activeIdentifiers.has(pane.identifier)) continue;
+
+    stalePanes.push({
+      paneId: pane.paneId,
+      title: pane.title,
+      reason: `no active work dir for ${pane.identifier}`,
+    });
+  }
+
+  return stalePanes;
+}
+
+/**
+ * Kill identified stale panes. Checks pane count before each kill
+ * to avoid destroying the last pane (which would destroy the session).
+ */
+export async function killStalePanes(
+  tmuxSession: string,
+  panes: StalePane[],
+): Promise<{ killed: number; failed: number }> {
+  let killed = 0;
+  let failed = 0;
+
+  for (const pane of panes) {
+    // Check pane count — never kill the last pane
+    const countResult = await runCommand("tmux", ["list-panes", "-t", tmuxSession]);
+    if (countResult.code !== 0) { failed++; continue; }
+    const numPanes = countResult.stdout.trim().split("\n").length;
+    if (numPanes <= 1) { failed++; continue; }
+
+    const killResult = await runCommand("tmux", ["kill-pane", "-t", pane.paneId]);
+    if (killResult.code === 0) {
+      killed++;
+    } else {
+      failed++;
+    }
+  }
+
+  return { killed, failed };
+}
+
 export async function spawnClaudeForPhase(
   ctx: PhaseContext,
   prompt: string,
