@@ -84,6 +84,8 @@ export function loadConfig(configPath?: string): Config {
   const slackBotToken = process.env.SLACK_BOT_TOKEN || undefined;
   const slackChannel = process.env.SLACK_CHANNEL || undefined;
   const dashboardToken = (yaml.dashboardToken as string) ?? process.env.DASHBOARD_TOKEN ?? undefined;
+  const linearWebhookSecret = (yaml.linearWebhookSecret as string) ?? process.env.LINEAR_WEBHOOK_SECRET ?? undefined;
+  const jiraWebhookSecret = (yaml.jiraWebhookSecret as string) ?? process.env.JIRA_WEBHOOK_SECRET ?? undefined;
 
   const repos: Record<string, RepoConfig> = {};
   if (yaml.repos && typeof yaml.repos === "object") {
@@ -167,6 +169,8 @@ export function loadConfig(configPath?: string): Config {
     tunnel,
     mcpConfig: (yaml.mcpConfig as string | string[]) ?? undefined,
     strictMcpConfig: (yaml.strictMcpConfig as boolean) ?? undefined,
+    linearWebhookSecret,
+    jiraWebhookSecret,
     provider,
     critterTypes: [], // populated below
   };

@@ -343,6 +343,11 @@ async function main() {
   const watcher = new UnifiedWatcher(config, trackers, spawner, updatePollTime);
 
   // Start health server
+  const webhookConfig = {
+    linearWebhookSecret: config.linearWebhookSecret,
+    jiraWebhookSecret: config.jiraWebhookSecret,
+    critterTypes: config.critterTypes,
+  };
   let healthServer: { stop: () => void } | null = null;
   const healthContext: {
     trackers: Map<string, IssueTracker>;
@@ -410,7 +415,8 @@ async function main() {
       triggerPoll: () => watcher.triggerPoll(),
       triggerReviewPoll: () => watcher.triggerPoll(), // unified watcher handles both
       triggerRestart: () => restartDaemon(),
-    }, config.workDir, config.dashboardToken, healthContext);
+      triggerPollForIssue: (identifier: string) => watcher.pollForIssue(identifier),
+    }, config.workDir, config.dashboardToken, healthContext, webhookConfig);
   }
 
   // Start tunnel if configured
@@ -497,6 +503,9 @@ async function main() {
       healthContext.defaultProvider = newConfig.provider;
       healthContext.repos = newConfig.repos;
       healthContext.teamRepos = newConfig.teamRepos;
+      webhookConfig.linearWebhookSecret = newConfig.linearWebhookSecret;
+      webhookConfig.jiraWebhookSecret = newConfig.jiraWebhookSecret;
+      webhookConfig.critterTypes = newConfig.critterTypes;
       resetMetadataCache();
       await ensureLabelsAndStatuses(config, trackers);
       log(summary);
