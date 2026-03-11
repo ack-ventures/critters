@@ -1,3 +1,4 @@
+import type { CircuitBreaker } from "./circuit-breaker.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import { log, logError, logTask, logTaskError } from "./logger.js";
 import { recordMetric } from "./metrics.js";
@@ -28,17 +29,20 @@ export class UnifiedWatcher {
   private stopped = false;
   private polling = false;
   private onPoll?: () => void;
+  private circuitBreakers: Map<string, CircuitBreaker>;
 
   constructor(
     config: Config,
     trackers: Map<string, IssueTracker>,
     spawner: UnifiedSpawner | null,
     onPoll?: () => void,
+    circuitBreakers?: Map<string, CircuitBreaker>,
   ) {
     this.config = config;
     this.trackers = trackers;
     this.spawner = spawner;
     this.onPoll = onPoll;
+    this.circuitBreakers = circuitBreakers ?? new Map();
   }
 
   private getTracker(critterType: CritterTypeConfig): IssueTracker {
@@ -194,12 +198,36 @@ export class UnifiedWatcher {
     return { total, wouldPickUp, blocked, skipped };
   }
 
+  getCircuitBreakerStatus(): Record<string, { state: string; consecutiveFailures: number; lastFailureAt: string | null; nextRetryAt: string | null }> {
+    const result: Record<string, { state: string; consecutiveFailures: number; lastFailureAt: string | null; nextRetryAt: string | null }> = {};
+    for (const [provider, breaker] of this.circuitBreakers) {
+      result[provider] = breaker.getStatus();
+    }
+    return result;
+  }
+
   private async poll(): Promise<number> {
     let totalIssues = 0;
 
     for (const critterType of this.config.critterTypes) {
+      const providerName = critterType.provider ?? this.config.provider;
+      const breaker = this.circuitBreakers.get(providerName);
+
+      if (breaker && !breaker.canProceed()) {
+        log(`[${critterType.name}] Skipping poll — ${providerName} circuit breaker is open`);
+        continue;
+      }
+
       const tracker = this.getTracker(critterType);
-      const issues = await tracker.findIssues(critterType.trigger);
+      let issues: TrackerTask[];
+      try {
+        issues = await tracker.findIssues(critterType.trigger);
+        breaker?.recordSuccess();
+      } catch (err) {
+        breaker?.recordFailure();
+        logError(`[${critterType.name}] Poll failed for ${providerName}: ${err}`);
+        continue;
+      }
       totalIssues += issues.length;
 
       for (const task of issues) {

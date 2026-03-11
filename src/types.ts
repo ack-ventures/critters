@@ -23,6 +23,11 @@ export interface AutoRetryConfig {
   maxDelaySeconds: number;
 }
 
+export interface CircuitBreakerConfig {
+  failureThreshold?: number;     // default: 3
+  maxBackoffMinutes?: number;    // default: 30
+}
+
 export interface TunnelConfig {
   enabled?: boolean;
   auth?: string;       // "user:password" for basic auth
@@ -78,6 +83,7 @@ export interface Config {
   };
   autoRetry?: AutoRetryConfig;
   tunnel?: TunnelConfig;
+  circuitBreaker?: CircuitBreakerConfig;
   mcpConfig?: string | string[];
   strictMcpConfig?: boolean;
   linearWebhookSecret?: string;
