@@ -68,6 +68,24 @@ export function getRecentMetrics(n: number): MetricEvent[] {
   }
 }
 
+export function readAllMetrics(filePath?: string): MetricEvent[] {
+  const file = filePath ?? join(homedir(), ".critters", "metrics.jsonl");
+  if (!existsSync(file)) return [];
+  try {
+    const content = readFileSync(file, "utf-8");
+    const lines = content.split("\n").filter(Boolean);
+    return lines.flatMap((line) => {
+      try {
+        return [JSON.parse(line) as MetricEvent];
+      } catch {
+        return [];
+      }
+    });
+  } catch {
+    return [];
+  }
+}
+
 export function pruneMetrics(retentionDays: number): void {
   if (!metricsFile) return;
   if (!existsSync(metricsFile)) return;
