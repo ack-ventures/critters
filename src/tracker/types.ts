@@ -13,7 +13,7 @@ export interface IssueTracker {
   init(): Promise<void>;
   findIssues(trigger: TriggerConfig): Promise<TrackerTask[]>;
   findIssueByIdentifier(identifier: string): Promise<IssueTrackerIssue | null>;
-  updateStatus(taskId: string, statusName: string, groupId: string): Promise<void>;
+  updateStatus(taskId: string, statusName: string, groupId: string, identifier?: string): Promise<void>;
   comment(taskId: string, body: string): Promise<void>;
   getComments(taskId: string): Promise<string[]>;
   uploadAttachment(

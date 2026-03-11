@@ -113,8 +113,11 @@ export class JiraTracker implements IssueTracker {
     }
   }
 
-  async updateStatus(taskId: string, statusName: string, _groupId: string): Promise<void> {
+  async updateStatus(taskId: string, statusName: string, _groupId: string, identifier?: string): Promise<void> {
     const targetStatus = this.mapStatusName(statusName);
+    const logErr = identifier
+      ? (msg: string) => logTaskError(identifier, msg)
+      : (msg: string) => logError(msg);
 
     // Get available transitions
     const resp = await this.request(`/issue/${taskId}/transitions`);
@@ -127,7 +130,7 @@ export class JiraTracker implements IssueTracker {
 
     if (!transition) {
       const available = data.transitions.map((t) => `${t.name} → ${t.to.name}`).join(", ");
-      logError(`Jira: No transition to "${targetStatus}" for issue ${taskId}. Available: ${available}`);
+      logErr(`Jira: No transition to "${targetStatus}" for issue ${taskId}. Available: ${available}`);
       return;
     }
 
@@ -139,7 +142,7 @@ export class JiraTracker implements IssueTracker {
     } catch (err) {
       // Jira workflow rules (e.g. "must be in a sprint") can reject transitions.
       // Log but don't crash — the critter's work matters more than the status update.
-      logError(`Jira: Failed to transition issue ${taskId} to "${targetStatus}": ${err}`);
+      logErr(`Jira: Failed to transition issue ${taskId} to "${targetStatus}": ${err}`);
     }
   }
 

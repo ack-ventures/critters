@@ -51,6 +51,7 @@ export interface Config {
   tmuxSession: string;
   branchPrefix: string;
   noTmux: boolean;
+  jsonLogs?: boolean;
   planningModel: string;
   executionModel: string;
   reviewTriggerLabel: string;

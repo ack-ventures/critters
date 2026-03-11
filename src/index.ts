@@ -12,7 +12,7 @@ import { loadEnvFallback } from "./env.js";
 import { resetMetadataCache, startHealthServer } from "./health.js";
 import { runInit } from "./init.js";
 import { runInitRepo } from "./init-repo.js";
-import { enableJsonLogs, initFileLogging, log, logError } from "./logger.js";
+import { disableJsonLogs, enableJsonLogs, initFileLogging, isJsonMode, log, logError } from "./logger.js";
 import { initMetrics, pruneMetrics } from "./metrics.js";
 import { checkPrerequisites } from "./prerequisites.js";
 import { SlackNotifier, sendSlackNotification } from "./slack.js";
@@ -272,6 +272,11 @@ async function main() {
     : undefined;
   let config = loadConfig(configPath);
   config.noTmux = noTmux || dryRun;
+
+  // Apply jsonLogs from config (CLI flag takes precedence, already set above)
+  if (!jsonLogs && config.jsonLogs) {
+    enableJsonLogs();
+  }
 
   // Fetch latest version for dev builds (non-blocking, cached for session)
   if (VERSION === "dev") {
@@ -642,6 +647,14 @@ async function main() {
       webhookConfig.jiraWebhookSecret = newConfig.jiraWebhookSecret;
       webhookConfig.critterTypes = newConfig.critterTypes;
       resetMetadataCache();
+      // Hot-reload jsonLogs (CLI flag always takes precedence)
+      if (!jsonLogs) {
+        if (newConfig.jsonLogs && !isJsonMode()) {
+          enableJsonLogs();
+        } else if (!newConfig.jsonLogs && isJsonMode()) {
+          disableJsonLogs();
+        }
+      }
       await ensureLabelsAndStatuses(config, trackers);
       log(summary);
     })().catch((err) => {

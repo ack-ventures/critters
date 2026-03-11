@@ -123,6 +123,13 @@ describe("diffConfigs", () => {
 		expect(result).toContain("updated repos");
 	});
 
+	test("reports jsonLogs change", () => {
+		const oldConfig = makeConfig({ jsonLogs: undefined });
+		const newConfig = makeConfig({ jsonLogs: true });
+		const result = diffConfigs(oldConfig, newConfig);
+		expect(result).toContain("jsonLogs");
+	});
+
 	test("reports hooks change", () => {
 		const oldConfig = makeConfig({ hooks: undefined });
 		const newConfig = makeConfig({ hooks: { onTaskStarted: "echo hello" } });

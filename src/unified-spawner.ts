@@ -55,7 +55,7 @@ async function applyOutcome(
   tracker: IssueTracker,
 ): Promise<void> {
   if (outcome?.status) {
-    await tracker.updateStatus(task.id, outcome.status, task.groupId);
+    await tracker.updateStatus(task.id, outcome.status, task.groupId, task.identifier);
   }
   if (outcome?.removeLabel) {
     try {
@@ -282,6 +282,7 @@ export class UnifiedSpawner {
         await this.slackNotifier.notify(
           task.id,
           formatTimeoutWarning(task.identifier, task.title, elapsedMinutes, critterType.timeoutMinutes),
+          task.identifier,
         );
       }, critterType.timeoutMinutes * 0.8 * 60 * 1000);
     }
@@ -296,7 +297,7 @@ export class UnifiedSpawner {
 
       // Handle status update for create-type tasks
       if (critterType.name === "create") {
-        await tracker.updateStatus(task.id, "In Progress", task.groupId);
+        await tracker.updateStatus(task.id, "In Progress", task.groupId, task.identifier);
         await tracker.comment(task.id, "Cloning repo...");
       } else if (isReviewType) {
         await tracker.comment(task.id, `Review critter (${critterType.phases[0].model}) picking up PR...`);
@@ -344,6 +345,7 @@ export class UnifiedSpawner {
         await this.slackNotifier.notify(
           task.id,
           formatTaskPickedUp(task.identifier, task.title, task.repoUrl),
+          task.identifier,
         );
         triggerHook(this.config, "onTaskStarted", {
           CRITTER_ISSUE_ID: task.id,
@@ -356,6 +358,7 @@ export class UnifiedSpawner {
         await this.slackNotifier.notify(
           task.id,
           formatReviewStarted(task.identifier, task.title, task.prUrl ?? ""),
+          task.identifier,
         );
         triggerHook(this.config, "onReviewStarted", {
           CRITTER_ISSUE_ID: task.id,
@@ -448,6 +451,7 @@ export class UnifiedSpawner {
           await this.slackNotifier.notify(
             task.id,
             formatPlanningComplete(task.identifier, task.title, phaseResult.spawn.numTurns, phaseResult.spawn.costUsd),
+            task.identifier,
           );
           triggerHook(this.config, "onPlanningCompleted", {
             CRITTER_ISSUE_ID: task.id,
@@ -467,6 +471,7 @@ export class UnifiedSpawner {
             await this.slackNotifier.notify(
               task.id,
               formatCostAlert(task.identifier, task.title, accumulatedCost, this.config.costAlertThreshold, phase.name),
+              task.identifier,
             );
           }
         }
@@ -626,11 +631,13 @@ export class UnifiedSpawner {
         await this.slackNotifier.notify(
           task.id,
           formatReviewFailure(task.identifier, task.title, error, totalDuration),
+          task.identifier,
         );
       } else {
         await this.slackNotifier.notify(
           task.id,
           formatFailure(task.identifier, task.title, error, totalDuration),
+          task.identifier,
         );
       }
 
@@ -750,6 +757,7 @@ export class UnifiedSpawner {
     await this.slackNotifier.notify(
       task.id,
       formatSuccess(task.identifier, task.title, prUrl, totalDuration),
+      task.identifier,
     );
     logTask(task.identifier, `Success — PR: ${prUrl}`);
 
@@ -812,6 +820,7 @@ export class UnifiedSpawner {
         await this.slackNotifier.notify(
           task.id,
           formatReviewMerged(task.identifier, task.title, task.prUrl ?? "", totalDuration),
+          task.identifier,
         );
         logTask(task.identifier, `Review complete — PR merged`);
       }
@@ -853,6 +862,7 @@ export class UnifiedSpawner {
       await this.slackNotifier.notify(
         task.id,
         formatReviewNeedsChanges(task.identifier, task.title, reason ?? "No reason provided", totalDuration),
+        task.identifier,
       );
       logTask(task.identifier, `Review complete — needs changes: ${reason}`);
       // Upload full output logs

@@ -108,6 +108,13 @@ teamRepos:
     expect(config.maxLogSizeMb).toBe(10);
     expect(config.healthPort).toBe(3847);
     expect(config.metricsRetentionDays).toBe(90);
+    expect(config.jsonLogs).toBeUndefined();
+  });
+
+  test("parses jsonLogs from config", () => {
+    const yaml = `defaultAllowedTools:\n  - "Read"\njsonLogs: true\n`;
+    const config = loadConfig(writeYaml(yaml));
+    expect(config.jsonLogs).toBe(true);
   });
 
   test("throws when config file does not exist", () => {

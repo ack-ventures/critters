@@ -131,10 +131,14 @@ export class LinearTracker implements IssueTracker {
     );
   }
 
-  async updateStatus(taskId: string, statusName: string, groupId: string): Promise<void> {
+  async updateStatus(taskId: string, statusName: string, groupId: string, identifier?: string): Promise<void> {
     const statusId = this.teamStatusCache[groupId]?.[statusName];
     if (!statusId) {
-      logError(`Status "${statusName}" not found for group ${groupId}`);
+      if (identifier) {
+        logTaskError(identifier, `Status "${statusName}" not found for group ${groupId}`);
+      } else {
+        logError(`Status "${statusName}" not found for group ${groupId}`);
+      }
       return;
     }
     await this.client.updateIssue(taskId, { stateId: statusId });

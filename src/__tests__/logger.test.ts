@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { formatJsonLogEntry, initFileLogging, resetFileLogging, rotateFileIfNeeded } from "../logger.js";
+import { disableJsonLogs, enableJsonLogs, formatJsonLogEntry, initFileLogging, isJsonMode, logWarn, resetFileLogging, rotateFileIfNeeded } from "../logger.js";
 import { createTempDir } from "./helpers.js";
 
 let tempDir: string;
@@ -161,5 +161,63 @@ describe("formatJsonLogEntry", () => {
     const line = formatJsonLogEntry("", "test", []);
     expect(line.endsWith("\n")).toBe(true);
     expect(line.trim()).not.toBe("");
+  });
+
+  test("warn level from WARN prefix", () => {
+    const line = formatJsonLogEntry("WARN: ", "something odd", []);
+    const parsed = JSON.parse(line);
+    expect(parsed.level).toBe("warn");
+    expect(parsed.message).toBe("something odd");
+    expect(parsed.identifier).toBeUndefined();
+  });
+});
+
+describe("logWarn", () => {
+  afterEach(() => {
+    disableJsonLogs();
+    resetFileLogging();
+  });
+
+  test("produces warn-level JSON output in JSON mode", () => {
+    enableJsonLogs();
+    initFileLogging(10, tempDir);
+
+    // Capture stdout
+    const chunks: string[] = [];
+    const origWrite = process.stdout.write;
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      chunks.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write;
+
+    logWarn("test warning");
+
+    process.stdout.write = origWrite;
+
+    expect(chunks.length).toBeGreaterThan(0);
+    const parsed = JSON.parse(chunks[0]);
+    expect(parsed.level).toBe("warn");
+    expect(parsed.message).toBe("test warning");
+  });
+});
+
+describe("isJsonMode", () => {
+  afterEach(() => {
+    disableJsonLogs();
+  });
+
+  test("returns false by default", () => {
+    expect(isJsonMode()).toBe(false);
+  });
+
+  test("returns true after enableJsonLogs", () => {
+    enableJsonLogs();
+    expect(isJsonMode()).toBe(true);
+  });
+
+  test("returns false after disableJsonLogs", () => {
+    enableJsonLogs();
+    disableJsonLogs();
+    expect(isJsonMode()).toBe(false);
   });
 });
