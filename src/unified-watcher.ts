@@ -88,6 +88,46 @@ export class UnifiedWatcher {
     }
   }
 
+  private webhookDebounce = new Map<string, number>();
+  private static WEBHOOK_DEBOUNCE_MS = 5_000;
+
+  async pollForIssue(identifier: string): Promise<number> {
+    const now = Date.now();
+    const lastPoll = this.webhookDebounce.get(identifier) ?? 0;
+    if (now - lastPoll < UnifiedWatcher.WEBHOOK_DEBOUNCE_MS) {
+      return 0;
+    }
+    this.webhookDebounce.set(identifier, now);
+
+    // Clean stale debounce entries
+    if (this.webhookDebounce.size > 100) {
+      for (const [key, ts] of this.webhookDebounce) {
+        if (now - ts > UnifiedWatcher.WEBHOOK_DEBOUNCE_MS * 2) {
+          this.webhookDebounce.delete(key);
+        }
+      }
+    }
+
+    return await this.pollSingleIssue(identifier);
+  }
+
+  private async pollSingleIssue(identifier: string): Promise<number> {
+    let dispatched = 0;
+
+    for (const critterType of this.config.critterTypes) {
+      const tracker = this.getTracker(critterType);
+      const issues = await tracker.findIssues(critterType.trigger);
+      const matchingTask = issues.find((t) => t.identifier === identifier);
+      if (!matchingTask) continue;
+
+      if (await this.tryDispatch(matchingTask, critterType, tracker)) {
+        dispatched++;
+      }
+    }
+
+    return dispatched;
+  }
+
   async dryRunPoll(): Promise<{ total: number; wouldPickUp: number; blocked: number; skipped: number }> {
     let total = 0;
     let wouldPickUp = 0;
@@ -163,73 +203,79 @@ export class UnifiedWatcher {
       totalIssues += issues.length;
 
       for (const task of issues) {
-        // Per-type dedup
-        if (!this.activeIssueIds.has(critterType.name)) {
-          this.activeIssueIds.set(critterType.name, new Set());
-        }
-        const activeIds = this.activeIssueIds.get(critterType.name)!;
-
-        if (activeIds.has(task.id)) continue;
-
-        // Check blockers
-        if (task.blockedBy && task.blockedBy.length > 0) {
-          const blockerList = task.blockedBy
-            .map((b) => `${b.identifier} (${b.status})`)
-            .join(", ");
-          logTask(task.identifier, `Blocked by ${blockerList} — skipping`);
-          continue;
-        }
-
-        // Resolve repo URL
-        const critterTask = {
-          issueId: task.id,
-          identifier: task.identifier,
-          title: task.title,
-          description: task.description,
-          repoUrl: "",
-          teamId: task.groupId,
-          projectId: task.projectId,
-        };
-        const repoUrl = resolveRepoUrl(critterTask, this.config);
-        if (!repoUrl) {
-          logTask(task.identifier, "Could not determine repository — skipping");
-          try {
-            await tracker.comment(
-              task.id,
-              "Could not determine repository. Add a `repo: <url>` line to the description, or configure a project/team mapping in critters.config.yaml.",
-            );
-          } catch {
-            // Best effort
-          }
-          continue;
-        }
-        task.repoUrl = repoUrl;
-
-        // Per-type enrichment
-        if (critterType.enrichment === "extractPrUrl") {
-          const enriched = await this.enrichReviewTask(task, tracker);
-          if (!enriched) continue;
-        }
-
-        activeIds.add(task.id);
-        logTask(task.identifier, `Picked up [${critterType.name}]: ${task.title}`);
-
-        // Dispatch
-        this.spawner?.dispatch(task, critterType).then((result) => {
-          activeIds.delete(task.id);
-          if (result.success) {
-            logTask(task.identifier, "Completed successfully");
-          } else {
-            logTask(task.identifier, `Failed: ${result.error}`);
-          }
-        }).catch((err) => {
-          activeIds.delete(task.id);
-          logTaskError(task.identifier, `Dispatch failed: ${err}`);
-        });
+        await this.tryDispatch(task, critterType, tracker);
       }
     }
 
     return totalIssues;
+  }
+
+  private async tryDispatch(task: TrackerTask, critterType: CritterTypeConfig, tracker: IssueTracker): Promise<boolean> {
+    // Per-type dedup
+    if (!this.activeIssueIds.has(critterType.name)) {
+      this.activeIssueIds.set(critterType.name, new Set());
+    }
+    const activeIds = this.activeIssueIds.get(critterType.name)!;
+
+    if (activeIds.has(task.id)) return false;
+
+    // Check blockers
+    if (task.blockedBy && task.blockedBy.length > 0) {
+      const blockerList = task.blockedBy
+        .map((b) => `${b.identifier} (${b.status})`)
+        .join(", ");
+      logTask(task.identifier, `Blocked by ${blockerList} — skipping`);
+      return false;
+    }
+
+    // Resolve repo URL
+    const critterTask = {
+      issueId: task.id,
+      identifier: task.identifier,
+      title: task.title,
+      description: task.description,
+      repoUrl: "",
+      teamId: task.groupId,
+      projectId: task.projectId,
+    };
+    const repoUrl = resolveRepoUrl(critterTask, this.config);
+    if (!repoUrl) {
+      logTask(task.identifier, "Could not determine repository — skipping");
+      try {
+        await tracker.comment(
+          task.id,
+          "Could not determine repository. Add a `repo: <url>` line to the description, or configure a project/team mapping in critters.config.yaml.",
+        );
+      } catch {
+        // Best effort
+      }
+      return false;
+    }
+    task.repoUrl = repoUrl;
+
+    // Per-type enrichment
+    if (critterType.enrichment === "extractPrUrl") {
+      const enriched = await this.enrichReviewTask(task, tracker);
+      if (!enriched) return false;
+    }
+
+    activeIds.add(task.id);
+    logTask(task.identifier, `Picked up [${critterType.name}]: ${task.title}`);
+
+    // Dispatch
+    this.spawner?.dispatch(task, critterType).then((result) => {
+      activeIds.delete(task.id);
+      if (result.success) {
+        logTask(task.identifier, "Completed successfully");
+      } else {
+        logTask(task.identifier, `Failed: ${result.error}`);
+      }
+    }).catch((err) => {
+      activeIds.delete(task.id);
+      logTaskError(task.identifier, `Dispatch failed: ${err}`);
+    });
+
+    return true;
   }
 
   private async enrichReviewTask(task: TrackerTask, tracker: IssueTracker): Promise<boolean> {

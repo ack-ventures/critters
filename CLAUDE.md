@@ -582,6 +582,8 @@ critterTypes:
 | `tunnel.enabled` | false | Enable ngrok tunnel |
 | `tunnel.auth` | — | Basic auth credentials (`user:password`) |
 | `tunnel.domain` | — | Static ngrok domain (free tier gives one) |
+| `linearWebhookSecret` | — | Linear webhook signing secret (env: `LINEAR_WEBHOOK_SECRET`). Webhooks disabled if not set |
+| `jiraWebhookSecret` | — | Jira webhook secret (env: `JIRA_WEBHOOK_SECRET`). Webhooks disabled if not set |
 
 ### Allowed tools
 
@@ -644,6 +646,7 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 | `src/utils.ts` | Shared utility functions |
 | `src/tunnel.ts` | ngrok tunnel management for remote dashboard access |
 | `src/version.ts` | Version constant |
+| `src/webhook.ts` | Webhook signature verification + payload parsing (Linear & Jira) |
 | `src/validate.ts` | `critters validate` CLI command |
 | `src/cli-release-notes.ts` | `critters release-notes` CLI command |
 | `src/release-notes.ts` | Release notes data (bundled at build time by `scripts/bundle-release-notes.js`) |
@@ -664,6 +667,8 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 - `SLACK_BOT_TOKEN` (optional) — Slack bot token (`xoxb-...`) for threaded notifications
 - `SLACK_CHANNEL` (optional, required with `SLACK_BOT_TOKEN`) — Slack channel ID for bot notifications
 - `DASHBOARD_TOKEN` (optional) — bearer token for dashboard POST endpoints
+- `LINEAR_WEBHOOK_SECRET` (optional) — Linear webhook signing secret for near-instant issue pickup
+- `JIRA_WEBHOOK_SECRET` (optional) — Jira webhook secret for near-instant issue pickup
 
 Only the credentials for providers actually referenced by your `critterTypes` are required. A Linear-only config doesn't need Jira vars and vice versa.
 
@@ -802,10 +807,29 @@ An HTTP server starts on `healthPort` (default 3847, set to 0 to disable).
 | `/api/v1/auth-check` | GET | JSON `{ required: boolean }` — whether auth is configured |
 | `/api/v1/metadata` | GET | JSON metadata: providers with teams, critter types |
 | `/api/v1/issues` | POST | Create a critter issue. Body: `{ provider, teamId, title, description, critterType }` |
+| `/webhook/linear` | POST | Linear webhook endpoint. Requires `linearWebhookSecret` configured |
+| `/webhook/jira` | POST | Jira webhook endpoint. Requires `jiraWebhookSecret` configured |
 
 The dashboard includes a "New Critter" button in the header that opens a modal form for creating critter tickets. The form populates provider, team, and critter type dropdowns from `/api/v1/metadata` and submits to `/api/v1/issues`. When `dashboardToken` is configured, the dashboard handles auth via `localStorage` — prompting users for a token if needed and including it in all POST requests.
 
 Metrics are stored in `~/.critters/metrics.jsonl` (JSONL format). Events: `task_started`, `task_completed`, `task_failed`, `review_started`, `review_completed`, `review_failed`, `poll_completed`.
+
+## Webhooks
+
+Optional webhook endpoints provide near-instant issue pickup instead of waiting for the next poll cycle. Webhooks are additive — polling continues as the fallback.
+
+| Endpoint | Header | Description |
+|---|---|---|
+| `POST /webhook/linear` | `Linear-Signature` (HMAC-SHA256 hex) | Receives Linear issue events |
+| `POST /webhook/jira` | `X-Hub-Signature` (`sha256=<hex>`) | Receives Jira issue events |
+
+### Setup
+
+1. **Linear**: Settings > API > Webhooks. Set URL to `http://<host>:<port>/webhook/linear`, select "Issues" events, copy the signing secret into `LINEAR_WEBHOOK_SECRET`.
+2. **Jira**: Settings > System > WebHooks. Set URL to `http://<host>:<port>/webhook/jira`, configure a secret, set it as `JIRA_WEBHOOK_SECRET`. Select "Issue created" and "Issue updated" events.
+3. The daemon must be reachable from the internet — use the tunnel/ngrok config or a reverse proxy.
+
+When a webhook fires, the daemon verifies the signature, extracts the issue identifier, and triggers a targeted poll for just that issue. A per-identifier debounce (5s) prevents redundant polls from rapid-fire webhook events.
 
 ## Remote Access (ngrok)
 

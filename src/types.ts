@@ -80,6 +80,8 @@ export interface Config {
   tunnel?: TunnelConfig;
   mcpConfig?: string | string[];
   strictMcpConfig?: boolean;
+  linearWebhookSecret?: string;
+  jiraWebhookSecret?: string;
   provider: "linear" | "jira";
   critterTypes: CritterTypeConfig[];
 }

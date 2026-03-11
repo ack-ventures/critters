@@ -3,13 +3,15 @@ import { checkAuth } from "./auth.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import { renderDashboard, renderLogPage } from "./dashboard.js";
 import { formatToolUse, formatUserEvent, readLogTail, resolveLogFile, resolveWorkDirForIdentifier, stripAnsi } from "./log-resolver.js";
-import { log } from "./logger.js";
+import { log, logError } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
 import type { IssueTracker, TrackerTeam } from "./tracker/types.js";
 import type { ActiveCritterDetail } from "./types.js";
 import { getDisplayVersion } from "./updater.js";
 import { formatDuration } from "./utils.js";
 import { VERSION } from "./version.js";
+import type { JiraWebhookPayload, LinearWebhookPayload } from "./webhook.js";
+import { extractJiraWebhookTrigger, extractLinearWebhookTrigger, verifyJiraSignature, verifyLinearSignature } from "./webhook.js";
 
 export interface HealthStatus {
   activeCritters: number;
@@ -47,6 +49,7 @@ export function startHealthServer(
     triggerPoll?: () => Promise<number>;
     triggerReviewPoll?: () => Promise<number>;
     triggerRestart?: () => void;
+    triggerPollForIssue?: (identifier: string) => Promise<number>;
   },
   workDir?: string,
   dashboardToken?: string,
@@ -56,6 +59,11 @@ export function startHealthServer(
     defaultProvider?: string;
     repos?: Record<string, { url: string; extraAllowedTools?: string[] }>;
     teamRepos?: Record<string, string>;
+  },
+  webhookConfig?: {
+    linearWebhookSecret?: string;
+    jiraWebhookSecret?: string;
+    critterTypes: CritterTypeConfig[];
   },
 ): { stop: () => void } {
   const startTime = Date.now();
@@ -436,6 +444,82 @@ export function startHealthServer(
           const message = err instanceof Error ? err.message : String(err);
           return Response.json({ success: false, error: message }, { status: 500 });
         }
+      }
+
+      // ── Webhook endpoints ──────────────────────────────────────────────
+
+      if (url.pathname === "/webhook/linear") {
+        if (req.method !== "POST") {
+          return new Response("Method Not Allowed", { status: 405 });
+        }
+        if (!webhookConfig?.linearWebhookSecret) {
+          return Response.json({ error: "Linear webhooks not configured" }, { status: 404 });
+        }
+
+        const rawBody = await req.text();
+        const signature = req.headers.get("Linear-Signature") ?? "";
+
+        if (!verifyLinearSignature(rawBody, signature, webhookConfig.linearWebhookSecret)) {
+          log("Webhook: Linear signature verification failed");
+          return Response.json({ error: "Invalid signature" }, { status: 401 });
+        }
+
+        let payload: LinearWebhookPayload;
+        try {
+          payload = JSON.parse(rawBody);
+        } catch {
+          return Response.json({ error: "Invalid JSON" }, { status: 400 });
+        }
+
+        log(`Webhook: Linear event received — ${payload.type}/${payload.action}`);
+
+        const identifier = extractLinearWebhookTrigger(payload, webhookConfig.critterTypes);
+        if (identifier) {
+          log(`Webhook: Triggering poll for ${identifier}`);
+          triggers?.triggerPollForIssue?.(identifier).catch((err) => {
+            logError(`Webhook poll failed for ${identifier}: ${err}`);
+          });
+          return Response.json({ ok: true, triggered: true, identifier });
+        }
+
+        return Response.json({ ok: true, triggered: false });
+      }
+
+      if (url.pathname === "/webhook/jira") {
+        if (req.method !== "POST") {
+          return new Response("Method Not Allowed", { status: 405 });
+        }
+        if (!webhookConfig?.jiraWebhookSecret) {
+          return Response.json({ error: "Jira webhooks not configured" }, { status: 404 });
+        }
+
+        const rawBody = await req.text();
+        const signatureHeader = req.headers.get("X-Hub-Signature") ?? "";
+
+        if (!verifyJiraSignature(rawBody, signatureHeader, webhookConfig.jiraWebhookSecret)) {
+          log("Webhook: Jira signature verification failed");
+          return Response.json({ error: "Invalid signature" }, { status: 401 });
+        }
+
+        let payload: JiraWebhookPayload;
+        try {
+          payload = JSON.parse(rawBody);
+        } catch {
+          return Response.json({ error: "Invalid JSON" }, { status: 400 });
+        }
+
+        log(`Webhook: Jira event received — ${payload.webhookEvent}`);
+
+        const identifier = extractJiraWebhookTrigger(payload, webhookConfig.critterTypes);
+        if (identifier) {
+          log(`Webhook: Triggering poll for ${identifier}`);
+          triggers?.triggerPollForIssue?.(identifier).catch((err) => {
+            logError(`Webhook poll failed for ${identifier}: ${err}`);
+          });
+          return Response.json({ ok: true, triggered: true, identifier });
+        }
+
+        return Response.json({ ok: true, triggered: false });
       }
 
       return new Response("Not Found", { status: 404 });
