@@ -96,7 +96,9 @@ If you run `critters` outside of tmux, it will automatically launch a tmux sessi
 
 For headless server deployments, use `--no-tmux` mode which logs to file instead of tmux panes.
 
-Create `/etc/systemd/system/critters.service`:
+> **Tip:** On Linux, `critters init` can generate a systemd service file automatically. It writes `~/.critters/critters.service` with paths pre-filled for your system. Just copy it into place and enable.
+
+Here's what the generated service file looks like (or create it manually at `/etc/systemd/system/critters.service`):
 
 ```ini
 [Unit]
@@ -105,24 +107,27 @@ After=network.target
 
 [Service]
 Type=simple
-User=critters
-ExecStart=/usr/local/bin/critters --no-tmux
-Restart=always
+ExecStart=/usr/local/bin/critters --no-tmux --json-logs --config ~/.critters/config.yaml
+Restart=on-failure
 RestartSec=10
 Environment=HOME=/home/critters
 # Ensure tools are on the PATH for the service user
 Environment=PATH=/usr/local/bin:/usr/bin:/bin:/home/critters/.local/bin
+StandardOutput=journal
+StandardError=journal
+WorkingDirectory=/home/critters
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-Then enable and start:
+Then copy, enable, and start:
 
 ```bash
+sudo cp ~/.critters/critters.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable critters
-sudo systemctl start critters
+sudo systemctl enable --now critters
+journalctl -u critters -f
 ```
 
 **`--no-tmux` mode details:**

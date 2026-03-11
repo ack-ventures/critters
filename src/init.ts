@@ -6,6 +6,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 const CRITTERS_DIR = join(homedir(), ".critters");
 const CONFIG_PATH = join(CRITTERS_DIR, "config.yaml");
 const ENV_PATH = join(CRITTERS_DIR, ".env");
+const SERVICE_PATH = join(CRITTERS_DIR, "critters.service");
 
 const PROMPT_FILES = [
   {
@@ -176,6 +177,7 @@ export async function runInit(): Promise<void> {
     const answer = (await readLine()).toLowerCase();
     if (answer !== "y" && answer !== "yes") {
       console.log("Keeping existing .env");
+      await maybeGenerateSystemdService();
       printSummary();
       return;
     }
@@ -187,6 +189,7 @@ export async function runInit(): Promise<void> {
   const linearKey = await readLine();
   if (!linearKey) {
     console.log("No API key provided. You can set it later in " + ENV_PATH);
+    await maybeGenerateSystemdService();
     printSummary();
     return;
   }
@@ -219,13 +222,66 @@ export async function runInit(): Promise<void> {
   writeFileSync(ENV_PATH, envContent, { mode: 0o600 });
   console.log(`Wrote ${ENV_PATH}`);
 
+  await maybeGenerateSystemdService();
   printSummary();
+}
+
+function generateSystemdService(): string {
+  const home = homedir();
+  return `[Unit]
+Description=Critters daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=${process.execPath} --no-tmux --json-logs --config ${home}/.critters/config.yaml
+Restart=on-failure
+RestartSec=10
+Environment=HOME=${home}
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:${home}/.local/bin
+StandardOutput=journal
+StandardError=journal
+WorkingDirectory=${home}
+
+[Install]
+WantedBy=multi-user.target
+`;
+}
+
+async function maybeGenerateSystemdService(): Promise<void> {
+  if (process.platform !== "linux") return;
+
+  if (existsSync(SERVICE_PATH)) {
+    process.stdout.write(`\n${SERVICE_PATH} already exists. Overwrite? [y/N] `);
+    const answer = (await readLine()).toLowerCase();
+    if (answer !== "y" && answer !== "yes") {
+      console.log("Keeping existing service file");
+      return;
+    }
+  } else {
+    process.stdout.write("\nGenerate a systemd service file? [y/N] ");
+    const answer = (await readLine()).toLowerCase();
+    if (answer !== "y" && answer !== "yes") {
+      return;
+    }
+  }
+
+  writeFileSync(SERVICE_PATH, generateSystemdService());
+  console.log(`Wrote ${SERVICE_PATH}`);
+  console.log("\nTo install the service:");
+  console.log(`  sudo cp ${SERVICE_PATH} /etc/systemd/system/`);
+  console.log("  sudo systemctl daemon-reload");
+  console.log("  sudo systemctl enable --now critters");
+  console.log("  journalctl -u critters -f");
 }
 
 function printSummary(): void {
   console.log("\n--- Setup complete ---");
   console.log(`  Config: ${CONFIG_PATH}`);
   console.log(`  Env:    ${ENV_PATH}`);
+  if (existsSync(SERVICE_PATH)) {
+    console.log(`  Service: ${SERVICE_PATH}`);
+  }
   console.log(`\nRun 'critters' to start the daemon.`);
 }
 
