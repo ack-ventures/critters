@@ -18,6 +18,7 @@ import { recordMetric } from "./metrics.js";
 import { loadRepoConfig } from "./repo-config.js";
 import { updatePrWithPlan } from "./runner/execution.js";
 import { getPhaseRunner } from "./runner/index.js";
+import { VERSION } from "./version.js";
 import type { PhaseContext } from "./runner/types.js";
 import {
   formatCostAlert,
@@ -565,7 +566,7 @@ export class UnifiedSpawner {
         await tracker.comment(task.id, comment);
       } else {
         const modelSummary = [...new Set(critterType.phases.map(p => p.model))].join("/");
-        await tracker.comment(task.id, `Critter [${critterType.name}] (${modelSummary}) completed in ${totalDuration}`);
+        await tracker.comment(task.id, `Critter [${critterType.name}] (${modelSummary}, critters v${VERSION}) completed in ${totalDuration}`);
       }
 
       // Upload full output logs
@@ -809,7 +810,7 @@ export class UnifiedSpawner {
     const totalDuration = formatDuration(Date.now() - taskStart);
     logTask(task.identifier, `Completed in ${totalDuration}`);
     const modelSummary = [...new Set(critterType.phases.map(p => p.model))].join("/");
-    await tracker.comment(task.id, `PR created: ${prUrl} (${modelSummary}, completed in ${totalDuration})`);
+    await tracker.comment(task.id, `PR created: ${prUrl} (${modelSummary}, critters v${VERSION}, completed in ${totalDuration})`);
     await this.slackNotifier.notify(
       task.id,
       formatSuccess(task.identifier, task.title, prUrl, totalDuration),
@@ -872,7 +873,7 @@ export class UnifiedSpawner {
         await tracker.comment(task.id, "PR was already merged");
         logTask(task.identifier, "Review complete — PR was already merged");
       } else {
-        await tracker.comment(task.id, `PR merged by review critter (${critterType.phases[0].model}, ${totalDuration})`);
+        await tracker.comment(task.id, `PR merged by review critter (${critterType.phases[0].model}, critters v${VERSION}, ${totalDuration})`);
         await this.slackNotifier.notify(
           task.id,
           formatReviewMerged(task.identifier, task.title, task.prUrl ?? "", totalDuration),

@@ -6,6 +6,7 @@ import { buildExecutionPrompt, getExecutionAllowedTools } from "../prompt.js";
 import { buildPromptVars, resolveSkills, resolveTools } from "../prompt-template.js";
 import { withRetry } from "../retry.js";
 import { formatDuration, runCommand, tailLines } from "../utils.js";
+import { VERSION } from "../version.js";
 import type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
 
 export class ExecutionPhaseRunner implements PhaseRunner {
@@ -155,7 +156,7 @@ async function detectPr(
 }
 
 function formatStatsSection(stats: { name: string; durationMs: number; costUsd?: number }[]): string {
-  const lines: string[] = ["## Critter Stats"];
+  const lines: string[] = ["## Critter Stats", `- **Critter**: v${VERSION}`];
   let totalMs = 0;
   let totalCost = 0;
   let hasCost = false;
