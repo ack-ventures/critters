@@ -18,7 +18,6 @@ import { recordMetric } from "./metrics.js";
 import { loadRepoConfig } from "./repo-config.js";
 import { updatePrWithPlan } from "./runner/execution.js";
 import { getPhaseRunner } from "./runner/index.js";
-import { VERSION } from "./version.js";
 import type { PhaseContext } from "./runner/types.js";
 import {
   formatCostAlert,
@@ -37,6 +36,7 @@ import {
 import type { IssueTracker, TrackerTask } from "./tracker/types.js";
 import type { ActiveCritterDetail, Config, SpawnResult } from "./types.js";
 import { aggregatePhaseResults, branchName, extractOwnerRepo, formatDuration, formatPhaseStats, getTracker, runCommand, shortRepoName, tailLines, truncateComment } from "./utils.js";
+import { VERSION } from "./version.js";
 
 interface QueuedTask {
   task: TrackerTask;
