@@ -284,6 +284,75 @@ describe("cleanupStaleWorkDirs", () => {
 	});
 });
 
+describe("shallowClone with localPath", () => {
+	let devRepo: { path: string; workingClone: string; cleanup: () => void };
+
+	beforeEach(() => {
+		// Create a bare repo with "dev" as the default branch
+		const { path: barePath } = createTempDir();
+		tempDirs.push(barePath);
+		const bare = join(barePath, "bare.git");
+		mkdirSync(bare);
+		execSync("git init --bare -b dev", { cwd: bare, stdio: "ignore" });
+
+		// Seed with an initial commit on dev
+		const seedDir = mkdtempSync(join(tmpdir(), "critters-devseed-"));
+		tempDirs.push(seedDir);
+		const seedWork = join(seedDir, "work");
+		execSync(`git clone ${bare} ${seedWork}`, { stdio: "ignore" });
+		execSync("git checkout -b dev", { cwd: seedWork, stdio: "ignore" });
+		execSync("git config user.email test@test.com", { cwd: seedWork, stdio: "ignore" });
+		execSync("git config user.name Test", { cwd: seedWork, stdio: "ignore" });
+		writeFileSync(join(seedWork, "README.md"), "init on dev");
+		execSync("git add -A && git commit -m 'init dev'", { cwd: seedWork, stdio: "ignore" });
+		execSync("git push -u origin dev", { cwd: seedWork, stdio: "ignore" });
+		execSync("git symbolic-ref HEAD refs/heads/dev", { cwd: bare, stdio: "ignore" });
+
+		// Create a working clone that simulates ~/dev/qualia with a feature branch checked out
+		const { path: workDir } = createTempDir();
+		tempDirs.push(workDir);
+		const workingClone = join(workDir, "local");
+		execSync(`git clone ${bare} ${workingClone}`, { stdio: "ignore" });
+		execSync("git config user.email test@test.com", { cwd: workingClone, stdio: "ignore" });
+		execSync("git config user.name Test", { cwd: workingClone, stdio: "ignore" });
+		// Create and checkout a feature branch (simulates the bug)
+		execSync("git checkout -b feature/some-work", { cwd: workingClone, stdio: "ignore" });
+		writeFileSync(join(workingClone, "feature.txt"), "wip");
+		execSync("git add -A && git commit -m 'wip on feature'", { cwd: workingClone, stdio: "ignore" });
+
+		devRepo = { path: bare, workingClone, cleanup: () => {} };
+	});
+
+	test("local clone switches to default branch even when source has feature branch checked out", async () => {
+		const target = cloneDir();
+		// Clone from the working copy (which has feature branch checked out) with the bare repo as the "remote"
+		await shallowClone(devRepo.path, target, "test", undefined, 1, devRepo.workingClone);
+
+		// Should be on dev, not feature/some-work
+		const branch = execSync("git rev-parse --abbrev-ref HEAD", { cwd: target, encoding: "utf-8" }).trim();
+		expect(branch).toBe("dev");
+
+		// origin/HEAD should point to dev
+		const originHead = execSync("git symbolic-ref refs/remotes/origin/HEAD", { cwd: target, encoding: "utf-8" }).trim();
+		expect(originHead).toBe("refs/remotes/origin/dev");
+
+		// origin should point to the bare repo (remote), not the local path
+		const originUrl = execSync("git remote get-url origin", { cwd: target, encoding: "utf-8" }).trim();
+		expect(originUrl).toBe(devRepo.path);
+	});
+
+	test("local clone works fine when source is already on default branch", async () => {
+		// Switch the working clone back to dev
+		execSync("git checkout dev", { cwd: devRepo.workingClone, stdio: "ignore" });
+
+		const target = cloneDir();
+		await shallowClone(devRepo.path, target, "test", undefined, 1, devRepo.workingClone);
+
+		const branch = execSync("git rev-parse --abbrev-ref HEAD", { cwd: target, encoding: "utf-8" }).trim();
+		expect(branch).toBe("dev");
+	});
+});
+
 describe("shallowClone retry logic", () => {
 	test("throws after exhausting retries on invalid URL", async () => {
 		const target = cloneDir();
