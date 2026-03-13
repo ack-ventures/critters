@@ -318,7 +318,9 @@ export class UnifiedSpawner {
 
       // 1. Clone repo
       if (critterType.repo.clone) {
-        await shallowClone(task.repoUrl, workDir, task.identifier, this.config.workDir, critterType.repo.depth ?? 1, critterType.repo.localPath, this.config.minDiskSpaceMb);
+        // Resolve localPath: per-repo config takes precedence, then critter type default
+        const repoLocalPath = Object.values(this.config.repos).find((r) => r.url === task.repoUrl)?.localPath ?? critterType.repo.localPath;
+        await shallowClone(task.repoUrl, workDir, task.identifier, this.config.workDir, critterType.repo.depth ?? 1, repoLocalPath, this.config.minDiskSpaceMb, task.baseBranch);
       }
 
       // 2. Create branch (if type requires it)
@@ -337,7 +339,7 @@ export class UnifiedSpawner {
           }
           resuming = true;
         } else {
-          await createBranch(workDir, branch, task.identifier);
+          await createBranch(workDir, branch, task.identifier, task.baseBranch);
         }
 
         if (resuming) {
@@ -622,7 +624,7 @@ export class UnifiedSpawner {
       let salvageInfo = "";
       let salvageResult: { prUrl?: string; branchPushed?: boolean } = {};
       if (critterType.repo.branch && branch) {
-        salvageResult = await salvagePartialProgress(workDir, branch, task.identifier, task.title, task.repoUrl);
+        salvageResult = await salvagePartialProgress(workDir, branch, task.identifier, task.title, task.repoUrl, task.baseBranch);
         if (salvageResult.prUrl) {
           salvageInfo = `\n\nPartial progress was saved as a draft PR: ${salvageResult.prUrl}`;
           logTask(task.identifier, `Salvaged partial progress — draft PR: ${salvageResult.prUrl}`);
@@ -1010,11 +1012,12 @@ export async function salvagePartialProgress(
   identifier: string,
   title: string,
   repoUrl?: string,
+  baseBranch?: string,
 ): Promise<{ prUrl?: string; branchPushed?: boolean }> {
   try {
     const ownerRepo = repoUrl ? extractOwnerRepo(repoUrl) : null;
     const repoArgs = ownerRepo ? ["--repo", ownerRepo] : [];
-    const defaultBranch = await getDefaultBranch(workDir, identifier);
+    const defaultBranch = await getDefaultBranch(workDir, identifier, baseBranch);
     try {
       if (await hasUncommittedChanges(workDir)) {
         await autoCommit(workDir, identifier, `[${identifier}] Auto-commit in-progress work`);
@@ -1023,7 +1026,7 @@ export async function salvagePartialProgress(
       logTaskError(identifier, "Salvage: auto-commit failed, continuing anyway");
     }
 
-    if (!(await hasCommitsOnBranch(workDir, branch, identifier))) {
+    if (!(await hasCommitsOnBranch(workDir, branch, identifier, baseBranch))) {
       return {};
     }
 

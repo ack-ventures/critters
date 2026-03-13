@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   buildExecutionPrompt,
   buildPlanningPrompt,
+  parseBaseBranch,
   readCustomPrompt,
 } from "../prompt.js";
 import type { CritterTask } from "../types.js";
@@ -261,5 +262,27 @@ describe("readCustomPrompt integration — prompt appending", () => {
       : fakeBase;
     expect(result).toBe("Base prompt content");
     expect(result).not.toContain("## Additional Context");
+  });
+});
+
+describe("parseBaseBranch", () => {
+  test("extracts branch from description", () => {
+    expect(parseBaseBranch("branch: staging\nSome description")).toBe("staging");
+  });
+
+  test("extracts branch with repo line", () => {
+    expect(parseBaseBranch("repo: git@github.com:org/repo.git\nbranch: feature-branch\nDescription")).toBe("feature-branch");
+  });
+
+  test("returns null when no branch line", () => {
+    expect(parseBaseBranch("Just a description\nWith multiple lines")).toBeNull();
+  });
+
+  test("is case-insensitive for the key", () => {
+    expect(parseBaseBranch("Branch: my-branch")).toBe("my-branch");
+  });
+
+  test("trims whitespace from branch name", () => {
+    expect(parseBaseBranch("branch:   my-branch  ")).toBe("my-branch");
   });
 });

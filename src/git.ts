@@ -26,6 +26,7 @@ export async function shallowClone(
   depth: number = 1,
   localPath?: string,
   minDiskSpaceMb?: number,
+  baseBranch?: string,
 ): Promise<void> {
   // Check disk space before attempting clone
   if (minDiskSpaceMb != null) {
@@ -36,37 +37,73 @@ export async function shallowClone(
   await withRetry(
     async () => {
       const source = localPath ?? repoUrl;
+      // Skip --depth for local clones: git ignores it for data transfer anyway,
+      // but it limits which remote-tracking branches get created, which breaks
+      // default branch detection when the source has a non-default branch checked out.
       const args = localPath
-        ? ["clone", "--depth", String(depth), "--no-hardlinks", source, targetDir]
+        ? ["clone", "--no-hardlinks", source, targetDir]
         : ["clone", "--depth", String(depth), source, targetDir];
-      logTask(identifier, `Cloning ${source} → ${targetDir} (depth ${depth}${localPath ? ", local" : ""})`);
+      logTask(identifier, `Cloning ${source} → ${targetDir} (${localPath ? "local" : `depth ${depth}`})`);
       const { code, stderr } = await runCommand("git", args, cwd ? { cwd } : undefined);
       if (code !== 0) {
         throw new Error(`git clone failed: ${stderr}`);
       }
 
       if (localPath) {
-        // Point origin back to the remote URL and fetch latest
+        // Local clones inherit HEAD from whatever branch was checked out locally.
+        // Determine the target branch: use baseBranch override, or query the remote for the default.
+        let targetBranch = baseBranch ?? "main";
+        if (!baseBranch) {
+          const remoteShow = await runCommand("git", ["remote", "show", repoUrl], { cwd: targetDir });
+          if (remoteShow.code === 0) {
+            const match = remoteShow.stdout.match(/HEAD branch:\s*(\S+)/);
+            if (match) {
+              targetBranch = match[1];
+            }
+          } else {
+            logTaskWarn(identifier, "Could not query remote for default branch, falling back to 'main'");
+          }
+        }
+
+        // Point origin to the remote URL
         await runCommand("git", ["remote", "set-url", "origin", repoUrl], { cwd: targetDir });
+        await runCommand("git", ["remote", "set-head", "origin", targetBranch], { cwd: targetDir });
+
+        // Fetch the target branch from remote
         logTask(identifier, "Fetching latest from remote...");
-        const fetch = await runCommand("git", ["fetch", "--depth", String(depth), "origin"], { cwd: targetDir });
+        const fetch = await runCommand("git", ["fetch", "--depth", String(depth), "origin", targetBranch], { cwd: targetDir });
         if (fetch.code !== 0) {
           logTaskWarn(identifier, `git fetch from remote failed (non-fatal): ${fetch.stderr}`);
         }
-      }
 
-      // Ensure origin/HEAD is set from the remote (shallow/local clones may not have it)
-      await runCommand("git", ["remote", "set-head", "origin", "--auto"], { cwd: targetDir });
+        // Switch to the target branch if needed
+        const { stdout: currentRef } = await runCommand("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: targetDir });
+        if (currentRef.trim() !== targetBranch) {
+          logTask(identifier, `Switching from "${currentRef.trim()}" to branch "${targetBranch}"`);
+          await runCommand("git", ["checkout", "-B", targetBranch, `origin/${targetBranch}`], { cwd: targetDir });
+        }
+      } else {
+        // Non-local clone: determine target branch
+        if (baseBranch) {
+          // Explicit base branch: fetch and checkout it
+          logTask(identifier, `Fetching base branch "${baseBranch}" from remote`);
+          await runCommand("git", ["fetch", "--depth", String(depth), "origin", baseBranch], { cwd: targetDir });
+          await runCommand("git", ["checkout", "-B", baseBranch, `origin/${baseBranch}`], { cwd: targetDir });
+          await runCommand("git", ["remote", "set-head", "origin", baseBranch], { cwd: targetDir });
+        } else {
+          // Auto-detect default branch
+          await runCommand("git", ["remote", "set-head", "origin", "--auto"], { cwd: targetDir });
 
-      // Verify we're on the default branch (local clones inherit whatever was checked out)
-      const headRef = await runCommand("git", ["symbolic-ref", "refs/remotes/origin/HEAD"], { cwd: targetDir });
-      const defaultBranch = headRef.code === 0
-        ? headRef.stdout.trim().replace("refs/remotes/origin/", "")
-        : "main";
-      const { stdout: currentRef } = await runCommand("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: targetDir });
-      if (currentRef.trim() !== defaultBranch) {
-        logTask(identifier, `Switching from "${currentRef.trim()}" to default branch "${defaultBranch}"`);
-        await runCommand("git", ["checkout", "-B", defaultBranch, `origin/${defaultBranch}`], { cwd: targetDir });
+          const headRef = await runCommand("git", ["symbolic-ref", "refs/remotes/origin/HEAD"], { cwd: targetDir });
+          const defaultBranch = headRef.code === 0
+            ? headRef.stdout.trim().replace("refs/remotes/origin/", "")
+            : "main";
+          const { stdout: currentRef } = await runCommand("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: targetDir });
+          if (currentRef.trim() !== defaultBranch) {
+            logTask(identifier, `Switching from "${currentRef.trim()}" to default branch "${defaultBranch}"`);
+            await runCommand("git", ["checkout", "-B", defaultBranch, `origin/${defaultBranch}`], { cwd: targetDir });
+          }
+        }
       }
     },
     {
@@ -89,9 +126,10 @@ export async function createBranch(
   workDir: string,
   branch: string,
   identifier: string,
+  baseBranch?: string,
 ): Promise<void> {
-  // Ensure we're on the default branch before creating a feature branch
-  const defaultBranch = await getDefaultBranch(workDir, identifier);
+  // Ensure we're on the base branch before creating a feature branch
+  const defaultBranch = await getDefaultBranch(workDir, identifier, baseBranch);
   const { stdout: currentRef } = await runCommand("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: workDir });
   const currentBranch = currentRef.trim();
   if (currentBranch && currentBranch !== defaultBranch) {
@@ -115,8 +153,8 @@ export async function createBranch(
   }
 }
 
-export async function hasCommitsOnBranch(workDir: string, branch: string, identifier: string): Promise<boolean> {
-  const defaultBranch = await getDefaultBranch(workDir, identifier);
+export async function hasCommitsOnBranch(workDir: string, branch: string, identifier: string, baseBranch?: string): Promise<boolean> {
+  const defaultBranch = await getDefaultBranch(workDir, identifier, baseBranch);
   const { code, stdout } = await runCommand(
     "git",
     ["log", `${defaultBranch}..${branch}`, "--oneline"],
@@ -126,7 +164,8 @@ export async function hasCommitsOnBranch(workDir: string, branch: string, identi
   return stdout.trim().length > 0;
 }
 
-export async function getDefaultBranch(workDir: string, identifier: string): Promise<string> {
+export async function getDefaultBranch(workDir: string, identifier: string, baseBranch?: string): Promise<string> {
+  if (baseBranch) return baseBranch;
   const { code, stdout } = await runCommand("git", ["rev-parse", "--abbrev-ref", "origin/HEAD"], { cwd: workDir });
   if (code !== 0) {
     logTaskWarn(

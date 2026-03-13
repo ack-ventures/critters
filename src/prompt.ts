@@ -5,6 +5,7 @@ import type { PerRepoConfig } from "./repo-config.js";
 import type { Config, CritterTask } from "./types.js";
 
 const REPO_LINE_RE = /^repo:\s*(.+)$/mi;
+const BRANCH_LINE_RE = /^branch:\s*(.+)$/mi;
 
 export function readCustomPrompt(filename: string, baseDir?: string): string | null {
   const dir = baseDir ?? join(homedir(), ".critters");
@@ -40,6 +41,17 @@ export function parseRepoUrl(description: string, provider?: string): string | n
 export function stripRepoLine(description: string, provider?: string): string {
   const cleaned = cleanDescription(description, provider);
   return cleaned.replace(REPO_LINE_RE, "").trim();
+}
+
+export function parseBaseBranch(description: string, provider?: string): string | null {
+  const cleaned = cleanDescription(description, provider);
+  const match = cleaned.match(BRANCH_LINE_RE);
+  return match ? match[1].trim() : null;
+}
+
+export function stripBranchLine(description: string, provider?: string): string {
+  const cleaned = cleanDescription(description, provider);
+  return cleaned.replace(BRANCH_LINE_RE, "").trim();
 }
 
 export function resolveRepoUrlWithSource(
@@ -97,7 +109,7 @@ export function getExecutionAllowedTools(config: Config, task: CritterTask, repo
 }
 
 export function buildPlanningPrompt(task: CritterTask, repoConfig?: PerRepoConfig | null): string {
-  const cleanedDescription = stripRepoLine(task.description);
+  const cleanedDescription = stripBranchLine(stripRepoLine(task.description));
 
   let prompt = `You are working on issue ${task.identifier}: ${task.title}
 

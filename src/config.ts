@@ -94,6 +94,7 @@ export function loadConfig(configPath?: string): Config {
       repos[key] = {
         url: v.url as string,
         extraAllowedTools: (v.extraAllowedTools as string[] | undefined) ?? [],
+        localPath: v.localPath as string | undefined,
       };
     }
   }

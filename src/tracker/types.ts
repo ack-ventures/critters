@@ -60,6 +60,8 @@ export interface TrackerTask {
   projectId?: string;
   labels: string[];
   blockedBy?: { identifier: string; status: string }[];
+  /** Override the default branch for branching and PR targeting */
+  baseBranch?: string;
   prUrl?: string;
   prNumber?: number;
   prBranch?: string;

@@ -1,4 +1,4 @@
-import { readCustomPrompt, stripRepoLine } from "./prompt.js";
+import { readCustomPrompt, stripBranchLine, stripRepoLine } from "./prompt.js";
 import type { PerRepoConfig } from "./repo-config.js";
 import type { ReviewTask } from "./types.js";
 
@@ -10,7 +10,7 @@ export function getReviewAllowedTools(): string[] {
 }
 
 export function buildReviewPrompt(task: ReviewTask, repoConfig?: PerRepoConfig | null): string {
-  const cleanedDescription = stripRepoLine(task.description);
+  const cleanedDescription = stripBranchLine(stripRepoLine(task.description));
 
   let prompt = `You are reviewing a pull request for issue ${task.identifier}: ${task.title}
 

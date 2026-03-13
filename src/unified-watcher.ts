@@ -2,7 +2,7 @@ import type { CircuitBreaker } from "./circuit-breaker.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import { log, logError, logTask, logTaskError } from "./logger.js";
 import { recordMetric } from "./metrics.js";
-import { resolveRepoUrl, resolveRepoUrlWithSource } from "./prompt.js";
+import { parseBaseBranch, resolveRepoUrl, resolveRepoUrlWithSource } from "./prompt.js";
 import type { IssueTracker, TrackerTask } from "./tracker/types.js";
 import type { Config } from "./types.js";
 import type { UnifiedSpawner } from "./unified-spawner.js";
@@ -280,6 +280,13 @@ export class UnifiedWatcher {
       return false;
     }
     task.repoUrl = repoUrl;
+
+    // Parse optional base branch override from description
+    const baseBranch = parseBaseBranch(task.description);
+    if (baseBranch) {
+      task.baseBranch = baseBranch;
+      logTask(task.identifier, `Base branch override: ${baseBranch}`);
+    }
 
     // Per-type enrichment
     if (critterType.enrichment === "extractPrUrl") {

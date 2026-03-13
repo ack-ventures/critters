@@ -56,6 +56,7 @@ export function buildPromptVars(
     title: task.title,
     description: task.description,
     branch,
+    baseBranch: task.baseBranch ?? "",
     repoUrl: task.repoUrl,
     workDir,
     group: task.group,

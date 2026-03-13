@@ -15,6 +15,7 @@ export interface CritterTask {
 export interface RepoConfig {
   url: string;
   extraAllowedTools?: string[];
+  localPath?: string;
 }
 
 export interface AutoRetryConfig {
