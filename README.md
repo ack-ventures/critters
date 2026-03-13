@@ -25,7 +25,7 @@ This downloads the latest binary, installs it to your PATH, and walks you throug
 - `critters list-types` — show configured critter types
 - `critters init-repo` — scaffold `.critters.yaml` in the current repo
 - `critters prompt-help` — launch Claude to help design critter types and prompts
-- `critters clean` — clean up stale work directories (`--all`, `--dry-run`)
+- `critters clean` — clean up stale work directories (`--all`, `--dry-run`, `--branches`, `--panes`)
 - `critters release-notes` — show release notes for recent versions
 - `critters validate` — validate config file without starting daemon
 - `critters help` — show usage
@@ -34,6 +34,7 @@ This downloads the latest binary, installs it to your PATH, and walks you throug
 
 - `--dry-run` — poll once, show what would happen, and exit
 - `--no-tmux` — run without tmux (log to file instead)
+- `--no-watch` — disable config file watching (no hot-reload)
 - `--skip-update` — skip auto-update check on startup
 - `--config PATH` — use a custom config file
 - `--type NAME` — filter dry-run to a specific critter type
@@ -132,13 +133,28 @@ Settings live in `critters.config.yaml`:
 | `planningModel` | "opus" | Claude model for planning phase |
 | `executionModel` | "opus" | Claude model for execution phase |
 | `healthPort` | 3847 | HTTP server port for dashboard and health checks (0 to disable) |
+| `dashboardToken` | — | Shared secret for dashboard POST endpoints (also reads `DASHBOARD_TOKEN` env var) |
 | `maxLogSizeMb` | 10 | Max log file size in MB before rotation (with `--no-tmux`) |
+| `cleanupIntervalMinutes` | 60 | How often periodic work directory cleanup runs (minutes) |
+| `cleanupStaleMinutes` | timeout + 30 | Age threshold (minutes) for considering work directories stale |
+| `minDiskSpaceMb` | 1024 | Minimum free disk space (MB) required before cloning a repo |
 | `jiraStatusMap` | {} | Map critter status names to Jira workflow status names |
 | `hooks` | {} | Shell commands run on lifecycle events (see below) |
 | `costAlertThreshold` | — | Cost (USD) per task that triggers a Slack alert |
+| `costBudget` | — | Cost (USD) per task that triggers a kill |
+| `reviewTriggerLabel` | "Critter Review" | Label that triggers review pickup |
+| `reviewModel` | "opus" | Claude model for reviews |
+| `reviewConcurrency` | 2 | Max parallel review critters |
+| `reviewTimeoutMinutes` | 15 | Timeout per review |
+| `maxReviewTurns` | 30 | Max Claude turns per review |
+| `autoRetry` | — | Auto-retry config: `{ maxRetries, baseDelaySeconds, maxDelaySeconds }` |
+| `circuitBreaker` | — | Circuit breaker config: `{ failureThreshold, maxBackoffMinutes }` |
 | `mcpConfig` | — | Path(s) to MCP config JSON file(s), applied to all critters |
 | `strictMcpConfig` | false | When true, passes `--strict-mcp-config` to prevent inheriting operator's MCP servers |
 | `metricsRetentionDays` | 90 | Days to retain metrics data before pruning |
+| `tunnel` | — | Tunnel config: `{ enabled, auth, domain }` for ngrok remote access |
+| `linearWebhookSecret` | — | Linear webhook signing secret (env: `LINEAR_WEBHOOK_SECRET`) |
+| `jiraWebhookSecret` | — | Jira webhook secret (env: `JIRA_WEBHOOK_SECRET`) |
 
 Per-repo tool overrides merge with the defaults:
 
@@ -169,13 +185,25 @@ hooks:
 
 The daemon runs an HTTP server on port 3847 (configurable via `healthPort`, set to 0 to disable).
 
-| Route | Description |
-|---|---|
-| `/` or `/dashboard` | Live dashboard with task stats, charts, and recent activity |
-| `/healthz` | JSON health check (uptime, version, per-type active/queued counts, active critter details, metrics summary) |
-| `/metrics` | JSON array of recent metric events |
+| Route | Method | Description |
+|---|---|---|
+| `/` or `/dashboard` | GET | Live dashboard with task stats, charts, and recent activity. Includes a "New Critter" button for creating tickets |
+| `/healthz` | GET | JSON health check (uptime, version, per-type active/queued counts, active critter details, metrics summary) |
+| `/metrics` | GET | JSON array of recent metric events |
+| `/poll` | POST | Trigger an immediate poll cycle |
+| `/review-poll` | POST | Trigger an immediate review poll cycle |
+| `/restart` | POST | Restart the daemon process |
+| `/api/v1/metadata` | GET | Provider teams, critter types, and repo info |
+| `/api/v1/issues` | POST | Create a critter issue (`{ provider, teamId, title, description, critterType }`) |
+| `/api/logs/<id>` | GET | Processed log tail for a critter run |
+| `/webhook/linear` | POST | Linear webhook endpoint (requires `linearWebhookSecret`) |
+| `/webhook/jira` | POST | Jira webhook endpoint (requires `jiraWebhookSecret`) |
 
-`critters status` queries the health endpoint to display a quick summary in the terminal.
+When `dashboardToken` is configured, POST endpoints require a bearer token. `critters status` queries the health endpoint to display a quick summary in the terminal.
+
+### Webhooks
+
+Webhook endpoints provide near-instant issue pickup instead of waiting for the next poll. Webhooks are additive — polling continues as the fallback. Set `LINEAR_WEBHOOK_SECRET` and/or `JIRA_WEBHOOK_SECRET` to enable. The daemon must be reachable from the internet — use the `tunnel` config for ngrok or a reverse proxy.
 
 ## Creating tickets
 
