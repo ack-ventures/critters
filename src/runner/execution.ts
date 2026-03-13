@@ -31,7 +31,7 @@ export class ExecutionPhaseRunner implements PhaseRunner {
       : getExecutionAllowedTools(config, critterTask, repoConfig);
     logTask(task.identifier, `Execution phase allowed tools: ${allowedTools.join(", ")}`);
 
-    const defaultBranch = await getDefaultBranch(workDir, task.identifier);
+    const defaultBranch = await getDefaultBranch(workDir, task.identifier, task.baseBranch);
     const basePrompt = buildExecutionPrompt(critterTask, allowedTools, { resuming, repoConfig, commitPlans: ctx.critterType.repo.commitPlans, defaultBranch });
     const vars = buildPromptVars(task, workDir, branch);
     const skillContent = resolveSkills(ctx.phase.skills, vars);
@@ -46,7 +46,7 @@ export class ExecutionPhaseRunner implements PhaseRunner {
       await autoCommit(workDir, task.identifier, `[${task.identifier}] Auto-commit remaining changes`);
     }
 
-    if (!(await hasCommitsOnBranch(workDir, branch, task.identifier))) {
+    if (!(await hasCommitsOnBranch(workDir, branch, task.identifier, task.baseBranch))) {
       // No commits — nothing to do (analysis-only completion)
       return { spawn, data: { prUrl: null } };
     }
