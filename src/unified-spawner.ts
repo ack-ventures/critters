@@ -318,7 +318,9 @@ export class UnifiedSpawner {
 
       // 1. Clone repo
       if (critterType.repo.clone) {
-        await shallowClone(task.repoUrl, workDir, task.identifier, this.config.workDir, critterType.repo.depth ?? 1, critterType.repo.localPath, this.config.minDiskSpaceMb, task.baseBranch);
+        // Resolve localPath: per-repo config takes precedence, then critter type default
+        const repoLocalPath = Object.values(this.config.repos).find((r) => r.url === task.repoUrl)?.localPath ?? critterType.repo.localPath;
+        await shallowClone(task.repoUrl, workDir, task.identifier, this.config.workDir, critterType.repo.depth ?? 1, repoLocalPath, this.config.minDiskSpaceMb, task.baseBranch);
       }
 
       // 2. Create branch (if type requires it)
