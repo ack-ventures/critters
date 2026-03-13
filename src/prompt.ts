@@ -109,7 +109,7 @@ export function getExecutionAllowedTools(config: Config, task: CritterTask, repo
 }
 
 export function buildPlanningPrompt(task: CritterTask, repoConfig?: PerRepoConfig | null): string {
-  const cleanedDescription = stripRepoLine(task.description);
+  const cleanedDescription = stripBranchLine(stripRepoLine(task.description));
 
   let prompt = `You are working on issue ${task.identifier}: ${task.title}
 
