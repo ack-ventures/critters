@@ -85,6 +85,7 @@ Works with both Linear and Jira. Issues must have:
 Optional but recommended:
 - **Project**: assign to the relevant project
 - Put implementation guidance in the description — the critter reads it as its task spec
+- Add `branch: <name>` on its own line to target a non-default base branch (critter will branch from it and target the PR against it). Also available as `{{baseBranch}}` in custom prompt templates
 
 The unified watcher picks up matching issues every 120 seconds. Once picked up, status moves to "In Progress" → "In Review" (on PR) or "Critter Failed" (on error).
 
@@ -598,6 +599,7 @@ repos:
     extraAllowedTools:
       - "Bash(python:*)"
       - "Bash(pip:*)"
+    localPath: "~/dev/my-repo"  # optional: clone from local path for speed
 ```
 
 Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Bash).
