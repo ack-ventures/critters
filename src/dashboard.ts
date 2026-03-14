@@ -504,6 +504,9 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
       border-color: #5dade2;
       color: #fff;
     }
+    .bar-group[data-date] { cursor: pointer; transition: opacity 0.2s; }
+    [data-chart-type] { cursor: pointer; transition: opacity 0.2s; }
+    [data-chart-status] { cursor: pointer; transition: opacity 0.2s; }
     td .badge { cursor: pointer; }
     td .badge:hover { filter: brightness(1.2); }
     .badge-type {
@@ -793,9 +796,9 @@ ${(() => {
           const count = tc.completed + tc.failed;
           const h = Math.round((count / maxTasksPerDay) * 100);
           if (h === 0) return "";
-          return `              <div class="bar" style="height:${h}%;background:${typeColors[t]};border-radius:0" data-tooltip="${t}: ${count}"></div>`;
+          return `              <div class="bar" style="height:${h}%;background:${typeColors[t]};border-radius:0" data-tooltip="${t}: ${count}" data-chart-type="${t}"></div>`;
         }).filter(Boolean).join("\n");
-        return `          <div class="bar-group" data-tooltip="${shortDate}: ${total} tasks (${chartTypes.map(t => `${t}: ${(d.perType[t]?.completed ?? 0) + (d.perType[t]?.failed ?? 0)}`).join(", ")})">
+        return `          <div class="bar-group" data-date="${d.date}" data-tooltip="${shortDate}: ${total} tasks (${chartTypes.map(t => `${t}: ${(d.perType[t]?.completed ?? 0) + (d.perType[t]?.failed ?? 0)}`).join(", ")})">
             <div class="bar-stack">
 ${bars}
             </div>
@@ -805,7 +808,7 @@ ${bars}
       // Single type or filtered: success/failure bars
       const successH = Math.round(((d.completed) / maxTasksPerDay) * 100);
       const failH = Math.round(((d.failed) / maxTasksPerDay) * 100);
-      return `          <div class="bar-group" data-tooltip="${shortDate}: ${d.completed} completed, ${d.failed} failed">
+      return `          <div class="bar-group" data-date="${d.date}" data-tooltip="${shortDate}: ${d.completed} completed, ${d.failed} failed">
             <div class="bar-stack">
               <div class="bar failure" style="height:${failH}%"${failH > 0 ? ` data-tooltip="${d.failed} failed"` : ""}></div>
               <div class="bar success" style="height:${successH}%"${successH > 0 ? ` data-tooltip="${d.completed} completed"` : ""}></div>
@@ -828,7 +831,7 @@ ${(() => {
     if (!typeColors[t]) { typeColors[t] = extraColors[colorIdx % extraColors.length]; colorIdx++; }
   }
   return `      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:0.75rem;color:var(--text-dim)">
-${chartTypes.map(t => `        <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${typeColors[t]};margin-right:4px;vertical-align:middle"></span>${escapeHtml(t)}</span>`).join("\n")}
+${chartTypes.map(t => `        <span data-chart-type="${escapeHtml(t)}"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${typeColors[t]};margin-right:4px;vertical-align:middle"></span>${escapeHtml(t)}</span>`).join("\n")}
       </div>`;
 })()}
     </div>
@@ -846,7 +849,7 @@ ${dailyStats
     const h = Math.round((d.cost / maxCostPerDay) * 100);
     const shortDate = formatShortDate(d.date);
     const label = chartDateLabel(d.date, i > 0 ? dailyStats[i - 1].date : null);
-    return `          <div class="bar-group" data-tooltip="${shortDate}: $${d.cost.toFixed(2)}">
+    return `          <div class="bar-group" data-date="${d.date}" data-tooltip="${shortDate}: $${d.cost.toFixed(2)}">
             <div class="bar-stack">
               <div class="bar cost" style="height:${h}%"${h > 0 ? ` data-tooltip="$${d.cost.toFixed(2)}"` : ""}></div>
             </div>
@@ -871,7 +874,7 @@ ${dailyStats
     const h = maxDurationPerDay > 0 ? Math.round((d.avgDuration / maxDurationPerDay) * 100) : 0;
     const shortDate = formatShortDate(d.date);
     const label = chartDateLabel(d.date, i > 0 ? dailyStats[i - 1].date : null);
-    return `          <div class="bar-group" data-tooltip="${shortDate}: ${fmtDuration(d.avgDuration)}">
+    return `          <div class="bar-group" data-date="${d.date}" data-tooltip="${shortDate}: ${fmtDuration(d.avgDuration)}">
             <div class="bar-stack">
               <div class="bar duration" style="height:${h}%"${h > 0 ? ` data-tooltip="${fmtDuration(d.avgDuration)}"` : ""}></div>
             </div>
@@ -891,12 +894,12 @@ ${totalTasks > 0 ? (() => {
   return `        <svg viewBox="0 0 36 36" class="donut-svg">
           <circle cx="18" cy="18" r="15.9155" fill="none" stroke="var(--border)" stroke-width="2.5"/>
           <circle cx="18" cy="18" r="15.9155" fill="none" stroke="var(--success)" stroke-width="2.5"
-            stroke-dasharray="${successPct}, 100" stroke-dashoffset="25" stroke-linecap="round"/>
+            stroke-dasharray="${successPct}, 100" stroke-dashoffset="25" stroke-linecap="round" data-chart-status="success"/>
           <circle cx="18" cy="18" r="15.9155" fill="none" stroke="var(--failure)" stroke-width="2.5"
-            stroke-dasharray="${failPct}, 100" stroke-dashoffset="${25 - successPct}" stroke-linecap="round"/>
+            stroke-dasharray="${failPct}, 100" stroke-dashoffset="${25 - successPct}" stroke-linecap="round" data-chart-status="failure"/>
           <text x="18" y="18" class="donut-text">${successPct}%</text>
         </svg>
-        <div class="donut-legend">${succeeded} passed &middot; ${failed} failed</div>`;
+        <div class="donut-legend"><span data-chart-status="success">${succeeded} passed</span> &middot; <span data-chart-status="failure">${failed} failed</span></div>`;
 })() : `        <svg viewBox="0 0 36 36" class="donut-svg">
           <circle cx="18" cy="18" r="15.9155" fill="none" stroke="var(--border)" stroke-width="2.5"/>
           <text x="18" y="18" class="donut-text">N/A</text>
@@ -919,6 +922,7 @@ ${activityStatuses.map(s => `      <button class="filter-btn" data-filter-group=
       <span class="meta-sep">|</span>
       <span id="row-counter" style="font-size:0.8rem;color:var(--text-dim);"></span>
       <button id="clear-filters-btn" class="filter-btn" style="display:none;background:var(--failure);border-color:var(--failure);color:#fff;">Clear filters</button>
+      <span id="date-filter-display"></span>
     </div>
     <input type="text" id="activity-filter" placeholder="Filter by issue, type, or status..." style="background:var(--card-bg);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;width:100%;margin-bottom:12px;font-size:0.85rem;">
     <div class="table-wrap">
@@ -963,7 +967,7 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="8" class="empty-stat
     const logsLink = rawId
       ? `<a href="/dashboard/${encodeURIComponent(rawId)}" title="View logs">logs</a>`
       : '\u2014';
-    return `          <tr data-type="${typeName}" data-status="${statusText}">
+    return `          <tr data-type="${typeName}" data-status="${statusText}" data-date="${getDateKey(m.timestamp)}">
             <td>${idLink}</td>
             <td><span class="badge badge-type">${typeName}</span></td>
             <td><span class="${badgeClass}">${statusText}</span></td>
@@ -1124,14 +1128,16 @@ function showAuthPrompt() {
   var clearBtn = document.getElementById('clear-filters-btn');
   var textInput = document.getElementById('activity-filter');
 
-  var activeFilters = { type: '', status: '' };
+  var activeFilters = { type: '', status: '', date: '' };
 
   // Read initial filter state from URL
   var params = new URLSearchParams(window.location.search);
   var initType = params.get('ftype') || '';
   var initStatus = params.get('fstatus') || '';
+  var initDate = params.get('fdate') || '';
   activeFilters.type = initType;
   activeFilters.status = initStatus;
+  activeFilters.date = initDate;
 
   // Highlight initial active buttons
   filterBar.querySelectorAll('[data-filter-group]').forEach(function(btn) {
@@ -1146,6 +1152,8 @@ function showAuthPrompt() {
     else url.searchParams.delete('ftype');
     if (activeFilters.status) url.searchParams.set('fstatus', activeFilters.status);
     else url.searchParams.delete('fstatus');
+    if (activeFilters.date) url.searchParams.set('fdate', activeFilters.date);
+    else url.searchParams.delete('fdate');
     history.replaceState(null, '', url.toString());
   }
 
@@ -1157,20 +1165,26 @@ function showAuthPrompt() {
 
     rows.forEach(function(row) {
       var matchType = !activeFilters.type || row.getAttribute('data-type') === activeFilters.type;
-      var matchStatus = !activeFilters.status || row.getAttribute('data-status') === activeFilters.status;
+      var matchStatus = !activeFilters.status || (function() {
+        var rowStatus = row.getAttribute('data-status');
+        if (activeFilters.status === 'success') return rowStatus === 'Completed' || rowStatus === 'Review Completed';
+        if (activeFilters.status === 'failure') return rowStatus === 'Failed' || rowStatus === 'Review Failed';
+        return rowStatus === activeFilters.status;
+      })();
+      var matchDate = !activeFilters.date || row.getAttribute('data-date') === activeFilters.date;
       var matchText = !textQuery || row.textContent.toLowerCase().includes(textQuery);
-      var show = matchType && matchStatus && matchText;
+      var show = matchType && matchStatus && matchDate && matchText;
       row.style.display = show ? '' : 'none';
       if (show) visible++;
     });
 
     if (counterEl) {
-      var hasFilter = activeFilters.type || activeFilters.status || textQuery;
+      var hasFilter = activeFilters.type || activeFilters.status || activeFilters.date || textQuery;
       counterEl.textContent = hasFilter ? 'Showing ' + visible + ' of ' + total : total + ' entries';
     }
 
     if (clearBtn) {
-      clearBtn.style.display = (activeFilters.type || activeFilters.status) ? '' : 'none';
+      clearBtn.style.display = (activeFilters.type || activeFilters.status || activeFilters.date) ? '' : 'none';
     }
 
     updateURL();
@@ -1183,9 +1197,12 @@ function showAuthPrompt() {
       if (e.target.id === 'clear-filters-btn' || e.target.closest('#clear-filters-btn')) {
         activeFilters.type = '';
         activeFilters.status = '';
+        activeFilters.date = '';
         filterBar.querySelectorAll('[data-filter-group]').forEach(function(b) {
           b.classList.toggle('active', b.getAttribute('data-filter-value') === '');
         });
+        updateDateDisplay();
+        highlightChartElements();
         applyFilters();
       }
       return;
@@ -1240,8 +1257,132 @@ function showAuthPrompt() {
     textInput = newInput;
   }
 
+  // Helper functions for chart interaction
+  function scrollToActivity() {
+    var section = document.querySelector('.table-section');
+    if (!section) return;
+    var rect = section.getBoundingClientRect();
+    if (rect.top < 0 || rect.top > window.innerHeight) {
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  function updateDateDisplay() {
+    var container = document.getElementById('date-filter-display');
+    if (!container) return;
+    if (!activeFilters.date) {
+      container.innerHTML = '';
+      return;
+    }
+    var parts = activeFilters.date.split('-');
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var label = months[parseInt(parts[1],10)-1] + ' ' + parseInt(parts[2],10);
+    container.innerHTML = '<span class="meta-sep">|</span> <span style="font-size:0.75rem;color:var(--text-dim);text-transform:uppercase;font-weight:600;">Date:</span> <button class="filter-btn active" id="date-filter-clear">' + label + ' &times;</button>';
+    document.getElementById('date-filter-clear').addEventListener('click', function() {
+      activeFilters.date = '';
+      updateDateDisplay();
+      highlightChartElements();
+      applyFilters();
+    });
+  }
+
+  function highlightChartElements() {
+    document.querySelectorAll('.charts .bar-group[data-date]').forEach(function(g) {
+      var isSelected = activeFilters.date && g.getAttribute('data-date') === activeFilters.date;
+      var isDeselected = activeFilters.date && g.getAttribute('data-date') !== activeFilters.date;
+      g.style.opacity = isDeselected ? '0.3' : '1';
+      if (isSelected) {
+        g.style.outline = '2px solid var(--text)';
+        g.style.outlineOffset = '-1px';
+        g.style.borderRadius = '3px';
+      } else {
+        g.style.outline = '';
+        g.style.outlineOffset = '';
+        g.style.borderRadius = '';
+      }
+    });
+
+    document.querySelectorAll('[data-chart-type]').forEach(function(el) {
+      var isSelected = activeFilters.type && el.getAttribute('data-chart-type') === activeFilters.type;
+      var isDeselected = activeFilters.type && el.getAttribute('data-chart-type') !== activeFilters.type;
+      el.style.opacity = isDeselected ? '0.3' : '1';
+      if (isSelected && el.classList.contains('bar')) {
+        el.style.outline = '2px solid var(--text)';
+        el.style.outlineOffset = '-1px';
+      } else {
+        el.style.outline = '';
+        el.style.outlineOffset = '';
+      }
+    });
+
+    document.querySelectorAll('[data-chart-status]').forEach(function(el) {
+      var isDeselected = activeFilters.status && el.getAttribute('data-chart-status') !== activeFilters.status;
+      el.style.opacity = isDeselected ? '0.3' : '1';
+    });
+  }
+
+  // Chart click handlers
+  document.querySelectorAll('.charts .bar-group[data-date]').forEach(function(group) {
+    group.addEventListener('click', function() {
+      var date = group.getAttribute('data-date');
+      activeFilters.date = (activeFilters.date === date) ? '' : date;
+      updateDateDisplay();
+      highlightChartElements();
+      applyFilters();
+      scrollToActivity();
+    });
+  });
+
+  document.querySelectorAll('.charts .bar[data-chart-type]').forEach(function(bar) {
+    bar.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var typeName = bar.getAttribute('data-chart-type');
+      activeFilters.type = (activeFilters.type === typeName) ? '' : typeName;
+      filterBar.querySelectorAll('[data-filter-group="type"]').forEach(function(b) {
+        b.classList.toggle('active', b.getAttribute('data-filter-value') === activeFilters.type);
+      });
+      highlightChartElements();
+      applyFilters();
+      scrollToActivity();
+    });
+  });
+
+  document.querySelectorAll('[data-chart-type]').forEach(function(el) {
+    if (el.closest('.bar-stack')) return;
+    el.addEventListener('click', function() {
+      var typeName = el.getAttribute('data-chart-type');
+      activeFilters.type = (activeFilters.type === typeName) ? '' : typeName;
+      filterBar.querySelectorAll('[data-filter-group="type"]').forEach(function(b) {
+        b.classList.toggle('active', b.getAttribute('data-filter-value') === activeFilters.type);
+      });
+      highlightChartElements();
+      applyFilters();
+      scrollToActivity();
+    });
+  });
+
+  document.querySelectorAll('[data-chart-status]').forEach(function(el) {
+    el.addEventListener('click', function() {
+      var statusVal = el.getAttribute('data-chart-status');
+      activeFilters.status = (activeFilters.status === statusVal) ? '' : statusVal;
+      filterBar.querySelectorAll('[data-filter-group="status"]').forEach(function(b) {
+        var bVal = b.getAttribute('data-filter-value');
+        if (activeFilters.status === 'success' || activeFilters.status === 'failure') {
+          b.classList.remove('active');
+        } else {
+          b.classList.toggle('active', bVal === activeFilters.status);
+        }
+      });
+      highlightChartElements();
+      applyFilters();
+      scrollToActivity();
+    });
+  });
+
   // Apply initial filters
   applyFilters();
+  highlightChartElements();
+  updateDateDisplay();
 })();
 
 (function() {
