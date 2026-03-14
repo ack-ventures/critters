@@ -785,11 +785,12 @@ ${totalTasks > 0 ? (() => {
             <th data-sortable="duration">Duration</th>
             <th data-sortable="cost">Cost</th>
             <th>PR</th>
+            <th>Logs</th>
             <th data-sortable="date">When</th>
           </tr>
         </thead>
         <tbody>
-${recentActivity.length === 0 ? '          <tr><td colspan="7" class="empty-state"><span class="empty-state-icon">&#x1F4CB;</span>No activity yet</td></tr>' : recentActivity
+${recentActivity.length === 0 ? '          <tr><td colspan="8" class="empty-state"><span class="empty-state-icon">&#x1F4CB;</span>No activity yet</td></tr>' : recentActivity
   .map((m) => {
     const id = escapeHtml(m.identifier ?? m.issueId ?? "\u2014");
     const typeName = escapeHtml(m.critterType ?? (m.event.startsWith("review_") ? "review" : "create"));
@@ -808,7 +809,14 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="7" class="empty-stat
       : "\u2014";
     const when = formatDate(m.timestamp);
     const rawId = m.identifier ?? m.issueId ?? "";
-    const idLink = rawId ? `<a href="/dashboard/${encodeURIComponent(rawId)}">${id}</a>` : id;
+    const issueHref = m.issueUrl
+      ? escapeHtml(m.issueUrl)
+      : `/dashboard/${encodeURIComponent(rawId)}`;
+    const issueTarget = m.issueUrl ? ' target="_blank" rel="noopener"' : '';
+    const idLink = rawId ? `<a href="${issueHref}"${issueTarget}>${id}</a>` : id;
+    const logsLink = rawId
+      ? `<a href="/dashboard/${encodeURIComponent(rawId)}" title="View logs">logs</a>`
+      : '\u2014';
     return `          <tr>
             <td>${idLink}</td>
             <td>${typeName}</td>
@@ -816,6 +824,7 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="7" class="empty-stat
             <td data-sort-value="${m.duration ?? -1}">${dur}</td>
             <td data-sort-value="${m.costUsd ?? -1}">${cost}</td>
             <td>${pr}</td>
+            <td>${logsLink}</td>
             <td data-sort-value="${m.timestamp}">${when}</td>
           </tr>`;
   })
