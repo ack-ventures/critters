@@ -850,6 +850,10 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="7" class="empty-stat
         </select>
       </div>
       <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Base Branch <span style="font-weight:normal;color:var(--text-dim);">(optional)</span></label>
+        <input type="text" id="create-branch" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;" placeholder="e.g. dev, beta (defaults to repo default branch)">
+      </div>
+      <div style="margin-bottom:12px;">
         <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Title</label>
         <input type="text" id="create-title" required style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem;" placeholder="Issue title">
       </div>
@@ -1201,9 +1205,17 @@ function fetchLogPreview(identifier) {
     submitBtn.textContent = 'Creating...';
 
     var selectedRepo = document.getElementById('create-repo').value;
+    var selectedBranch = document.getElementById('create-branch').value.trim();
     var description = document.getElementById('create-description').value;
+    var prefix = '';
     if (selectedRepo && !/^repo:\\s/m.test(description)) {
-      description = 'repo: ' + selectedRepo + '\\n\\n' + description;
+      prefix += 'repo: ' + selectedRepo + '\\n';
+    }
+    if (selectedBranch && !/^branch:\\s/m.test(description)) {
+      prefix += 'branch: ' + selectedBranch + '\\n';
+    }
+    if (prefix) {
+      description = prefix + '\\n' + description;
     }
 
     var body = {
