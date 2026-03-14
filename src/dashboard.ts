@@ -201,8 +201,69 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
   const durations = taskMetrics.map((m) => m.duration).filter((d): d is number => d != null && !Number.isNaN(d));
   const avgDuration = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : null;
 
+  // Per-type stats breakdown
+  const perTypeStats = new Map<string, {
+    total: number;
+    succeeded: number;
+    failed: number;
+    totalCost: number;
+    durations: number[];
+  }>();
+
+  for (const m of taskMetrics) {
+    const typeName = inferType(m);
+    let entry = perTypeStats.get(typeName);
+    if (!entry) {
+      entry = { total: 0, succeeded: 0, failed: 0, totalCost: 0, durations: [] };
+      perTypeStats.set(typeName, entry);
+    }
+    entry.total++;
+    if (m.event === "task_completed" || m.event === "review_completed") {
+      entry.succeeded++;
+    } else {
+      entry.failed++;
+    }
+    entry.totalCost += m.costUsd ?? 0;
+    if (m.duration != null && !Number.isNaN(m.duration)) {
+      entry.durations.push(m.duration);
+    }
+  }
+
+  // Compute average duration per critter type for ETA estimates
+  const avgDurationByType = new Map<string, number>();
+  {
+    const typeAccum = new Map<string, { total: number; count: number }>();
+    for (const m of allMetrics) {
+      if (m.event !== "task_completed" && m.event !== "review_completed") continue;
+      if (m.duration == null || Number.isNaN(m.duration)) continue;
+      const t = m.critterType ?? (m.event.startsWith("review_") ? "review" : "create");
+      const acc = typeAccum.get(t);
+      if (acc) {
+        acc.total += m.duration;
+        acc.count++;
+      } else {
+        typeAccum.set(t, { total: m.duration, count: 1 });
+      }
+    }
+    for (const [t, acc] of typeAccum) {
+      if (acc.count >= 3) {
+        avgDurationByType.set(t, acc.total / acc.count);
+      }
+    }
+  }
+
   // Recent activity (last 50)
   const recentActivity = taskMetrics.slice(-50).reverse();
+
+  const activityTypes = [...new Set(recentActivity.map(m => {
+    return m.critterType ?? (m.event.startsWith("review_") ? "review" : "create");
+  }))].sort();
+
+  const activityStatuses = [...new Set(recentActivity.map(m => {
+    const isRev = m.event === "review_completed" || m.event === "review_failed";
+    const isOk = m.event === "task_completed" || m.event === "review_completed";
+    return isRev ? (isOk ? "Review Completed" : "Review Failed") : (isOk ? "Completed" : "Failed");
+  }))].sort();
 
   // Chart data
   const dailyStats = computeDailyStats(filteredMetrics, 14);
@@ -276,6 +337,40 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
     .today-value { color: var(--text); }
     .today-fail { color: var(--failure); }
     .today-sep { color: var(--text-dim); opacity: 0.4; }
+    .type-stats { margin-bottom: 24px; }
+    .type-stats h3 {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+    }
+    .type-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+    }
+    .type-stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .type-stat-name {
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: var(--text);
+      text-transform: capitalize;
+    }
+    .type-stat-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      padding: 2px 0;
+    }
+    .type-stat-label { color: var(--text-dim); }
+    .type-stat-value { color: var(--text); font-weight: 600; }
     .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
     .card {
       background: var(--card-bg);
@@ -407,6 +502,9 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
     .elapsed-ok { color: var(--success); }
     .elapsed-warn { color: #e2b93d; }
     .elapsed-danger { color: var(--failure); }
+    .eta-ok { color: var(--success); }
+    .eta-warn { color: #e2b93d; }
+    .eta-overdue { color: var(--failure); font-weight: 600; }
     /* Row hover */
     tr:hover td { background: rgba(255,255,255,0.04); }
     /* Empty states */
@@ -437,6 +535,8 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
       color: var(--text-dim);
       text-decoration: none;
       transition: all 0.15s;
+      cursor: pointer;
+      background: none;
     }
     .filter-btn:hover {
       border-color: var(--text-dim);
@@ -447,6 +547,16 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
       background: #5dade2;
       border-color: #5dade2;
       color: #fff;
+    }
+    td .badge { cursor: pointer; }
+    td .badge:hover { filter: brightness(1.2); }
+    .badge-type {
+      background: rgba(93, 173, 226, 0.1);
+      color: var(--text-dim);
+    }
+    .badge-type:hover {
+      color: var(--text);
+      background: rgba(93, 173, 226, 0.2);
     }
     th[data-sortable] { cursor: pointer; user-select: none; }
     th[data-sortable]:hover { color: var(--text); }
@@ -477,6 +587,7 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
       .bar-group:nth-child(even) .bar-label { visibility: hidden; }
       .bar-label { transform: rotate(-45deg); transform-origin: top center; font-size: 0.55rem; }
       .y-axis { min-width: 35px; width: auto; }
+      .type-stats-grid { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
 </head>
@@ -493,6 +604,8 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
       <button id="poll-btn" style="background:var(--accent);border:1px solid var(--border);color:var(--text);padding:4px 12px;border-radius:4px;cursor:pointer;font-size:0.85rem;">Poll Now</button>
       <span class="meta-sep">|</span>
       <button id="new-critter-btn" style="background:var(--accent);border:1px solid var(--border);color:var(--text);padding:4px 12px;border-radius:4px;cursor:pointer;font-size:0.85rem;">+ New Critter</button>
+      <span class="meta-sep">|</span>
+      <button id="notif-btn" title="Enable browser notifications" style="background:var(--accent);border:1px solid var(--border);color:var(--text);padding:4px 12px;border-radius:4px;cursor:pointer;font-size:0.85rem;position:relative;">🔔 <span id="notif-dot" style="display:none;position:absolute;top:2px;right:2px;width:6px;height:6px;background:var(--success);border-radius:50%;"></span></button>
       <span class="meta-sep">|</span>
       <span id="refresh-countdown" class="meta">Refreshing in 30s</span>
     </div>
@@ -533,6 +646,41 @@ ${allTypes.map(t => `    <a href="/dashboard?type=${encodeURIComponent(t)}" clas
       <div class="value">${avgDuration != null ? fmtDuration(avgDuration) : "N/A"}</div>
     </div>
   </div>
+
+${perTypeStats.size >= 2 ? `  <div class="type-stats">
+    <h3>Per-Type Breakdown</h3>
+    <div class="type-stats-grid">
+${[...perTypeStats.entries()]
+  .sort((a, b) => b[1].total - a[1].total)
+  .map(([typeName, stats]) => {
+    const rate = stats.total > 0 ? Math.round((stats.succeeded / stats.total) * 100) : null;
+    const avgCostVal = stats.total > 0 ? stats.totalCost / stats.total : null;
+    const avgDur = stats.durations.length > 0
+      ? stats.durations.reduce((a, b) => a + b, 0) / stats.durations.length
+      : null;
+    return `      <div class="type-stat-card">
+        <div class="type-stat-name">${escapeHtml(typeName)}</div>
+        <div class="type-stat-row">
+          <span class="type-stat-label">Tasks</span>
+          <span class="type-stat-value">${stats.succeeded}/${stats.total}</span>
+        </div>
+        <div class="type-stat-row">
+          <span class="type-stat-label">Success</span>
+          <span class="type-stat-value">${rate != null ? `${rate}%` : 'N/A'}</span>
+        </div>
+        <div class="type-stat-row">
+          <span class="type-stat-label">Avg Cost</span>
+          <span class="type-stat-value">${avgCostVal != null ? formatCost(avgCostVal) : 'N/A'}</span>
+        </div>
+        <div class="type-stat-row">
+          <span class="type-stat-label">Avg Duration</span>
+          <span class="type-stat-value">${avgDur != null ? fmtDuration(avgDur) : 'N/A'}</span>
+        </div>
+      </div>`;
+  })
+  .join("\n")}
+    </div>
+  </div>` : ''}
 
   <div class="today-stats">
     <div class="today-card">
@@ -602,7 +750,9 @@ ${status.activeCritterDetails.length > 0 ? `
             <th>Repo</th>
             <th>Branch</th>
             <th>PR</th>
+            <th>Cost</th>
             <th>Elapsed</th>
+            <th>ETA</th>
           </tr>
         </thead>
         <tbody>
@@ -623,19 +773,50 @@ ${status.activeCritterDetails.map((d) => {
     : d.phase === "exec" || d.phase === "execution" ? "badge badge-execution"
     : d.phase === "review" ? "badge badge-review-phase"
     : "badge";
+  const critterType = d.critterType ?? "create";
+  const avgDur = avgDurationByType.get(critterType);
+  let etaCell: string;
+  if (avgDur == null) {
+    etaCell = `<td style="color: var(--text-dim)">\u2014</td>`;
+  } else {
+    const remaining = avgDur - elapsedMs;
+    if (remaining < 0) {
+      etaCell = `<td class="eta-overdue">overdue</td>`;
+    } else {
+      const etaPct = elapsedMs / avgDur;
+      const etaClass = etaPct > 0.8 ? "eta-warn" : "eta-ok";
+      etaCell = `<td class="${etaClass}">\u223C${fmtDuration(remaining)} left</td>`;
+    }
+  }
   const prCell = d.prUrl
     ? `<a href="${escapeHtml(d.prUrl)}" target="_blank" rel="noopener">PR</a>${renderPrStatusIcons(d.prUrl, prStatuses)}`
     : "\u2014";
+  const issueHref = d.issueUrl
+    ? escapeHtml(d.issueUrl)
+    : `/dashboard/${encodeURIComponent(d.identifier)}`;
+  const issueTarget = d.issueUrl ? ' target="_blank" rel="noopener"' : '';
+  const costCell = (() => {
+    if (d.costUsd == null || d.costUsd === 0) return '<span style="color:var(--text-muted)">&mdash;</span>';
+    const costStr = `$${d.costUsd.toFixed(2)}`;
+    if (d.costBudget != null && d.costBudget > 0) {
+      const pct = d.costUsd / d.costBudget;
+      const color = pct > 0.8 ? "var(--failure)" : pct > 0.5 ? "#e2b93d" : "var(--success)";
+      return `<span style="color:${color}">${costStr} / $${d.costBudget.toFixed(2)}</span>`;
+    }
+    return costStr;
+  })();
   return `          <tr onclick="toggleLogPreview('${escapeHtml(d.identifier)}', this)" style="cursor:pointer" title="Click to view logs">
-            <td><a href="/dashboard/${encodeURIComponent(d.identifier)}">${escapeHtml(d.identifier)}</a></td>
+            <td><a href="${issueHref}"${issueTarget}>${escapeHtml(d.identifier)}</a></td>
             <td><span class="${phaseBadgeClass}">${phaseLabel}</span></td>
             <td>${escapeHtml(d.repo)}</td>
             <td><code>${escapeHtml(d.branch)}</code></td>
             <td>${prCell}</td>
+            <td>${costCell}</td>
             <td class="${elapsedClass}">${elapsed}</td>
+            ${etaCell}
           </tr>
           <tr class="log-preview-row" id="log-preview-${escapeHtml(d.identifier)}" style="display:none">
-            <td colspan="6" style="padding:0">
+            <td colspan="7" style="padding:0">
               <div class="log-preview-content" id="log-content-${escapeHtml(d.identifier)}"></div>
               <div style="padding:4px 12px 8px;text-align:right"><a href="/dashboard/${encodeURIComponent(d.identifier)}" class="log-preview-link">View details &rarr;</a></div>
             </td>
@@ -792,6 +973,18 @@ ${totalTasks > 0 ? (() => {
 
   <div class="table-section">
     <h2>Recent Activity</h2>
+    <div id="activity-filters" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+      <span style="font-size:0.75rem;color:var(--text-dim);text-transform:uppercase;font-weight:600;">Type:</span>
+      <button class="filter-btn active" data-filter-group="type" data-filter-value="">All</button>
+${activityTypes.map(t => `      <button class="filter-btn" data-filter-group="type" data-filter-value="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join("\n")}
+      <span class="meta-sep">|</span>
+      <span style="font-size:0.75rem;color:var(--text-dim);text-transform:uppercase;font-weight:600;">Status:</span>
+      <button class="filter-btn active" data-filter-group="status" data-filter-value="">All</button>
+${activityStatuses.map(s => `      <button class="filter-btn" data-filter-group="status" data-filter-value="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join("\n")}
+      <span class="meta-sep">|</span>
+      <span id="row-counter" style="font-size:0.8rem;color:var(--text-dim);"></span>
+      <button id="clear-filters-btn" class="filter-btn" style="display:none;background:var(--failure);border-color:var(--failure);color:#fff;">Clear filters</button>
+    </div>
     <input type="text" id="activity-filter" placeholder="Filter by issue, type, or status..." style="background:var(--card-bg);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;width:100%;margin-bottom:12px;font-size:0.85rem;">
     <div class="table-wrap">
       <table>
@@ -835,9 +1028,9 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="8" class="empty-stat
     const logsLink = rawId
       ? `<a href="/dashboard/${encodeURIComponent(rawId)}" title="View logs">logs</a>`
       : '\u2014';
-    return `          <tr>
+    return `          <tr data-type="${typeName}" data-status="${statusText}">
             <td>${idLink}</td>
-            <td>${typeName}</td>
+            <td><span class="badge badge-type">${typeName}</span></td>
             <td><span class="${badgeClass}">${statusText}</span></td>
             <td data-sort-value="${m.duration ?? -1}">${dur}</td>
             <td data-sort-value="${m.costUsd ?? -1}">${cost}</td>
@@ -988,19 +1181,132 @@ function showAuthPrompt() {
 })();
 
 (function() {
-  var input = document.getElementById('activity-filter');
+  var filterBar = document.getElementById('activity-filters');
   var table = document.querySelector('.table-section table');
-  if (!input || !table) return;
+  if (!filterBar || !table) return;
   var tbody = table.querySelector('tbody');
+  var counterEl = document.getElementById('row-counter');
+  var clearBtn = document.getElementById('clear-filters-btn');
+  var textInput = document.getElementById('activity-filter');
 
-  input.addEventListener('input', function() {
-    var query = input.value.toLowerCase();
-    var rows = tbody.querySelectorAll('tr');
-    rows.forEach(function(row) {
-      var text = row.textContent.toLowerCase();
-      row.style.display = text.includes(query) ? '' : 'none';
-    });
+  var activeFilters = { type: '', status: '' };
+
+  // Read initial filter state from URL
+  var params = new URLSearchParams(window.location.search);
+  var initType = params.get('ftype') || '';
+  var initStatus = params.get('fstatus') || '';
+  activeFilters.type = initType;
+  activeFilters.status = initStatus;
+
+  // Highlight initial active buttons
+  filterBar.querySelectorAll('[data-filter-group]').forEach(function(btn) {
+    var group = btn.getAttribute('data-filter-group');
+    var val = btn.getAttribute('data-filter-value');
+    btn.classList.toggle('active', val === activeFilters[group]);
   });
+
+  function updateURL() {
+    var url = new URL(window.location);
+    if (activeFilters.type) url.searchParams.set('ftype', activeFilters.type);
+    else url.searchParams.delete('ftype');
+    if (activeFilters.status) url.searchParams.set('fstatus', activeFilters.status);
+    else url.searchParams.delete('fstatus');
+    history.replaceState(null, '', url.toString());
+  }
+
+  function applyFilters() {
+    var rows = tbody.querySelectorAll('tr');
+    var total = rows.length;
+    var visible = 0;
+    var textQuery = textInput ? textInput.value.toLowerCase() : '';
+
+    rows.forEach(function(row) {
+      var matchType = !activeFilters.type || row.getAttribute('data-type') === activeFilters.type;
+      var matchStatus = !activeFilters.status || row.getAttribute('data-status') === activeFilters.status;
+      var matchText = !textQuery || row.textContent.toLowerCase().includes(textQuery);
+      var show = matchType && matchStatus && matchText;
+      row.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+
+    if (counterEl) {
+      var hasFilter = activeFilters.type || activeFilters.status || textQuery;
+      counterEl.textContent = hasFilter ? 'Showing ' + visible + ' of ' + total : total + ' entries';
+    }
+
+    if (clearBtn) {
+      clearBtn.style.display = (activeFilters.type || activeFilters.status) ? '' : 'none';
+    }
+
+    updateURL();
+  }
+
+  // Filter button clicks
+  filterBar.addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-filter-group]');
+    if (!btn) {
+      if (e.target.id === 'clear-filters-btn' || e.target.closest('#clear-filters-btn')) {
+        activeFilters.type = '';
+        activeFilters.status = '';
+        filterBar.querySelectorAll('[data-filter-group]').forEach(function(b) {
+          b.classList.toggle('active', b.getAttribute('data-filter-value') === '');
+        });
+        applyFilters();
+      }
+      return;
+    }
+
+    var group = btn.getAttribute('data-filter-group');
+    var val = btn.getAttribute('data-filter-value');
+    activeFilters[group] = val;
+
+    filterBar.querySelectorAll('[data-filter-group="' + group + '"]').forEach(function(b) {
+      b.classList.toggle('active', b.getAttribute('data-filter-value') === val);
+    });
+
+    applyFilters();
+  });
+
+  // Make table badges clickable (status badges and type badges)
+  tbody.addEventListener('click', function(e) {
+    var badge = e.target.closest('.badge');
+    if (!badge) return;
+    var row = badge.closest('tr');
+    if (!row) return;
+    if (e.target.tagName === 'A') return;
+
+    var cell = badge.closest('td');
+    var cellIdx = Array.from(row.cells).indexOf(cell);
+
+    if (cellIdx === 1) {
+      // Type column
+      var typeVal = row.getAttribute('data-type');
+      activeFilters.type = typeVal;
+      filterBar.querySelectorAll('[data-filter-group="type"]').forEach(function(b) {
+        b.classList.toggle('active', b.getAttribute('data-filter-value') === typeVal);
+      });
+      applyFilters();
+    } else if (cellIdx === 2) {
+      // Status column
+      var statusVal = row.getAttribute('data-status');
+      activeFilters.status = statusVal;
+      filterBar.querySelectorAll('[data-filter-group="status"]').forEach(function(b) {
+        b.classList.toggle('active', b.getAttribute('data-filter-value') === statusVal);
+      });
+      applyFilters();
+    }
+  });
+
+  // Override the existing text filter to work with badge filters
+  if (textInput) {
+    var newInput = textInput.cloneNode(true);
+    textInput.parentNode.replaceChild(newInput, textInput);
+    newInput.addEventListener('input', function() { applyFilters(); });
+    textInput = newInput;
+  }
+
+  // Apply initial filters
+  applyFilters();
 })();
 
 (function() {
@@ -1298,6 +1604,97 @@ function fetchLogPreview(identifier) {
       submitBtn.textContent = 'Create';
     });
   });
+})();
+</script>
+<script>
+(function() {
+  if (!window._notifState) {
+    window._notifState = {
+      enabled: localStorage.getItem('critters-notif') === 'on',
+      lastSeenTimestamp: localStorage.getItem('critters-notif-last-seen') || new Date().toISOString()
+    };
+  }
+
+  var state = window._notifState;
+  var btn = document.getElementById('notif-btn');
+  var dot = document.getElementById('notif-dot');
+
+  function updateUI() {
+    if (dot) dot.style.display = state.enabled ? 'inline-block' : 'none';
+    if (btn) btn.title = state.enabled ? 'Notifications enabled (click to disable)' : 'Enable browser notifications';
+  }
+  updateUI();
+
+  if (btn) {
+    btn.addEventListener('click', function() {
+      if (!('Notification' in window)) return;
+
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().then(function(perm) {
+          if (perm === 'granted') {
+            state.enabled = true;
+            state.lastSeenTimestamp = new Date().toISOString();
+            localStorage.setItem('critters-notif', 'on');
+            localStorage.setItem('critters-notif-last-seen', state.lastSeenTimestamp);
+            updateUI();
+          }
+        });
+      } else if (Notification.permission === 'granted') {
+        state.enabled = !state.enabled;
+        localStorage.setItem('critters-notif', state.enabled ? 'on' : 'off');
+        if (state.enabled) {
+          state.lastSeenTimestamp = new Date().toISOString();
+          localStorage.setItem('critters-notif-last-seen', state.lastSeenTimestamp);
+        }
+        updateUI();
+      }
+    });
+  }
+
+  if (state.enabled && 'Notification' in window && Notification.permission === 'granted') {
+    fetch('/metrics')
+      .then(function(res) { return res.json(); })
+      .then(function(events) {
+        var newEvents = events.filter(function(e) {
+          return e.timestamp > state.lastSeenTimestamp;
+        });
+
+        newEvents.forEach(function(e) {
+          var title = '';
+          var id = e.identifier || e.issueId || 'Unknown';
+          var tag = 'critters-' + id + '-' + e.event;
+
+          if (e.event === 'task_completed') {
+            title = '\\u2705 ' + id + (e.prUrl ? ' completed \\u2014 PR created' : ' completed');
+          } else if (e.event === 'task_failed') {
+            title = '\\u274c ' + id + ' failed';
+          } else if (e.event === 'review_completed' && e.outcome === 'needs_changes') {
+            title = '\\ud83d\\udc40 ' + id + ' needs human review';
+          } else {
+            return;
+          }
+
+          var notif = new Notification(title, {
+            body: e.critterType ? 'Type: ' + e.critterType : '',
+            tag: tag
+          });
+          notif.onclick = function() {
+            window.focus();
+            window.location.href = '/dashboard/' + id;
+            notif.close();
+          };
+        });
+
+        if (events.length > 0) {
+          var latest = events.reduce(function(max, e) {
+            return e.timestamp > max ? e.timestamp : max;
+          }, state.lastSeenTimestamp);
+          state.lastSeenTimestamp = latest;
+          localStorage.setItem('critters-notif-last-seen', latest);
+        }
+      })
+      .catch(function() {});
+  }
 })();
 </script>
 </body>
@@ -1669,6 +2066,7 @@ export function renderIssuePage(identifier: string, status: HealthStatus, workDi
   })();
   const branch = activeDetail?.branch ?? "\u2014";
   const prUrl = activeDetail?.prUrl ?? taskEnded?.prUrl;
+  const issueUrl = activeDetail?.issueUrl ?? taskStarted?.issueUrl ?? taskEnded?.issueUrl;
 
   // Cost/token aggregation from phase results (preferred) or metrics (fallback)
   let totalCost = 0;
@@ -1902,7 +2300,7 @@ ${noData ? `
   <div class="header">
     <div class="header-top">
       <a href="/dashboard">&larr; Dashboard</a>
-      <h1>${safeId}</h1>
+      <h1>${issueUrl ? `<a href="${escapeHtml(issueUrl)}" target="_blank" rel="noopener" style="color: inherit; text-decoration: none;">${safeId} <span style="font-size: 0.6em; opacity: 0.6;">&#x2197;</span></a>` : safeId}</h1>
       ${statusBadge}
       ${typeBadge}
     </div>
@@ -1914,7 +2312,7 @@ ${noData ? `
       <span class="info-label">Title</span>
       <span>${escapeHtml(title)}</span>
       <span class="info-label">Identifier</span>
-      <span>${safeId}</span>
+      <span>${issueUrl ? `<a href="${escapeHtml(issueUrl)}" target="_blank" rel="noopener">${safeId} &#x2197;</a>` : safeId}</span>
       <span class="info-label">Type</span>
       <span>${escapeHtml(critterType)}</span>
       <span class="info-label">Repo</span>

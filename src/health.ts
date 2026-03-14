@@ -107,6 +107,8 @@ export function startHealthServer(
             timeoutMinutes: d.timeoutMinutes ?? null,
             critterType: d.critterType ?? null,
             workDir: d.workDir ?? null,
+            costUsd: d.costUsd ?? null,
+            costBudget: d.costBudget ?? null,
           })),
         });
       }
