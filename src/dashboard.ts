@@ -212,6 +212,29 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
     }
   }
 
+  // Compute average duration per critter type for ETA estimates
+  const avgDurationByType = new Map<string, number>();
+  {
+    const typeAccum = new Map<string, { total: number; count: number }>();
+    for (const m of allMetrics) {
+      if (m.event !== "task_completed" && m.event !== "review_completed") continue;
+      if (m.duration == null || Number.isNaN(m.duration)) continue;
+      const t = m.critterType ?? (m.event.startsWith("review_") ? "review" : "create");
+      const acc = typeAccum.get(t);
+      if (acc) {
+        acc.total += m.duration;
+        acc.count++;
+      } else {
+        typeAccum.set(t, { total: m.duration, count: 1 });
+      }
+    }
+    for (const [t, acc] of typeAccum) {
+      if (acc.count >= 3) {
+        avgDurationByType.set(t, acc.total / acc.count);
+      }
+    }
+  }
+
   // Recent activity (last 50)
   const recentActivity = taskMetrics.slice(-50).reverse();
 
@@ -451,6 +474,9 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
     .elapsed-ok { color: var(--success); }
     .elapsed-warn { color: #e2b93d; }
     .elapsed-danger { color: var(--failure); }
+    .eta-ok { color: var(--success); }
+    .eta-warn { color: #e2b93d; }
+    .eta-overdue { color: var(--failure); font-weight: 600; }
     /* Row hover */
     tr:hover td { background: rgba(255,255,255,0.04); }
     /* Empty states */
@@ -686,6 +712,7 @@ ${status.activeCritterDetails.length > 0 ? `
             <th>PR</th>
             <th>Cost</th>
             <th>Elapsed</th>
+            <th>ETA</th>
           </tr>
         </thead>
         <tbody>
@@ -706,6 +733,21 @@ ${status.activeCritterDetails.map((d) => {
     : d.phase === "exec" || d.phase === "execution" ? "badge badge-execution"
     : d.phase === "review" ? "badge badge-review-phase"
     : "badge";
+  const critterType = d.critterType ?? "create";
+  const avgDur = avgDurationByType.get(critterType);
+  let etaCell: string;
+  if (avgDur == null) {
+    etaCell = `<td style="color: var(--text-dim)">\u2014</td>`;
+  } else {
+    const remaining = avgDur - elapsedMs;
+    if (remaining < 0) {
+      etaCell = `<td class="eta-overdue">overdue</td>`;
+    } else {
+      const etaPct = elapsedMs / avgDur;
+      const etaClass = etaPct > 0.8 ? "eta-warn" : "eta-ok";
+      etaCell = `<td class="${etaClass}">\u223C${fmtDuration(remaining)} left</td>`;
+    }
+  }
   const prCell = d.prUrl
     ? `<a href="${escapeHtml(d.prUrl)}" target="_blank" rel="noopener">PR</a>`
     : "\u2014";
@@ -727,6 +769,7 @@ ${status.activeCritterDetails.map((d) => {
             <td>${prCell}</td>
             <td>${costCell}</td>
             <td class="${elapsedClass}">${elapsed}</td>
+            ${etaCell}
           </tr>
           <tr class="log-preview-row" id="log-preview-${escapeHtml(d.identifier)}" style="display:none">
             <td colspan="7" style="padding:0">
