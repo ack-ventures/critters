@@ -1,6 +1,7 @@
 import type { HealthStatus } from "./health.js";
 import { extractPhaseResult, resolveAllPhases, resolveWorkDirForIdentifier } from "./log-resolver.js";
 import { getRecentMetrics, type MetricEvent } from "./metrics.js";
+import type { PrStatus } from "./pr-status.js";
 import { getDisplayVersion } from "./updater.js";
 import { formatDuration } from "./utils.js";
 
@@ -158,7 +159,23 @@ function inferType(m: MetricEvent): string {
   return m.critterType ?? (m.event.startsWith("review_") ? "review" : "create");
 }
 
-export function renderDashboard(metricsPath: string, status: HealthStatus, uptime: number, typeFilter?: string, dashboardToken?: string): string {
+function renderPrStatusIcons(prUrl: string, prStatuses?: Map<string, PrStatus>): string {
+  if (!prStatuses) return "";
+  const s = prStatuses.get(prUrl);
+  if (!s) return "";
+  const ciIcon = s.ciStatus === "success" ? "\u2705"
+    : s.ciStatus === "failure" ? "\u274C"
+    : s.ciStatus === "pending" ? "\u23F3"
+    : "";
+  const reviewIcon = s.reviewStatus === "approved" ? "\uD83D\uDC4D"
+    : s.reviewStatus === "changes_requested" ? "\uD83D\uDD04"
+    : s.reviewStatus === "pending" ? "\u23F3"
+    : "";
+  if (!ciIcon && !reviewIcon) return "";
+  return ` <span class="pr-status" title="CI: ${s.ciStatus}, Review: ${s.reviewStatus}">${ciIcon}${reviewIcon}</span>`;
+}
+
+export function renderDashboard(metricsPath: string, status: HealthStatus, uptime: number, typeFilter?: string, dashboardToken?: string, prStatuses?: Map<string, PrStatus>): string {
   const allMetrics = getRecentMetrics(10000);
 
   // Extract unique types for filter buttons
@@ -292,6 +309,7 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
     .donut-svg { width: 100px; height: 100px; }
     .donut-text { font-family: inherit; font-size: 0.45rem; fill: var(--text); font-weight: 700; text-anchor: middle; dominant-baseline: central; }
     .donut-legend { font-size: 0.75rem; color: var(--text-dim); margin-top: 8px; text-align: center; }
+    .pr-status { font-size: 0.75rem; margin-left: 4px; }
     .bar-label { font-size: 0.6rem; color: var(--text-dim); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .bar[data-tooltip]:hover::after {
       content: attr(data-tooltip);
@@ -606,7 +624,7 @@ ${status.activeCritterDetails.map((d) => {
     : d.phase === "review" ? "badge badge-review-phase"
     : "badge";
   const prCell = d.prUrl
-    ? `<a href="${escapeHtml(d.prUrl)}" target="_blank" rel="noopener">PR</a>`
+    ? `<a href="${escapeHtml(d.prUrl)}" target="_blank" rel="noopener">PR</a>${renderPrStatusIcons(d.prUrl, prStatuses)}`
     : "\u2014";
   return `          <tr onclick="toggleLogPreview('${escapeHtml(d.identifier)}', this)" style="cursor:pointer" title="Click to view logs">
             <td><a href="/dashboard/${encodeURIComponent(d.identifier)}">${escapeHtml(d.identifier)}</a></td>
@@ -805,7 +823,7 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="8" class="empty-stat
     const dur = fmtDuration(m.duration);
     const cost = formatCost(m.costUsd);
     const pr = m.prUrl
-      ? `<a href="${escapeHtml(m.prUrl)}" target="_blank" rel="noopener">PR</a>`
+      ? `<a href="${escapeHtml(m.prUrl)}" target="_blank" rel="noopener">PR</a>${renderPrStatusIcons(m.prUrl, prStatuses)}`
       : "\u2014";
     const when = formatDate(m.timestamp);
     const rawId = m.identifier ?? m.issueId ?? "";
@@ -1437,7 +1455,7 @@ export function renderLogPage(identifier: string, status: HealthStatus, workDir:
     </div>
     <div class="meta">
       ${isActive && activeDetail ? `${escapeHtml(activeDetail.repo)} &middot; <code>${escapeHtml(activeDetail.branch)}</code> &middot; ${elapsedStr}` : ""}
-      ${activeDetail?.prUrl ? ` &middot; <a href="${escapeHtml(activeDetail.prUrl)}" target="_blank">PR</a>` : ""}
+      ${activeDetail?.prUrl ? ` &middot; <a href="${escapeHtml(activeDetail.prUrl)}" target="_blank">PR</a>${renderPrStatusIcons(activeDetail.prUrl, prStatuses)}` : ""}
     </div>
   </div>
 
@@ -1605,7 +1623,7 @@ function formatTokenCount(n: number | undefined): string {
   return String(n);
 }
 
-export function renderIssuePage(identifier: string, status: HealthStatus, workDir: string): string {
+export function renderIssuePage(identifier: string, status: HealthStatus, workDir: string, prStatuses?: Map<string, PrStatus>): string {
   const safeId = escapeHtml(identifier);
   const activeDetail = status.activeCritterDetails.find((d) => d.identifier === identifier);
   const isActive = !!activeDetail;
@@ -1904,7 +1922,7 @@ ${noData ? `
       <span class="info-label">Branch</span>
       <span><code>${escapeHtml(branch)}</code></span>
       ${prUrl ? `<span class="info-label">PR</span>
-      <span><a href="${escapeHtml(prUrl)}" target="_blank" rel="noopener">${escapeHtml(prUrl)}</a></span>` : ""}
+      <span><a href="${escapeHtml(prUrl)}" target="_blank" rel="noopener">${escapeHtml(prUrl)}</a>${renderPrStatusIcons(prUrl, prStatuses)}</span>` : ""}
       <span class="info-label">Started</span>
       <span>${startedStr}</span>
       <span class="info-label">Duration</span>
