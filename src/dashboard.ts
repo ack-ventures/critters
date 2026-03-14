@@ -1304,7 +1304,7 @@ function fetchLogPreview(identifier) {
 </html>`;
 }
 
-export function renderLogPage(identifier: string, status: HealthStatus, workDir: string): string {
+export function renderLogPage(identifier: string, status: HealthStatus, workDir: string, prStatuses?: Map<string, PrStatus>): string {
   const safeId = escapeHtml(identifier);
   // Check if critter is currently active
   const activeDetail = status.activeCritterDetails.find((d) => d.identifier === identifier);
