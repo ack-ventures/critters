@@ -539,6 +539,8 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
       <span class="meta-sep">|</span>
       <button id="new-critter-btn" style="background:var(--accent);border:1px solid var(--border);color:var(--text);padding:4px 12px;border-radius:4px;cursor:pointer;font-size:0.85rem;">+ New Critter</button>
       <span class="meta-sep">|</span>
+      <button id="notif-btn" title="Enable browser notifications" style="background:var(--accent);border:1px solid var(--border);color:var(--text);padding:4px 12px;border-radius:4px;cursor:pointer;font-size:0.85rem;position:relative;">🔔 <span id="notif-dot" style="display:none;position:absolute;top:2px;right:2px;width:6px;height:6px;background:var(--success);border-radius:50%;"></span></button>
+      <span class="meta-sep">|</span>
       <span id="refresh-countdown" class="meta">Refreshing in 30s</span>
     </div>
   </div>
@@ -1378,6 +1380,97 @@ function fetchLogPreview(identifier) {
       submitBtn.textContent = 'Create';
     });
   });
+})();
+</script>
+<script>
+(function() {
+  if (!window._notifState) {
+    window._notifState = {
+      enabled: localStorage.getItem('critters-notif') === 'on',
+      lastSeenTimestamp: localStorage.getItem('critters-notif-last-seen') || new Date().toISOString()
+    };
+  }
+
+  var state = window._notifState;
+  var btn = document.getElementById('notif-btn');
+  var dot = document.getElementById('notif-dot');
+
+  function updateUI() {
+    if (dot) dot.style.display = state.enabled ? 'inline-block' : 'none';
+    if (btn) btn.title = state.enabled ? 'Notifications enabled (click to disable)' : 'Enable browser notifications';
+  }
+  updateUI();
+
+  if (btn) {
+    btn.addEventListener('click', function() {
+      if (!('Notification' in window)) return;
+
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().then(function(perm) {
+          if (perm === 'granted') {
+            state.enabled = true;
+            state.lastSeenTimestamp = new Date().toISOString();
+            localStorage.setItem('critters-notif', 'on');
+            localStorage.setItem('critters-notif-last-seen', state.lastSeenTimestamp);
+            updateUI();
+          }
+        });
+      } else if (Notification.permission === 'granted') {
+        state.enabled = !state.enabled;
+        localStorage.setItem('critters-notif', state.enabled ? 'on' : 'off');
+        if (state.enabled) {
+          state.lastSeenTimestamp = new Date().toISOString();
+          localStorage.setItem('critters-notif-last-seen', state.lastSeenTimestamp);
+        }
+        updateUI();
+      }
+    });
+  }
+
+  if (state.enabled && 'Notification' in window && Notification.permission === 'granted') {
+    fetch('/metrics')
+      .then(function(res) { return res.json(); })
+      .then(function(events) {
+        var newEvents = events.filter(function(e) {
+          return e.timestamp > state.lastSeenTimestamp;
+        });
+
+        newEvents.forEach(function(e) {
+          var title = '';
+          var id = e.identifier || e.issueId || 'Unknown';
+          var tag = 'critters-' + id + '-' + e.event;
+
+          if (e.event === 'task_completed') {
+            title = '\\u2705 ' + id + (e.prUrl ? ' completed \\u2014 PR created' : ' completed');
+          } else if (e.event === 'task_failed') {
+            title = '\\u274c ' + id + ' failed';
+          } else if (e.event === 'review_completed' && e.outcome === 'needs_changes') {
+            title = '\\ud83d\\udc40 ' + id + ' needs human review';
+          } else {
+            return;
+          }
+
+          var notif = new Notification(title, {
+            body: e.critterType ? 'Type: ' + e.critterType : '',
+            tag: tag
+          });
+          notif.onclick = function() {
+            window.focus();
+            window.location.href = '/dashboard/' + id;
+            notif.close();
+          };
+        });
+
+        if (events.length > 0) {
+          var latest = events.reduce(function(max, e) {
+            return e.timestamp > max ? e.timestamp : max;
+          }, state.lastSeenTimestamp);
+          state.lastSeenTimestamp = latest;
+          localStorage.setItem('critters-notif-last-seen', latest);
+        }
+      })
+      .catch(function() {});
+  }
 })();
 </script>
 </body>
