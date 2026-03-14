@@ -773,6 +773,10 @@ ${status.activeCritterDetails.map((d) => {
   const prCell = d.prUrl
     ? `<a href="${escapeHtml(d.prUrl)}" target="_blank" rel="noopener">PR</a>`
     : "\u2014";
+  const issueHref = d.issueUrl
+    ? escapeHtml(d.issueUrl)
+    : `/dashboard/${encodeURIComponent(d.identifier)}`;
+  const issueTarget = d.issueUrl ? ' target="_blank" rel="noopener"' : '';
   const costCell = (() => {
     if (d.costUsd == null || d.costUsd === 0) return '<span style="color:var(--text-muted)">&mdash;</span>';
     const costStr = `$${d.costUsd.toFixed(2)}`;
@@ -784,7 +788,7 @@ ${status.activeCritterDetails.map((d) => {
     return costStr;
   })();
   return `          <tr onclick="toggleLogPreview('${escapeHtml(d.identifier)}', this)" style="cursor:pointer" title="Click to view logs">
-            <td><a href="/dashboard/${encodeURIComponent(d.identifier)}">${escapeHtml(d.identifier)}</a></td>
+            <td><a href="${issueHref}"${issueTarget}>${escapeHtml(d.identifier)}</a></td>
             <td><span class="${phaseBadgeClass}">${phaseLabel}</span></td>
             <td>${escapeHtml(d.repo)}</td>
             <td><code>${escapeHtml(d.branch)}</code></td>
