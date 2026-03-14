@@ -1854,6 +1854,7 @@ export function renderIssuePage(identifier: string, status: HealthStatus, workDi
   })();
   const branch = activeDetail?.branch ?? "\u2014";
   const prUrl = activeDetail?.prUrl ?? taskEnded?.prUrl;
+  const issueUrl = activeDetail?.issueUrl ?? taskStarted?.issueUrl ?? taskEnded?.issueUrl;
 
   // Cost/token aggregation from phase results (preferred) or metrics (fallback)
   let totalCost = 0;
@@ -2087,7 +2088,7 @@ ${noData ? `
   <div class="header">
     <div class="header-top">
       <a href="/dashboard">&larr; Dashboard</a>
-      <h1>${safeId}</h1>
+      <h1>${issueUrl ? `<a href="${escapeHtml(issueUrl)}" target="_blank" rel="noopener" style="color: inherit; text-decoration: none;">${safeId} <span style="font-size: 0.6em; opacity: 0.6;">&#x2197;</span></a>` : safeId}</h1>
       ${statusBadge}
       ${typeBadge}
     </div>
@@ -2099,7 +2100,7 @@ ${noData ? `
       <span class="info-label">Title</span>
       <span>${escapeHtml(title)}</span>
       <span class="info-label">Identifier</span>
-      <span>${safeId}</span>
+      <span>${issueUrl ? `<a href="${escapeHtml(issueUrl)}" target="_blank" rel="noopener">${safeId} &#x2197;</a>` : safeId}</span>
       <span class="info-label">Type</span>
       <span>${escapeHtml(critterType)}</span>
       <span class="info-label">Repo</span>
