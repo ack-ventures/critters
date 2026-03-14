@@ -295,6 +295,9 @@ export class UnifiedSpawner {
 
     // Resolve effective cost budget
     const effectiveCostBudget = critterType.costBudget ?? this.config.costBudget;
+    // Set cost budget on active detail for dashboard display
+    const detail2 = this.activeCritterMap.get(task.id);
+    if (detail2) detail2.costBudget = effectiveCostBudget;
     let costBudgetExceeded = false;
     let costBudgetSpent = 0;
     let costBudgetLimit = 0;
@@ -436,34 +439,40 @@ export class UnifiedSpawner {
           }, task.identifier);
         }
 
-        // Cost monitoring interval (30s) — checks accumulated cost during phase execution
-        let costMonitorInterval: Timer | undefined;
-        if (effectiveCostBudget != null) {
-          const phaseTag = phaseFileTag(phase.name);
-          const outputFile = `${workDir}/.critter-output-${phaseTag}.json`;
-          costMonitorInterval = setInterval(() => {
-            const currentPhaseCost = readPartialCost(outputFile);
-            const completedPhaseCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
-            const totalCost = completedPhaseCost + currentPhaseCost;
-            if (totalCost > effectiveCostBudget) {
-              logTask(task.identifier, `Cost budget exceeded: $${totalCost.toFixed(2)} spent, $${effectiveCostBudget.toFixed(2)} budget`);
-              costBudgetExceeded = true;
-              costBudgetSpent = totalCost;
-              costBudgetLimit = effectiveCostBudget;
-              costBudgetPhase = phase.name;
-              abortController.abort();
-            }
-          }, 30_000);
-          costMonitorInterval.unref();
-        }
+        // Cost monitoring interval (30s) — tracks cost for dashboard + budget enforcement
+        const phaseTag = phaseFileTag(phase.name);
+        const outputFile = `${workDir}/.critter-output-${phaseTag}.json`;
+        const costMonitorInterval = setInterval(() => {
+          const currentPhaseCost = readPartialCost(outputFile);
+          const completedPhaseCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
+          const totalCost = completedPhaseCost + currentPhaseCost;
+          // Update active detail for dashboard
+          const activeDetail = this.activeCritterMap.get(task.id);
+          if (activeDetail) activeDetail.costUsd = totalCost;
+          // Budget enforcement (only when budget is configured)
+          if (effectiveCostBudget != null && totalCost > effectiveCostBudget) {
+            logTask(task.identifier, `Cost budget exceeded: $${totalCost.toFixed(2)} spent, $${effectiveCostBudget.toFixed(2)} budget`);
+            costBudgetExceeded = true;
+            costBudgetSpent = totalCost;
+            costBudgetLimit = effectiveCostBudget;
+            costBudgetPhase = phase.name;
+            abortController.abort();
+          }
+        }, 30_000);
+        costMonitorInterval.unref();
 
         let phaseResult: Awaited<ReturnType<typeof runner.run>>;
         try {
           phaseResult = await runner.run(ctx);
         } finally {
-          if (costMonitorInterval) clearInterval(costMonitorInterval);
+          clearInterval(costMonitorInterval);
         }
         phaseResults.push(phaseResult.spawn);
+
+        // Update accumulated cost on detail for dashboard accuracy between phases
+        const accumulatedCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
+        const phaseDetail = this.activeCritterMap.get(task.id);
+        if (phaseDetail) phaseDetail.costUsd = accumulatedCost;
         phaseDataList.push(phaseResult.data);
 
         const phaseDuration = Date.now() - phaseStart;
