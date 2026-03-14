@@ -184,6 +184,34 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
   const durations = taskMetrics.map((m) => m.duration).filter((d): d is number => d != null && !Number.isNaN(d));
   const avgDuration = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : null;
 
+  // Per-type stats breakdown
+  const perTypeStats = new Map<string, {
+    total: number;
+    succeeded: number;
+    failed: number;
+    totalCost: number;
+    durations: number[];
+  }>();
+
+  for (const m of taskMetrics) {
+    const typeName = inferType(m);
+    let entry = perTypeStats.get(typeName);
+    if (!entry) {
+      entry = { total: 0, succeeded: 0, failed: 0, totalCost: 0, durations: [] };
+      perTypeStats.set(typeName, entry);
+    }
+    entry.total++;
+    if (m.event === "task_completed" || m.event === "review_completed") {
+      entry.succeeded++;
+    } else {
+      entry.failed++;
+    }
+    entry.totalCost += m.costUsd ?? 0;
+    if (m.duration != null && !Number.isNaN(m.duration)) {
+      entry.durations.push(m.duration);
+    }
+  }
+
   // Recent activity (last 50)
   const recentActivity = taskMetrics.slice(-50).reverse();
 
@@ -259,6 +287,40 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
     .today-value { color: var(--text); }
     .today-fail { color: var(--failure); }
     .today-sep { color: var(--text-dim); opacity: 0.4; }
+    .type-stats { margin-bottom: 24px; }
+    .type-stats h3 {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+    }
+    .type-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+    }
+    .type-stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .type-stat-name {
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: var(--text);
+      text-transform: capitalize;
+    }
+    .type-stat-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      padding: 2px 0;
+    }
+    .type-stat-label { color: var(--text-dim); }
+    .type-stat-value { color: var(--text); font-weight: 600; }
     .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
     .card {
       background: var(--card-bg);
@@ -459,6 +521,7 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
       .bar-group:nth-child(even) .bar-label { visibility: hidden; }
       .bar-label { transform: rotate(-45deg); transform-origin: top center; font-size: 0.55rem; }
       .y-axis { min-width: 35px; width: auto; }
+      .type-stats-grid { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
 </head>
@@ -515,6 +578,41 @@ ${allTypes.map(t => `    <a href="/dashboard?type=${encodeURIComponent(t)}" clas
       <div class="value">${avgDuration != null ? fmtDuration(avgDuration) : "N/A"}</div>
     </div>
   </div>
+
+${perTypeStats.size >= 2 ? `  <div class="type-stats">
+    <h3>Per-Type Breakdown</h3>
+    <div class="type-stats-grid">
+${[...perTypeStats.entries()]
+  .sort((a, b) => b[1].total - a[1].total)
+  .map(([typeName, stats]) => {
+    const rate = stats.total > 0 ? Math.round((stats.succeeded / stats.total) * 100) : null;
+    const avgCostVal = stats.total > 0 ? stats.totalCost / stats.total : null;
+    const avgDur = stats.durations.length > 0
+      ? stats.durations.reduce((a, b) => a + b, 0) / stats.durations.length
+      : null;
+    return `      <div class="type-stat-card">
+        <div class="type-stat-name">${escapeHtml(typeName)}</div>
+        <div class="type-stat-row">
+          <span class="type-stat-label">Tasks</span>
+          <span class="type-stat-value">${stats.succeeded}/${stats.total}</span>
+        </div>
+        <div class="type-stat-row">
+          <span class="type-stat-label">Success</span>
+          <span class="type-stat-value">${rate != null ? `${rate}%` : 'N/A'}</span>
+        </div>
+        <div class="type-stat-row">
+          <span class="type-stat-label">Avg Cost</span>
+          <span class="type-stat-value">${avgCostVal != null ? formatCost(avgCostVal) : 'N/A'}</span>
+        </div>
+        <div class="type-stat-row">
+          <span class="type-stat-label">Avg Duration</span>
+          <span class="type-stat-value">${avgDur != null ? fmtDuration(avgDur) : 'N/A'}</span>
+        </div>
+      </div>`;
+  })
+  .join("\n")}
+    </div>
+  </div>` : ''}
 
   <div class="today-stats">
     <div class="today-card">
