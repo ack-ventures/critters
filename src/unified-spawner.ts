@@ -226,6 +226,7 @@ export class UnifiedSpawner {
         branch: item.task.prBranch ?? branchName(item.task.identifier, item.task.title, this.config.branchPrefix),
         startedAt: Date.now(),
         prUrl: item.task.prUrl,
+        issueUrl: item.task.issueUrl,
         timeoutMinutes: item.critterType.timeoutMinutes,
         critterType: typeName,
       });
