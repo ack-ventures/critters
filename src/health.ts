@@ -5,6 +5,7 @@ import { renderDashboard, renderIssuePage } from "./dashboard.js";
 import { formatToolUse, formatUserEvent, readLogTail, resolveLogFile, resolveWorkDirForIdentifier, stripAnsi } from "./log-resolver.js";
 import { log, logError } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
+import { getPrStatuses } from "./pr-status.js";
 import type { IssueTracker, TrackerTeam } from "./tracker/types.js";
 import type { ActiveCritterDetail } from "./types.js";
 import { getDisplayVersion } from "./updater.js";
@@ -120,7 +121,14 @@ export function startHealthServer(
       if (url.pathname.startsWith("/dashboard/") && url.pathname.length > "/dashboard/".length) {
         const identifier = decodeURIComponent(url.pathname.slice("/dashboard/".length));
         const status = getStatus();
-        const html = renderIssuePage(identifier, status, workDir ?? "/tmp/critters-work");
+
+        // Fetch PR status for this issue's PR (if any)
+        const issueMetrics = getRecentMetrics(10000).filter(m => m.identifier === identifier);
+        const prUrl = status.activeCritterDetails.find(d => d.identifier === identifier)?.prUrl
+          ?? issueMetrics.find(m => m.prUrl)?.prUrl;
+        const prStatuses = prUrl ? await getPrStatuses([prUrl]) : new Map();
+
+        const html = renderIssuePage(identifier, status, workDir ?? "/tmp/critters-work", prStatuses);
         return new Response(html, {
           headers: { "Content-Type": "text/html; charset=utf-8" },
         });
@@ -130,7 +138,19 @@ export function startHealthServer(
         const status = getStatus();
         const uptime = Date.now() - startTime;
         const typeFilter = url.searchParams.get("type") || undefined;
-        const html = renderDashboard(metricsPath ?? "", status, uptime, typeFilter, dashboardToken);
+
+        // Collect PR URLs from recent metrics and active critters
+        const recentMetrics = getRecentMetrics(50);
+        const prUrls: string[] = [];
+        for (const m of recentMetrics) {
+          if (m.prUrl) prUrls.push(m.prUrl);
+        }
+        for (const d of status.activeCritterDetails) {
+          if (d.prUrl) prUrls.push(d.prUrl);
+        }
+        const prStatuses = await getPrStatuses(prUrls);
+
+        const html = renderDashboard(metricsPath ?? "", status, uptime, typeFilter, dashboardToken, prStatuses);
         return new Response(html, {
           headers: { "Content-Type": "text/html; charset=utf-8" },
         });
