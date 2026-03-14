@@ -133,6 +133,8 @@ export interface ActiveCritterDetail {
   timeoutMinutes?: number;
   critterType?: string; // the critter type name (e.g., "create", "review", "code-audit")
   workDir?: string;     // the work directory path for this critter
+  costUsd?: number;        // running cost in USD
+  costBudget?: number;     // effective cost budget (if configured)
 }
 
 export interface ReviewTask extends CritterTask {

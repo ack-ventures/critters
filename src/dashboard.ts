@@ -584,6 +584,7 @@ ${status.activeCritterDetails.length > 0 ? `
             <th>Repo</th>
             <th>Branch</th>
             <th>PR</th>
+            <th>Cost</th>
             <th>Elapsed</th>
           </tr>
         </thead>
@@ -608,16 +609,27 @@ ${status.activeCritterDetails.map((d) => {
   const prCell = d.prUrl
     ? `<a href="${escapeHtml(d.prUrl)}" target="_blank" rel="noopener">PR</a>`
     : "\u2014";
+  const costCell = (() => {
+    if (d.costUsd == null || d.costUsd === 0) return '<span style="color:var(--text-muted)">&mdash;</span>';
+    const costStr = `$${d.costUsd.toFixed(2)}`;
+    if (d.costBudget != null && d.costBudget > 0) {
+      const pct = d.costUsd / d.costBudget;
+      const color = pct > 0.8 ? "var(--failure)" : pct > 0.5 ? "#e2b93d" : "var(--success)";
+      return `<span style="color:${color}">${costStr} / $${d.costBudget.toFixed(2)}</span>`;
+    }
+    return costStr;
+  })();
   return `          <tr onclick="toggleLogPreview('${escapeHtml(d.identifier)}', this)" style="cursor:pointer" title="Click to view logs">
             <td><a href="/dashboard/${encodeURIComponent(d.identifier)}">${escapeHtml(d.identifier)}</a></td>
             <td><span class="${phaseBadgeClass}">${phaseLabel}</span></td>
             <td>${escapeHtml(d.repo)}</td>
             <td><code>${escapeHtml(d.branch)}</code></td>
             <td>${prCell}</td>
+            <td>${costCell}</td>
             <td class="${elapsedClass}">${elapsed}</td>
           </tr>
           <tr class="log-preview-row" id="log-preview-${escapeHtml(d.identifier)}" style="display:none">
-            <td colspan="6" style="padding:0">
+            <td colspan="7" style="padding:0">
               <div class="log-preview-content" id="log-content-${escapeHtml(d.identifier)}"></div>
               <div style="padding:4px 12px 8px;text-align:right"><a href="/dashboard/${encodeURIComponent(d.identifier)}" class="log-preview-link">View details &rarr;</a></div>
             </td>
