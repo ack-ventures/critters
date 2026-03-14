@@ -24,6 +24,7 @@ export type MetricEvent = {
   cacheReadTokens?: number;
   costUsd?: number;
   prUrl?: string;
+  issueUrl?: string;
   outcome?: string;
   error?: string;
   critterType?: string;

@@ -238,6 +238,7 @@ export class UnifiedSpawner {
         identifier: item.task.identifier,
         repoUrl: item.task.repoUrl,
         ...(item.task.prUrl ? { prUrl: item.task.prUrl } : {}),
+        ...(item.task.issueUrl ? { issueUrl: item.task.issueUrl } : {}),
         critterType: typeName,
       });
 
@@ -590,6 +591,7 @@ export class UnifiedSpawner {
         outputTokens: totalOutput,
         cacheReadTokens: totalCache,
         costUsd: totalCost,
+        ...(task.issueUrl ? { issueUrl: task.issueUrl } : {}),
         critterType: critterType.name,
       });
 
@@ -710,6 +712,7 @@ export class UnifiedSpawner {
         identifier: task.identifier,
         repoUrl: task.repoUrl,
         ...(task.prUrl ? { prUrl: task.prUrl } : {}),
+        ...(task.issueUrl ? { issueUrl: task.issueUrl } : {}),
         duration: Date.now() - taskStart,
         error,
         numTurns: totalTurns || undefined,
@@ -841,6 +844,7 @@ export class UnifiedSpawner {
       outputTokens: totalOutput,
       cacheReadTokens: totalCache,
       costUsd: totalCost,
+      ...(task.issueUrl ? { issueUrl: task.issueUrl } : {}),
       critterType: critterType.name,
     });
 
@@ -895,6 +899,7 @@ export class UnifiedSpawner {
         identifier: task.identifier,
         repoUrl: task.repoUrl,
         prUrl: task.prUrl,
+        ...(task.issueUrl ? { issueUrl: task.issueUrl } : {}),
         ...(data.alreadyMerged ? {} : { duration: Date.now() - taskStart }),
         outcome: data.alreadyMerged ? "already_merged" : "merged",
         numTurns: spawn.numTurns,
@@ -936,6 +941,7 @@ export class UnifiedSpawner {
         identifier: task.identifier,
         repoUrl: task.repoUrl,
         prUrl: task.prUrl,
+        ...(task.issueUrl ? { issueUrl: task.issueUrl } : {}),
         duration: Date.now() - taskStart,
         outcome: "needs_changes",
         numTurns: spawn.numTurns,
