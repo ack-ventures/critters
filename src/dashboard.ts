@@ -215,6 +215,16 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
   // Recent activity (last 50)
   const recentActivity = taskMetrics.slice(-50).reverse();
 
+  const activityTypes = [...new Set(recentActivity.map(m => {
+    return m.critterType ?? (m.event.startsWith("review_") ? "review" : "create");
+  }))].sort();
+
+  const activityStatuses = [...new Set(recentActivity.map(m => {
+    const isRev = m.event === "review_completed" || m.event === "review_failed";
+    const isOk = m.event === "task_completed" || m.event === "review_completed";
+    return isRev ? (isOk ? "Review Completed" : "Review Failed") : (isOk ? "Completed" : "Failed");
+  }))].sort();
+
   // Chart data
   const dailyStats = computeDailyStats(filteredMetrics, 14);
   const rawMaxTasks = Math.max(1, ...dailyStats.map((d) => d.completed + d.failed));
@@ -481,6 +491,8 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
       color: var(--text-dim);
       text-decoration: none;
       transition: all 0.15s;
+      cursor: pointer;
+      background: none;
     }
     .filter-btn:hover {
       border-color: var(--text-dim);
@@ -491,6 +503,16 @@ export function renderDashboard(metricsPath: string, status: HealthStatus, uptim
       background: #5dade2;
       border-color: #5dade2;
       color: #fff;
+    }
+    td .badge { cursor: pointer; }
+    td .badge:hover { filter: brightness(1.2); }
+    .badge-type {
+      background: rgba(93, 173, 226, 0.1);
+      color: var(--text-dim);
+    }
+    .badge-type:hover {
+      color: var(--text);
+      background: rgba(93, 173, 226, 0.2);
     }
     th[data-sortable] { cursor: pointer; user-select: none; }
     th[data-sortable]:hover { color: var(--text); }
@@ -886,6 +908,18 @@ ${totalTasks > 0 ? (() => {
 
   <div class="table-section">
     <h2>Recent Activity</h2>
+    <div id="activity-filters" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+      <span style="font-size:0.75rem;color:var(--text-dim);text-transform:uppercase;font-weight:600;">Type:</span>
+      <button class="filter-btn active" data-filter-group="type" data-filter-value="">All</button>
+${activityTypes.map(t => `      <button class="filter-btn" data-filter-group="type" data-filter-value="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join("\n")}
+      <span class="meta-sep">|</span>
+      <span style="font-size:0.75rem;color:var(--text-dim);text-transform:uppercase;font-weight:600;">Status:</span>
+      <button class="filter-btn active" data-filter-group="status" data-filter-value="">All</button>
+${activityStatuses.map(s => `      <button class="filter-btn" data-filter-group="status" data-filter-value="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join("\n")}
+      <span class="meta-sep">|</span>
+      <span id="row-counter" style="font-size:0.8rem;color:var(--text-dim);"></span>
+      <button id="clear-filters-btn" class="filter-btn" style="display:none;background:var(--failure);border-color:var(--failure);color:#fff;">Clear filters</button>
+    </div>
     <input type="text" id="activity-filter" placeholder="Filter by issue, type, or status..." style="background:var(--card-bg);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;width:100%;margin-bottom:12px;font-size:0.85rem;">
     <div class="table-wrap">
       <table>
@@ -929,9 +963,9 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="8" class="empty-stat
     const logsLink = rawId
       ? `<a href="/dashboard/${encodeURIComponent(rawId)}" title="View logs">logs</a>`
       : '\u2014';
-    return `          <tr>
+    return `          <tr data-type="${typeName}" data-status="${statusText}">
             <td>${idLink}</td>
-            <td>${typeName}</td>
+            <td><span class="badge badge-type">${typeName}</span></td>
             <td><span class="${badgeClass}">${statusText}</span></td>
             <td data-sort-value="${m.duration ?? -1}">${dur}</td>
             <td data-sort-value="${m.costUsd ?? -1}">${cost}</td>
@@ -1082,19 +1116,132 @@ function showAuthPrompt() {
 })();
 
 (function() {
-  var input = document.getElementById('activity-filter');
+  var filterBar = document.getElementById('activity-filters');
   var table = document.querySelector('.table-section table');
-  if (!input || !table) return;
+  if (!filterBar || !table) return;
   var tbody = table.querySelector('tbody');
+  var counterEl = document.getElementById('row-counter');
+  var clearBtn = document.getElementById('clear-filters-btn');
+  var textInput = document.getElementById('activity-filter');
 
-  input.addEventListener('input', function() {
-    var query = input.value.toLowerCase();
-    var rows = tbody.querySelectorAll('tr');
-    rows.forEach(function(row) {
-      var text = row.textContent.toLowerCase();
-      row.style.display = text.includes(query) ? '' : 'none';
-    });
+  var activeFilters = { type: '', status: '' };
+
+  // Read initial filter state from URL
+  var params = new URLSearchParams(window.location.search);
+  var initType = params.get('ftype') || '';
+  var initStatus = params.get('fstatus') || '';
+  activeFilters.type = initType;
+  activeFilters.status = initStatus;
+
+  // Highlight initial active buttons
+  filterBar.querySelectorAll('[data-filter-group]').forEach(function(btn) {
+    var group = btn.getAttribute('data-filter-group');
+    var val = btn.getAttribute('data-filter-value');
+    btn.classList.toggle('active', val === activeFilters[group]);
   });
+
+  function updateURL() {
+    var url = new URL(window.location);
+    if (activeFilters.type) url.searchParams.set('ftype', activeFilters.type);
+    else url.searchParams.delete('ftype');
+    if (activeFilters.status) url.searchParams.set('fstatus', activeFilters.status);
+    else url.searchParams.delete('fstatus');
+    history.replaceState(null, '', url.toString());
+  }
+
+  function applyFilters() {
+    var rows = tbody.querySelectorAll('tr');
+    var total = rows.length;
+    var visible = 0;
+    var textQuery = textInput ? textInput.value.toLowerCase() : '';
+
+    rows.forEach(function(row) {
+      var matchType = !activeFilters.type || row.getAttribute('data-type') === activeFilters.type;
+      var matchStatus = !activeFilters.status || row.getAttribute('data-status') === activeFilters.status;
+      var matchText = !textQuery || row.textContent.toLowerCase().includes(textQuery);
+      var show = matchType && matchStatus && matchText;
+      row.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+
+    if (counterEl) {
+      var hasFilter = activeFilters.type || activeFilters.status || textQuery;
+      counterEl.textContent = hasFilter ? 'Showing ' + visible + ' of ' + total : total + ' entries';
+    }
+
+    if (clearBtn) {
+      clearBtn.style.display = (activeFilters.type || activeFilters.status) ? '' : 'none';
+    }
+
+    updateURL();
+  }
+
+  // Filter button clicks
+  filterBar.addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-filter-group]');
+    if (!btn) {
+      if (e.target.id === 'clear-filters-btn' || e.target.closest('#clear-filters-btn')) {
+        activeFilters.type = '';
+        activeFilters.status = '';
+        filterBar.querySelectorAll('[data-filter-group]').forEach(function(b) {
+          b.classList.toggle('active', b.getAttribute('data-filter-value') === '');
+        });
+        applyFilters();
+      }
+      return;
+    }
+
+    var group = btn.getAttribute('data-filter-group');
+    var val = btn.getAttribute('data-filter-value');
+    activeFilters[group] = val;
+
+    filterBar.querySelectorAll('[data-filter-group="' + group + '"]').forEach(function(b) {
+      b.classList.toggle('active', b.getAttribute('data-filter-value') === val);
+    });
+
+    applyFilters();
+  });
+
+  // Make table badges clickable (status badges and type badges)
+  tbody.addEventListener('click', function(e) {
+    var badge = e.target.closest('.badge');
+    if (!badge) return;
+    var row = badge.closest('tr');
+    if (!row) return;
+    if (e.target.tagName === 'A') return;
+
+    var cell = badge.closest('td');
+    var cellIdx = Array.from(row.cells).indexOf(cell);
+
+    if (cellIdx === 1) {
+      // Type column
+      var typeVal = row.getAttribute('data-type');
+      activeFilters.type = typeVal;
+      filterBar.querySelectorAll('[data-filter-group="type"]').forEach(function(b) {
+        b.classList.toggle('active', b.getAttribute('data-filter-value') === typeVal);
+      });
+      applyFilters();
+    } else if (cellIdx === 2) {
+      // Status column
+      var statusVal = row.getAttribute('data-status');
+      activeFilters.status = statusVal;
+      filterBar.querySelectorAll('[data-filter-group="status"]').forEach(function(b) {
+        b.classList.toggle('active', b.getAttribute('data-filter-value') === statusVal);
+      });
+      applyFilters();
+    }
+  });
+
+  // Override the existing text filter to work with badge filters
+  if (textInput) {
+    var newInput = textInput.cloneNode(true);
+    textInput.parentNode.replaceChild(newInput, textInput);
+    newInput.addEventListener('input', function() { applyFilters(); });
+    textInput = newInput;
+  }
+
+  // Apply initial filters
+  applyFilters();
 })();
 
 (function() {
