@@ -29,6 +29,11 @@ export interface CircuitBreakerConfig {
   maxBackoffMinutes?: number;    // default: 30
 }
 
+export interface AutoUpdateConfig {
+  enabled: boolean;
+  intervalMinutes: number;
+}
+
 export interface TunnelConfig {
   enabled?: boolean;
   auth?: string;       // "user:password" for basic auth
@@ -86,6 +91,7 @@ export interface Config {
     onExecutionStarted?: string;
   };
   autoRetry?: AutoRetryConfig;
+  autoUpdate?: AutoUpdateConfig;
   tunnel?: TunnelConfig;
   circuitBreaker?: CircuitBreakerConfig;
   mcpConfig?: string | string[];

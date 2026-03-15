@@ -15,7 +15,7 @@ mock.module("../logger.js", () => ({
 }));
 
 // Re-import after mocking
-const { checkForUpdate, fetchLatestVersion, getDisplayVersion, _resetCachedLatestVersion } = await import("../updater.js");
+const { checkForUpdate, checkForUpdateAvailable, fetchLatestVersion, getDisplayVersion, _resetCachedLatestVersion } = await import("../updater.js");
 
 let tempDir: string;
 let fakeBinaryPath: string;
@@ -533,5 +533,82 @@ describe("getDisplayVersion", () => {
     await fetchLatestVersion();
     const result = getDisplayVersion();
     expect(result).toBe("vdev (latest: v1.2.3)");
+  });
+});
+
+describe("checkForUpdateAvailable", () => {
+  beforeEach(() => {
+    _resetCachedLatestVersion();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    Object.defineProperty(process, "execPath", { value: originalExecPath, writable: true });
+    _resetCachedLatestVersion();
+  });
+
+  test("returns null when running via bun", async () => {
+    Object.defineProperty(process, "execPath", { value: "/usr/local/bin/bun", writable: true });
+    const result = await checkForUpdateAvailable("1.0.0");
+    expect(result).toBeNull();
+  });
+
+  test("returns null for dev version", async () => {
+    const result = await checkForUpdateAvailable("dev");
+    expect(result).toBeNull();
+  });
+
+  test("returns available=true when newer version exists", async () => {
+    Object.defineProperty(process, "execPath", { value: "/usr/local/bin/critters", writable: true });
+    globalThis.fetch = mock(() =>
+      Promise.resolve(new Response(JSON.stringify({ tag_name: "v2.0.0" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })),
+    ) as unknown as typeof fetch;
+
+    const result = await checkForUpdateAvailable("1.0.0");
+    expect(result).not.toBeNull();
+    expect(result!.available).toBe(true);
+    expect(result!.latestVersion).toBe("2.0.0");
+    expect(result!.currentVersion).toBe("1.0.0");
+  });
+
+  test("returns available=false when already up to date", async () => {
+    Object.defineProperty(process, "execPath", { value: "/usr/local/bin/critters", writable: true });
+    globalThis.fetch = mock(() =>
+      Promise.resolve(new Response(JSON.stringify({ tag_name: "v1.0.0" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })),
+    ) as unknown as typeof fetch;
+
+    const result = await checkForUpdateAvailable("1.0.0");
+    expect(result).not.toBeNull();
+    expect(result!.available).toBe(false);
+  });
+
+  test("returns null when fetch fails", async () => {
+    Object.defineProperty(process, "execPath", { value: "/usr/local/bin/critters", writable: true });
+    globalThis.fetch = mock(() =>
+      Promise.resolve(new Response("error", { status: 500 })),
+    ) as unknown as typeof fetch;
+
+    const result = await checkForUpdateAvailable("1.0.0");
+    expect(result).toBeNull();
+  });
+
+  test("strips pre-release suffix from latest version", async () => {
+    Object.defineProperty(process, "execPath", { value: "/usr/local/bin/critters", writable: true });
+    globalThis.fetch = mock(() =>
+      Promise.resolve(new Response(JSON.stringify({ tag_name: "v2.0.0-rc1" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })),
+    ) as unknown as typeof fetch;
+
+    const result = await checkForUpdateAvailable("1.0.0");
+    expect(result).not.toBeNull();
+    expect(result!.latestVersion).toBe("2.0.0");
   });
 });

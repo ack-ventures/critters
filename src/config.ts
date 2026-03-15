@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { parse as parseYaml } from "yaml";
 import { type CritterTypeConfig, parseCritterTypes as parseCritterTypesFromYaml, synthesizeDefaultTypes, validateCritterType } from "./critter-type.js";
 import { log } from "./logger.js";
-import type { AutoRetryConfig, CircuitBreakerConfig, Config, RepoConfig, TunnelConfig } from "./types.js";
+import type { AutoRetryConfig, AutoUpdateConfig, CircuitBreakerConfig, Config, RepoConfig, TunnelConfig } from "./types.js";
 
 export function validateWorkDir(workDir: string): void {
   const resolved = workDir.startsWith("/") ? workDir : `${process.cwd()}/${workDir}`;
@@ -124,6 +124,14 @@ export function loadConfig(configPath?: string): Config {
   mkdirSync(workDir, { recursive: true });
   const resolvedWorkDir = realpathSync(workDir);
 
+  const autoUpdateRaw = yaml.autoUpdate as Record<string, unknown> | undefined;
+  const autoUpdate: AutoUpdateConfig | undefined = autoUpdateRaw
+    ? {
+        enabled: (autoUpdateRaw.enabled as boolean) ?? true,
+        intervalMinutes: (autoUpdateRaw.intervalMinutes as number) ?? 1440,
+      }
+    : undefined;
+
   const tunnel = yaml.tunnel as TunnelConfig | undefined;
 
   const circuitBreakerRaw = yaml.circuitBreaker as Record<string, unknown> | undefined;
@@ -178,6 +186,7 @@ export function loadConfig(configPath?: string): Config {
     costBudget: (yaml.costBudget as number) ?? undefined,
     hooks,
     autoRetry,
+    autoUpdate,
     tunnel,
     circuitBreaker,
     mcpConfig: (yaml.mcpConfig as string | string[]) ?? undefined,
@@ -365,6 +374,11 @@ function validateConfig(config: Config): void {
   }
   if (config.costBudget != null && config.costBudget <= 0) {
     throw new Error(`Invalid config: costBudget must be > 0, got ${config.costBudget}`);
+  }
+  if (config.autoUpdate) {
+    if (config.autoUpdate.intervalMinutes < 1) {
+      throw new Error(`Invalid config: autoUpdate.intervalMinutes must be >= 1, got ${config.autoUpdate.intervalMinutes}`);
+    }
   }
   if (config.autoRetry) {
     if (config.autoRetry.maxRetries < 1) {
