@@ -56,6 +56,28 @@ export function compareSemver(a: string, b: string): number {
   return 0;
 }
 
+export async function checkForUpdateAvailable(currentVersion: string): Promise<{
+  available: boolean;
+  currentVersion: string;
+  latestVersion: string;
+} | null> {
+  const execName = process.execPath.split("/").pop() ?? "";
+  if (execName === "bun" || execName === "bun.exe") return null;
+  if (currentVersion === "dev") return null;
+
+  _resetCachedLatestVersion();
+
+  const latestVersion = await fetchLatestVersion();
+  if (!latestVersion) return null;
+
+  const cleanLatest = latestVersion.replace(/-.*$/, "");
+  return {
+    available: compareSemver(cleanLatest, currentVersion) > 0,
+    currentVersion,
+    latestVersion: cleanLatest,
+  };
+}
+
 export function isAllowedDownloadUrl(url: string): boolean {
   try {
     const parsed = new URL(url);

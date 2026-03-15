@@ -109,6 +109,15 @@ export function validateConfigFile(configPath?: string): { errors: string[]; war
     warnings.push("Health server disabled — dashboard and kickoff will not work");
   }
 
+  // Validate autoUpdate
+  const autoUpdateRaw = yaml.autoUpdate as Record<string, unknown> | undefined;
+  if (autoUpdateRaw) {
+    const intervalMinutes = (autoUpdateRaw.intervalMinutes as number) ?? 1440;
+    if (typeof autoUpdateRaw.intervalMinutes === "number" && intervalMinutes < 1) {
+      errors.push(`Invalid config: autoUpdate.intervalMinutes must be >= 1, got ${intervalMinutes}`);
+    }
+  }
+
   // Validate autoRetry
   const autoRetryRaw = yaml.autoRetry as Record<string, unknown> | undefined;
   if (autoRetryRaw) {

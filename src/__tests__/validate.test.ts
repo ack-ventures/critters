@@ -324,6 +324,30 @@ defaultAllowedTools:
     expect(result.errors.some((e) => e.includes("minDiskSpaceMb"))).toBe(false);
   });
 
+  test("autoUpdate.intervalMinutes < 1 collects error", () => {
+    const path = writeYaml(`
+autoUpdate:
+  enabled: true
+  intervalMinutes: 0
+defaultAllowedTools:
+  - "Read"
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors.some((e) => e.includes("autoUpdate.intervalMinutes must be >= 1"))).toBe(true);
+  });
+
+  test("valid autoUpdate config passes", () => {
+    const path = writeYaml(`
+autoUpdate:
+  enabled: true
+  intervalMinutes: 60
+defaultAllowedTools:
+  - "Read"
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors).toHaveLength(0);
+  });
+
   test("reviewConcurrency and reviewTimeoutMinutes warn", () => {
     const path = writeYaml(`
 reviewConcurrency: 8

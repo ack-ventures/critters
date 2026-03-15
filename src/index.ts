@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { startAutoUpdater } from "./auto-updater.js";
 import { CircuitBreaker } from "./circuit-breaker.js";
 import { loadConfig, resolveConfigPath } from "./config.js";
 import { ConfigWatcher, diffConfigs } from "./config-watcher.js";
@@ -464,11 +465,15 @@ async function main() {
     repos: config.repos,
     teamRepos: config.teamRepos,
   };
+  // Start auto-updater
+  const autoUpdater = startAutoUpdater(config, spawner, slackNotifier, restartDaemon);
+
   function restartDaemon(): void {
     log("Restarting daemon...");
 
     try {
       // Clean up resources
+      autoUpdater?.stop();
       tunnelHandle?.stop();
       configWatcher?.stop();
       if (titleInterval) clearInterval(titleInterval);
@@ -650,6 +655,7 @@ async function main() {
         channel: newConfig.slackChannel,
       });
 
+      autoUpdater?.updateConfig(newConfig);
       watcher.updateConfig(newConfig, newTrackers);
       spawner.updateConfig(newConfig, newTrackers);
       trackers = newTrackers;
@@ -688,6 +694,7 @@ async function main() {
     shuttingDown = true;
 
     log("Shutting down...");
+    autoUpdater?.stop();
     tunnelHandle?.stop();
     configWatcher?.stop();
     if (titleInterval) clearInterval(titleInterval);
