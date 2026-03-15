@@ -3,7 +3,6 @@ import type { SlackNotifier } from "./slack.js";
 import type { Config } from "./types.js";
 import type { UnifiedSpawner } from "./unified-spawner.js";
 import { checkForUpdate, checkForUpdateAvailable } from "./updater.js";
-import { VERSION } from "./version.js";
 
 export interface AutoUpdaterHandle {
   stop(): void;
@@ -48,7 +47,7 @@ export function startAutoUpdater(
 
   const tick = async () => {
     try {
-      const result = await checkForUpdateAvailable(VERSION);
+      const result = await checkForUpdateAvailable(version);
       if (!result || !result.available) return;
 
       const activeCount = spawner.getActiveCount();
@@ -65,7 +64,7 @@ export function startAutoUpdater(
         );
       }
 
-      await checkForUpdate(VERSION);
+      await checkForUpdate(version);
       restartFn();
     } catch (err) {
       log(`Auto-update: check failed — ${err instanceof Error ? err.message : String(err)}`);
