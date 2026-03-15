@@ -643,6 +643,7 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 | `src/cli-history.ts` | `critters history` CLI command |
 | `src/logs.ts` | `critters logs` CLI command |
 | `src/cli-kickoff.ts` | `critters kickoff` CLI command |
+| `src/cli-stop.ts` | `critters stop` CLI command |
 | `src/cli-restart.ts` | `critters restart` CLI command |
 | `src/cli-clean.ts` | `critters clean` CLI command |
 | `src/cli-tail.ts` | `critters tail` CLI command |
@@ -700,6 +701,7 @@ Usage: `critters [command] [flags]`
 | `logs <ID>` | View critter logs (`--phase planning\|execution\|review`, `--follow\|-f`) |
 | `retry <ID>` | Reset a failed critter to Todo for re-pickup (`--force` to override non-failed states, `--all-failed` to retry all failed) |
 | `history` | Show completed critter history (recent tasks, outcomes, durations) |
+| `stop` | Stop the daemon gracefully |
 | `restart` | Restart the daemon |
 | `kickoff` | Trigger an immediate poll cycle via the health server |
 | `tail` | Live-stream output from all active critters |
