@@ -17,6 +17,7 @@ This downloads the latest binary, installs it to your PATH, and walks you throug
 - `critters` — start the daemon
 - `critters version` — show version
 - `critters update` — check for and apply updates
+- `critters stop` — stop the daemon gracefully
 - `critters init` — (re-)configure `~/.critters/`
 - `critters status` — show daemon status (active/queued critters, today's stats)
 - `critters retry <ID>` — retry a failed critter (reset to Todo)
@@ -152,6 +153,7 @@ Settings live in `critters.config.yaml`:
 | `mcpConfig` | — | Path(s) to MCP config JSON file(s), applied to all critters |
 | `strictMcpConfig` | false | When true, passes `--strict-mcp-config` to prevent inheriting operator's MCP servers |
 | `metricsRetentionDays` | 90 | Days to retain metrics data before pruning |
+| `autoUpdate` | — | Auto-update config: `{ enabled (default: true), intervalMinutes (default: 1440) }` |
 | `tunnel` | — | Tunnel config: `{ enabled, auth, domain }` for ngrok remote access |
 | `linearWebhookSecret` | — | Linear webhook signing secret (env: `LINEAR_WEBHOOK_SECRET`) |
 | `jiraWebhookSecret` | — | Jira webhook secret (env: `JIRA_WEBHOOK_SECRET`) |
@@ -193,6 +195,7 @@ The daemon runs an HTTP server on port 3847 (configurable via `healthPort`, set 
 | `/poll` | POST | Trigger an immediate poll cycle |
 | `/review-poll` | POST | Trigger an immediate review poll cycle |
 | `/restart` | POST | Restart the daemon process |
+| `/stop` | POST | Stop the daemon gracefully |
 | `/api/v1/metadata` | GET | Provider teams, critter types, and repo info |
 | `/api/v1/issues` | POST | Create a critter issue (`{ provider, teamId, title, description, critterType }`) |
 | `/api/logs/<id>` | GET | Processed log tail for a critter run |

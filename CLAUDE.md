@@ -587,6 +587,9 @@ critterTypes:
 | `tunnel.domain` | — | Static ngrok domain (free tier gives one) |
 | `linearWebhookSecret` | — | Linear webhook signing secret (env: `LINEAR_WEBHOOK_SECRET`). Webhooks disabled if not set |
 | `jiraWebhookSecret` | — | Jira webhook secret (env: `JIRA_WEBHOOK_SECRET`). Webhooks disabled if not set |
+| `autoUpdate` | — | Auto-update configuration |
+| `autoUpdate.enabled` | true | Automatically check for and apply updates when idle |
+| `autoUpdate.intervalMinutes` | 1440 | How often to check for updates (default: 24 hours) |
 
 ### Allowed tools
 
@@ -660,6 +663,8 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 | `src/release-notes.ts` | Release notes data (bundled at build time by `scripts/bundle-release-notes.js`) |
 | `src/env.ts` | Shared `.env` fallback loader |
 | `src/updater.ts` | Self-update check logic |
+| `src/auto-updater.ts` | Periodic auto-update timer (checks for updates, applies when idle) |
+| `src/pr-status.ts` | PR CI and review status tracking for dashboard |
 | `src/prerequisites.ts` | Startup prerequisite checks |
 | `src/init.ts` | `critters init` CLI command |
 | `src/jq-filter.ts` | jq filter string for stream-json display |
