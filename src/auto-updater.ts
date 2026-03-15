@@ -3,6 +3,7 @@ import type { SlackNotifier } from "./slack.js";
 import type { Config } from "./types.js";
 import type { UnifiedSpawner } from "./unified-spawner.js";
 import { checkForUpdate, checkForUpdateAvailable } from "./updater.js";
+import { VERSION } from "./version.js";
 
 export interface AutoUpdaterHandle {
   stop(): void;
