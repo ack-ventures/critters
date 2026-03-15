@@ -47,6 +47,7 @@ Usage: critters [command] [flags]
 Commands:
   (none)      Start the daemon
   retry       Retry a failed critter (or --all-failed for bulk retry)
+  stop        Stop the daemon gracefully
   restart     Restart the daemon
   kickoff     Trigger an immediate poll cycle
   status      Show daemon status
@@ -169,6 +170,12 @@ if (subcommand === "kickoff") {
 if (subcommand === "restart") {
   const { runRestart } = await import("./cli-restart.js");
   await runRestart();
+  process.exit(0);
+}
+
+if (subcommand === "stop") {
+  const { runStop } = await import("./cli-stop.js");
+  await runStop();
   process.exit(0);
 }
 
@@ -511,6 +518,7 @@ async function main() {
       triggerPoll: () => watcher.triggerPoll(),
       triggerReviewPoll: () => watcher.triggerPoll(), // unified watcher handles both
       triggerRestart: () => restartDaemon(),
+      triggerStop: () => process.kill(process.pid, "SIGTERM"),
       triggerPollForIssue: (identifier: string) => watcher.pollForIssue(identifier),
     }, config.workDir, config.dashboardToken, healthContext, webhookConfig);
   }

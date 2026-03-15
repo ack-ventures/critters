@@ -56,6 +56,7 @@ export function startHealthServer(
     triggerPoll?: () => Promise<number>;
     triggerReviewPoll?: () => Promise<number>;
     triggerRestart?: () => void;
+    triggerStop?: () => void;
     triggerPollForIssue?: (identifier: string) => Promise<number>;
   },
   workDir?: string,
@@ -198,6 +199,23 @@ export function startHealthServer(
         }, 250);
 
         return Response.json({ ok: true, message: "Restarting..." });
+      }
+
+      if (url.pathname === "/stop") {
+        if (req.method !== "POST") {
+          return new Response("Method Not Allowed", { status: 405 });
+        }
+        const authResp = checkAuth(req, dashboardToken);
+        if (authResp) return authResp;
+        if (!triggers?.triggerStop) {
+          return Response.json({ error: "Stop not available" }, { status: 503 });
+        }
+
+        setTimeout(() => {
+          triggers.triggerStop!();
+        }, 250);
+
+        return Response.json({ ok: true, message: "Stopping..." });
       }
 
       // API: GET /api/logs/<identifier> — returns processed log tail as plain text
