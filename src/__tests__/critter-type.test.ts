@@ -37,6 +37,7 @@ function baseConfig(overrides?: Partial<Config>): Config {
     linearApiKey: "test-key",
     provider: "linear",
     critterTypes: [],
+    cli: "claude",
     ...overrides,
   };
 }

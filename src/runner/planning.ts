@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { spawnClaudeForPhase } from "../claude.js";
+import { spawnForPhase } from "../cli/spawn.js";
 import { commitFile } from "../git.js";
 import { logTask } from "../logger.js";
 import { buildPlanningPrompt, getPlanningAllowedTools } from "../prompt.js";
@@ -24,12 +24,12 @@ export class PlanningPhaseRunner implements PhaseRunner {
       projectId: task.projectId,
     };
 
-    const basePrompt = buildPlanningPrompt(critterTask, repoConfig);
+    const basePrompt = buildPlanningPrompt(critterTask, ctx.cliAdapter, repoConfig);
     const vars = buildPromptVars(task, workDir, "");
     const skillContent = resolveSkills(ctx.phase.skills, vars);
     const prompt = skillContent ? basePrompt + skillContent : basePrompt;
 
-    const spawn = await spawnClaudeForPhase(ctx, prompt, allowedTools, "plan");
+    const spawn = await spawnForPhase(ctx, prompt, allowedTools, "plan");
 
     validatePhaseResult(spawn, "planning");
 

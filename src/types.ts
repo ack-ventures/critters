@@ -100,6 +100,7 @@ export interface Config {
   jiraWebhookSecret?: string;
   provider: "linear" | "jira";
   critterTypes: CritterTypeConfig[];
+  cli: string;
 }
 
 export interface TeamStatusMap {

@@ -460,6 +460,7 @@ describe("src/prompt.ts", () => {
       linearApiKey: "test",
       provider: "linear",
       critterTypes: [],
+      cli: "claude",
     };
 
     test("from description (highest priority)", () => {

@@ -195,6 +195,7 @@ export function loadConfig(configPath?: string): Config {
     jiraWebhookSecret,
     provider,
     critterTypes: [], // populated below
+    cli: (yaml.cli as string) ?? "claude",
   };
 
   // Parse critterTypes from YAML, or synthesize from flat config

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { spawnClaudeForPhase } from "../claude.js";
+import { spawnForPhase } from "../cli/spawn.js";
 import { autoCommit, getDefaultBranch, hasCommitsOnBranch, hasUncommittedChanges } from "../git.js";
 import { logTask, logTaskError, logTaskWarn } from "../logger.js";
 import { buildExecutionPrompt, getExecutionAllowedTools } from "../prompt.js";
@@ -32,12 +32,12 @@ export class ExecutionPhaseRunner implements PhaseRunner {
     logTask(task.identifier, `Execution phase allowed tools: ${allowedTools.join(", ")}`);
 
     const defaultBranch = await getDefaultBranch(workDir, task.identifier, task.baseBranch);
-    const basePrompt = buildExecutionPrompt(critterTask, allowedTools, { resuming, repoConfig, commitPlans: ctx.critterType.repo.commitPlans, defaultBranch });
+    const basePrompt = buildExecutionPrompt(critterTask, allowedTools, { resuming, repoConfig, commitPlans: ctx.critterType.repo.commitPlans, defaultBranch, cliAdapter: ctx.cliAdapter });
     const vars = buildPromptVars(task, workDir, branch);
     const skillContent = resolveSkills(ctx.phase.skills, vars);
     const prompt = skillContent ? basePrompt + skillContent : basePrompt;
 
-    const spawn = await spawnClaudeForPhase(ctx, prompt, allowedTools, "exec");
+    const spawn = await spawnForPhase(ctx, prompt, allowedTools, "exec");
 
     validatePhaseResult(spawn, "execution");
 

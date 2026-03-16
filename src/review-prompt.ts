@@ -1,3 +1,4 @@
+import type { CliAdapter } from "./cli/types.js";
 import { readCustomPrompt, stripBranchLine, stripRepoLine } from "./prompt.js";
 import type { PerRepoConfig } from "./repo-config.js";
 import type { ReviewTask } from "./types.js";
@@ -9,8 +10,20 @@ export function getReviewAllowedTools(): string[] {
   ];
 }
 
-export function buildReviewPrompt(task: ReviewTask, repoConfig?: PerRepoConfig | null): string {
+export function buildReviewPrompt(task: ReviewTask, adapter?: CliAdapter | PerRepoConfig | null, repoConfig?: PerRepoConfig | null): string {
+  // Support old signature: buildReviewPrompt(task, repoConfig)
+  let actualAdapter: CliAdapter | undefined;
+  let actualRepoConfig: PerRepoConfig | null | undefined;
+  if (adapter && typeof adapter === "object" && "name" in adapter && "binary" in adapter) {
+    actualAdapter = adapter as CliAdapter;
+    actualRepoConfig = repoConfig;
+  } else {
+    actualAdapter = undefined;
+    actualRepoConfig = adapter as PerRepoConfig | null | undefined;
+  }
+
   const cleanedDescription = stripBranchLine(stripRepoLine(task.description));
+  const readingGuidance = actualAdapter?.promptGuidance() ?? "## Reading Large Files\nThe Read tool supports `offset` and `limit` parameters \u2014 use these to read large files in chunks rather than attempting to read the entire file at once.";
 
   let prompt = `You are reviewing a pull request for issue ${task.identifier}: ${task.title}
 
@@ -71,16 +84,15 @@ Compare the PR against the original task description above. Check:
 - Be pragmatic: minor style nits or trivial improvements should NOT block a merge. Only request changes for genuine correctness, security, or completeness issues.
 - If the PR is mostly good with a minor issue, approve it with a note rather than requesting changes.
 
-## Reading Large Files
-The Read tool supports \`offset\` and \`limit\` parameters — use these to read large files in chunks rather than attempting to read the entire file at once.`;
+${readingGuidance}`;
 
   const custom = readCustomPrompt("review-prompt.md");
   if (custom) {
     prompt += `\n\n## Additional Context\n${custom}`;
   }
 
-  if (repoConfig?.reviewPrompt) {
-    prompt += `\n\n## Repo-Specific Instructions\n${repoConfig.reviewPrompt.trim()}`;
+  if (actualRepoConfig?.reviewPrompt) {
+    prompt += `\n\n## Repo-Specific Instructions\n${actualRepoConfig.reviewPrompt.trim()}`;
   }
 
   return prompt;

@@ -48,6 +48,7 @@ function makeConfig(hooks?: Config["hooks"]): Config {
     hooks,
     provider: "linear",
     critterTypes: [],
+    cli: "claude",
   };
 }
 

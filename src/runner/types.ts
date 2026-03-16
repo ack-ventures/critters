@@ -1,3 +1,4 @@
+import type { CliAdapter } from "../cli/types.js";
 import type { CritterTypeConfig, PhaseConfig } from "../critter-type.js";
 import type { PerRepoConfig } from "../repo-config.js";
 import type { IssueTracker, TrackerTask } from "../tracker/types.js";
@@ -17,6 +18,7 @@ export interface PhaseContext {
   resuming: boolean;
   mcpConfig: string[];
   strictMcpConfig: boolean;
+  cliAdapter: CliAdapter;
 }
 
 export interface PhaseResult {

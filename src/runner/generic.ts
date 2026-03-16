@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync, readFileSync } from "node:fs";
-import { spawnClaudeForPhase } from "../claude.js";
+import { spawnForPhase } from "../cli/spawn.js";
 import { logTask, logTaskWarn } from "../logger.js";
 import { buildPromptVars, resolvePrompt, resolveSkills, resolveTools } from "../prompt-template.js";
 import { tailLines } from "../utils.js";
@@ -103,7 +103,7 @@ export class GenericPhaseRunner implements PhaseRunner {
 
     logTask(task.identifier, `Phase ${phase.name} allowed tools: ${allowedTools.join(", ")}`);
 
-    const spawn = await spawnClaudeForPhase(ctx, prompt, allowedTools, phase.name);
+    const spawn = await spawnForPhase(ctx, prompt, allowedTools, phase.name);
 
     if (spawn.timedOut) {
       throw new Error(`Timed out during ${phase.name} phase`);

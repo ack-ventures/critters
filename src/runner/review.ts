@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { spawnClaudeForPhase } from "../claude.js";
+import { spawnForPhase } from "../cli/spawn.js";
 import { logTask } from "../logger.js";
 import { buildPromptVars, resolveSkills } from "../prompt-template.js";
 import { buildReviewPrompt, getReviewAllowedTools } from "../review-prompt.js";
@@ -125,14 +125,14 @@ export class ReviewPhaseRunner implements PhaseRunner {
     };
 
     const allowedTools = getReviewAllowedTools();
-    const basePrompt = buildReviewPrompt(reviewTask, repoConfig);
+    const basePrompt = buildReviewPrompt(reviewTask, ctx.cliAdapter, repoConfig);
     const vars = buildPromptVars(task, workDir, task.prBranch ?? "");
     const skillContent = resolveSkills(ctx.phase.skills, vars);
     const prompt = skillContent ? basePrompt + skillContent : basePrompt;
 
     logTask(task.identifier, "Starting review phase");
 
-    const spawn = await spawnClaudeForPhase(ctx, prompt, allowedTools, "review");
+    const spawn = await spawnForPhase(ctx, prompt, allowedTools, "review");
 
     if (spawn.timedOut) {
       throw new Error("Timed out during review phase");

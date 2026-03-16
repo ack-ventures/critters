@@ -15,6 +15,7 @@ export interface PhaseConfig {
   tools: string | string[];
   skills?: string[];
   comment?: boolean;
+  cli?: string;
 }
 
 export interface OutcomeConfig {
@@ -36,6 +37,7 @@ export interface CritterTypeConfig {
   mcpConfig?: string | string[];
   strictMcpConfig?: boolean;
   costBudget?: number;
+  cli?: string;
 }
 
 /**
@@ -167,6 +169,7 @@ export function parseCritterType(name: string, raw: Record<string, unknown>): Cr
     tools: (p.tools as string | string[]) ?? "default",
     skills: p.skills as string[] | undefined,
     comment: p.comment as boolean | undefined,
+    cli: p.cli as string | undefined,
   }));
 
   const ct: CritterTypeConfig = {
@@ -193,6 +196,7 @@ export function parseCritterType(name: string, raw: Record<string, unknown>): Cr
     mcpConfig: raw.mcpConfig as string | string[] | undefined,
     strictMcpConfig: raw.strictMcpConfig as boolean | undefined,
     costBudget: raw.costBudget as number | undefined,
+    cli: raw.cli as string | undefined,
   };
 
   validateCritterType(ct);

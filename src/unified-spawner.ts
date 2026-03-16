@@ -1,4 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { getCliAdapter } from "./cli/registry.js";
 import { readPartialCost, resolveMcpConfig } from "./claude.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import {
@@ -415,6 +416,10 @@ export class UnifiedSpawner {
 
         const phaseStart = Date.now();
         const runner = getPhaseRunner(phase);
+        // Resolve CLI adapter: phase > type > global config, default "claude"
+        const cliName = phase.cli ?? critterType.cli ?? this.config.cli ?? "claude";
+        const cliAdapter = getCliAdapter(cliName);
+
         const ctx: PhaseContext = {
           task,
           critterType,
@@ -428,6 +433,7 @@ export class UnifiedSpawner {
           resuming,
           mcpConfig,
           strictMcpConfig,
+          cliAdapter,
         };
 
         if (phase.name === "execution" && critterType.name === "create") {
