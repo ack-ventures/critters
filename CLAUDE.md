@@ -164,6 +164,7 @@ critterTypes:
 | `phases[].tools` | no | `default` | `readonly`, `default`, `review`, or explicit array of tool names |
 | `phases[].skills` | no | — | Array of skill file paths appended to the phase prompt (supports `{{var}}` substitution) |
 | `phases[].comment` | no | false | Post the phase's report text as an issue comment |
+| `phases[].cli` | no | type's `cli` | CLI adapter for this phase (cascades: phase > type > global) |
 | `outcomes.success` | no | — | Status to set on success. `comment: true` is now implicit for custom types |
 | `outcomes.failure` | no | — | Status to set on failure |
 | `outcomes.merged` | no | — | Status to set when a PR is merged (review type) |
@@ -177,6 +178,7 @@ critterTypes:
 | `mcpConfig` | no | global `mcpConfig` | Path(s) to MCP config JSON file(s) — fully replaces global |
 | `strictMcpConfig` | no | global `strictMcpConfig` | Per-type override for strict MCP config mode |
 | `costBudget` | no | global `costBudget` | Cost (USD) per task that triggers a kill (overrides global) |
+| `cli` | no | global `cli` | CLI adapter name (currently only `"claude"`). Cascades: phase > type > global |
 
 ### Phases
 
@@ -590,6 +592,7 @@ critterTypes:
 | `autoUpdate` | — | Auto-update configuration |
 | `autoUpdate.enabled` | true | Automatically check for and apply updates when idle |
 | `autoUpdate.intervalMinutes` | 1440 | How often to check for updates (default: 24 hours) |
+| `cli` | "claude" | Default CLI adapter. Currently only `"claude"` is supported. Overridable per critter type and per phase |
 
 ### Allowed tools
 
@@ -625,8 +628,12 @@ Planning phase gets a read-only subset (Read, Glob, Grep, Write, Task + basic Ba
 | `src/runner/review.ts` | ReviewPhaseRunner (review diff, approve/merge) |
 | `src/runner/generic.ts` | GenericPhaseRunner (custom types, writes .critter-report.md) |
 | `src/runner/index.ts` | Runner registry (builtin → dedicated runner, else → generic) |
+| `src/cli/types.ts` | CliAdapter interface + supporting types |
+| `src/cli/claude.ts` | ClaudeCodeAdapter (Claude Code CLI integration) |
+| `src/cli/spawn.ts` | CLI-agnostic tmux/subprocess spawning, stale pane cleanup |
+| `src/cli/registry.ts` | getCliAdapter() lookup |
 | `src/prompt-template.ts` | resolvePrompt(), resolveTools(), variable substitution |
-| `src/claude.ts` | tmux pane spawning, stream-json piping |
+| `src/claude.ts` | Re-export shim for backward compatibility (logic moved to src/cli/) |
 | `src/prompt.ts` | Build planning/execution prompts, parse repo URL |
 | `src/linear.ts` | Linear SDK wrapper (legacy, mostly unused — tracker abstraction preferred) |
 | `src/review-prompt.ts` | Build review prompt, review allowed tools |
@@ -705,7 +712,7 @@ Usage: `critters [command] [flags]`
 | `status` | Show daemon status (active/queued critters, uptime, today's stats) |
 | `logs <ID>` | View critter logs (`--phase planning\|execution\|review`, `--follow\|-f`) |
 | `retry <ID>` | Reset a failed critter to Todo for re-pickup (`--force` to override non-failed states, `--all-failed` to retry all failed) |
-| `history` | Show completed critter history (recent tasks, outcomes, durations) |
+| `history` | Show completed critter history (recent tasks, outcomes, durations). `--type NAME` to filter by critter type |
 | `stop` | Stop the daemon gracefully |
 | `restart` | Restart the daemon |
 | `kickoff` | Trigger an immediate poll cycle via the health server |
