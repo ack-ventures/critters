@@ -27,7 +27,7 @@ function formatDate(timestamp: string): string {
   return `${year}-${month}-${day} ${hours}:${minutes}`;
 }
 
-function parseArgs(args: string[]): { last: number; failed: boolean; type: string | null; json: boolean } {
+export function parseArgs(args: string[]): { last: number; failed: boolean; type: string | null; json: boolean } {
   let last = 20;
   let failed = false;
   let type: string | null = null;
