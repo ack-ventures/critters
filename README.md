@@ -34,7 +34,7 @@ This downloads the latest binary, installs it to your PATH, and walks you throug
 ### Flags
 
 - `--dry-run` — poll once, show what would happen, and exit
-- `--no-tmux` — run without tmux (log to file instead)
+- `--no-tmux` — daemonize to background without tmux (logs to `~/.critters/critters.log`, writes PID to `~/.critters/critters.pid`)
 - `--no-watch` — disable config file watching (no hot-reload)
 - `--skip-update` — skip auto-update check on startup
 - `--config PATH` — use a custom config file
