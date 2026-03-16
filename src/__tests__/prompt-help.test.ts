@@ -5,9 +5,9 @@ import { buildPromptHelpSystemPrompt } from "../prompt-help.js";
 describe("embedded CLAUDE.md", () => {
   test("is non-empty and contains expected sections", () => {
     expect(claudeMd.length).toBeGreaterThan(0);
-    expect(claudeMd).toContain("## CLI Commands");
-    expect(claudeMd).toContain("critterTypes");
-    expect(claudeMd).toContain("## Config");
+    expect(claudeMd).toContain("## Architecture");
+    expect(claudeMd).toContain("## Key files");
+    expect(claudeMd).toContain("## Conventions");
   });
 });
 
