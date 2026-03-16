@@ -3,6 +3,7 @@
  * This file exists for backward compatibility so existing imports continue to work.
  */
 
+export type { StalePane } from "./cli/spawn.js";
 // Re-export spawn utilities from cli/spawn
 export {
   cleanupStalePanes,
@@ -10,7 +11,6 @@ export {
   parsePaneList,
   spawnForPhase,
 } from "./cli/spawn.js";
-export type { StalePane } from "./cli/spawn.js";
 
 // Re-export adapter utilities via the Claude adapter singleton
 import { ClaudeCodeAdapter } from "./cli/claude.js";

@@ -1,6 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { getCliAdapter } from "./cli/registry.js";
 import { readPartialCost, resolveMcpConfig } from "./claude.js";
+import { getCliAdapter } from "./cli/registry.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import {
   autoCommit,

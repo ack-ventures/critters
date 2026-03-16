@@ -1,5 +1,5 @@
-import type { CliAdapter } from "./types.js";
 import { ClaudeCodeAdapter } from "./claude.js";
+import type { CliAdapter } from "./types.js";
 
 const adapters = new Map<string, CliAdapter>();
 

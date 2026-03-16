@@ -19,7 +19,7 @@ describe("checkAuth", () => {
     const req = new Request("http://localhost/poll", { method: "POST" });
     const resp = checkAuth(req, "my-secret-token");
     expect(resp).not.toBeNull();
-    expect(resp!.status).toBe(401);
+    expect(resp?.status).toBe(401);
   });
 
   test("returns 401 when Authorization header has wrong token", () => {
@@ -29,7 +29,7 @@ describe("checkAuth", () => {
     });
     const resp = checkAuth(req, "my-secret-token");
     expect(resp).not.toBeNull();
-    expect(resp!.status).toBe(401);
+    expect(resp?.status).toBe(401);
   });
 
   test("returns 401 when Authorization header uses non-Bearer scheme", () => {
@@ -39,6 +39,6 @@ describe("checkAuth", () => {
     });
     const resp = checkAuth(req, "my-secret-token");
     expect(resp).not.toBeNull();
-    expect(resp!.status).toBe(401);
+    expect(resp?.status).toBe(401);
   });
 });
