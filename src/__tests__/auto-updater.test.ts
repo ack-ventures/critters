@@ -88,7 +88,7 @@ describe("startAutoUpdater", () => {
     );
     expect(handle).not.toBeNull();
     expect(logCalls.some((l) => l.includes("checking every 60 minutes"))).toBe(true);
-    handle!.stop();
+    handle?.stop();
   });
 
   test("uses defaults when autoUpdate config is omitted", () => {
@@ -102,7 +102,7 @@ describe("startAutoUpdater", () => {
     );
     expect(handle).not.toBeNull();
     expect(logCalls.some((l) => l.includes("checking every 1440 minutes"))).toBe(true);
-    handle!.stop();
+    handle?.stop();
   });
 
   test("updateConfig disables when enabled set to false", () => {
@@ -117,7 +117,7 @@ describe("startAutoUpdater", () => {
     expect(handle).not.toBeNull();
     handle!.updateConfig({ autoUpdate: { enabled: false, intervalMinutes: 60 } } as any);
     expect(logCalls.some((l) => l.includes("disabled by config reload"))).toBe(true);
-    handle!.stop();
+    handle?.stop();
   });
 
   test("updateConfig changes interval", () => {
@@ -132,6 +132,6 @@ describe("startAutoUpdater", () => {
     expect(handle).not.toBeNull();
     handle!.updateConfig({ autoUpdate: { enabled: true, intervalMinutes: 120 } } as any);
     expect(logCalls.some((l) => l.includes("interval changed to 120 minutes"))).toBe(true);
-    handle!.stop();
+    handle?.stop();
   });
 });

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { CliAdapter } from "./cli/types.js";
 import type { PerRepoConfig } from "./repo-config.js";
 import type { Config, CritterTask } from "./types.js";
 
@@ -108,19 +109,15 @@ export function getExecutionAllowedTools(config: Config, task: CritterTask, repo
   return [...new Set(tools)];
 }
 
-export function buildPlanningPrompt(task: CritterTask, repoConfig?: PerRepoConfig | null): string {
+export function buildPlanningPrompt(task: CritterTask, adapter?: CliAdapter, repoConfig?: PerRepoConfig | null): string {
   const cleanedDescription = stripBranchLine(stripRepoLine(task.description));
 
-  let prompt = `You are working on issue ${task.identifier}: ${task.title}
+  const tools = adapter?.toolNames() ?? { read: "Read", write: "Write", edit: "Edit", bash: "Bash", glob: "Glob", grep: "Grep", task: "Task" };
+  const hasSubagents = adapter?.supportsSubagents() ?? true;
 
-## Task
-${cleanedDescription}
-
-## Your Workflow
-1. Explore the codebase thoroughly — understand the project structure, patterns, and conventions
-2. Design an implementation plan for this task
-3. Write your plan to critters/plans/${task.identifier}.md (the directory already exists — do not create it)
-4. Spawn a reviewer subagent using the Task tool with this prompt:
+  let reviewerSteps: string;
+  if (hasSubagents && tools.task) {
+    reviewerSteps = `4. Spawn a reviewer subagent using the ${tools.task} tool with this prompt:
    "Review the implementation plan in critters/plans/${task.identifier}.md for the task: ${task.title}. Read the plan and the relevant source files it references. Check for: completeness, correctness, potential issues, missing edge cases, and whether it aligns with the codebase's patterns.
 
    Output your review in this exact format:
@@ -144,7 +141,7 @@ ${cleanedDescription}
    Approval requires zero MUST_FIX items. SHOULD_FIX items alone do not block approval but should be noted.
 
    If this is a re-review (round 2+), you will see a '## Previous Review Items' section in the plan. Verify that all prior MUST_FIX items have been adequately addressed. If a prior MUST_FIX was not addressed, re-list it as MUST_FIX with a note that it is unresolved from a prior round."
-5. If the reviewer output contains REVIEW_STATUS: NEEDS_REVISION, revise your plan (use the Write tool to rewrite the entire plan file — Edit is not available):
+5. If the reviewer output contains REVIEW_STATUS: NEEDS_REVISION, revise your plan (use the ${tools.write} tool to rewrite the entire plan file — ${tools.edit} is not available):
    a. Add a "## Previous Review Items" section at the end of the plan file
    b. For each MUST_FIX and SHOULD_FIX item from the reviewer, quote the item and explain how you addressed it (or why you chose not to address a SHOULD_FIX). Format:
       > [MUST_FIX] <original item>
@@ -152,7 +149,21 @@ ${cleanedDescription}
    c. Update the relevant sections of the plan to incorporate the fixes
    d. Spawn another reviewer subagent with the same prompt
 6. Repeat until the reviewer responds with REVIEW_STATUS: APPROVED (max 3 review rounds — if not approved after 3, stop and exit with an error)
-7. Once approved, you are done — do not implement anything
+7. Once approved, you are done — do not implement anything`;
+  } else {
+    reviewerSteps = `4. Once your plan is complete and thorough, you are done — do not implement anything`;
+  }
+
+  let prompt = `You are working on issue ${task.identifier}: ${task.title}
+
+## Task
+${cleanedDescription}
+
+## Your Workflow
+1. Explore the codebase thoroughly — understand the project structure, patterns, and conventions
+2. Design an implementation plan for this task
+3. Write your plan to critters/plans/${task.identifier}.md (the directory already exists — do not create it)
+${reviewerSteps}
 
 ## Plan Format
 Your plan should include:
@@ -166,8 +177,7 @@ You have a limited set of tools. Only these Bash commands are available: git, ls
 If a command is blocked or requires approval, do NOT retry it — move on and find an alternative approach or skip that step.
 Never run \`bun run src/index.ts\`, \`bun start\`, or any command that starts the critters daemon — it will destroy your working directory.
 
-## Reading Large Files
-The Read tool supports \`offset\` and \`limit\` parameters — use these to read large files in chunks rather than attempting to read the entire file at once.`;
+${adapter?.promptGuidance() ?? "## Reading Large Files\nThe Read tool supports `offset` and `limit` parameters \u2014 use these to read large files in chunks rather than attempting to read the entire file at once."}`;
 
   const custom = readCustomPrompt("planning-prompt.md");
   if (custom) {
@@ -188,12 +198,14 @@ function getOsGuidance(): string {
   return "You are running on Linux.";
 }
 
-export function buildExecutionPrompt(task: CritterTask, allowedTools: string[], options?: { resuming?: boolean; repoConfig?: PerRepoConfig | null; commitPlans?: boolean; defaultBranch?: string }): string {
+export function buildExecutionPrompt(task: CritterTask, allowedTools: string[], options?: { resuming?: boolean; repoConfig?: PerRepoConfig | null; commitPlans?: boolean; defaultBranch?: string; cliAdapter?: CliAdapter }): string {
   const bashTools = allowedTools
     .filter((t) => t.startsWith("Bash("))
     .map((t) => t.replace(/^Bash\(([^:]+):.*\)$/, "$1"));
 
   const resuming = options?.resuming ?? false;
+  const adapter = options?.cliAdapter;
+  const guidance = adapter?.promptGuidance();
 
   const resumePreamble = resuming
     ? `## Resuming from checkpoint
@@ -216,9 +228,12 @@ ${planInstruction} Then:
 - Push your branch
 - Create a PR using \`gh pr create --head <branch-name> --base ${options?.defaultBranch ?? "<default-branch>"}\` with title "[${task.identifier}] ${task.title}" and body that includes a link to ${task.issueUrl ? `the issue (${task.issueUrl})` : "the issue tracker ticket"} and "Automated by Critters". Always use both the --head and --base flags.${!options?.defaultBranch ? " Determine the default branch with: git rev-parse --abbrev-ref origin/HEAD" : ""}
 
-## Editing Files
-- Always read a file before editing it. Pay attention to whether it uses tabs or spaces for indentation — the Read tool's line numbers can make tabs look like spaces.
-- Do not fire more than 3-4 Edit calls in parallel. If one fails, all sibling parallel edits are cancelled too.
+${guidance ?? `## Editing Files
+- Always read a file before editing it. Pay attention to whether it uses tabs or spaces for indentation \u2014 the Read tool's line numbers can make tabs look like spaces.
+- Do not fire more than 3\u20114 Edit calls in parallel. If one fails, all sibling parallel edits are cancelled too.
+
+## Reading Large Files
+The Read tool supports \`offset\` and \`limit\` parameters \u2014 use these to read large files in chunks rather than attempting to read the entire file at once.`}
 
 ## Checkpointing
 After completing each major section/step of the plan, update a checkpoint file at \`critters/plans/${task.identifier}.checkpoint.md\`.
@@ -239,10 +254,7 @@ ${getOsGuidance()}
 If a command is blocked or requires approval, do NOT retry it — move on and find an alternative approach or skip that step. Never retry a blocked command more than once.
 
 ## Important: Do NOT run the project entry point
-Never run \`bun run src/index.ts\`, \`bun start\`, or any command that starts the critters daemon. This will launch a second daemon instance that cleans up work directories — including yours — and destroy your in-progress work. Use \`bun x tsc --noEmit\` for type-checking instead.
-
-## Reading Large Files
-The Read tool supports \`offset\` and \`limit\` parameters — use these to read large files in chunks rather than attempting to read the entire file at once.`;
+Never run \`bun run src/index.ts\`, \`bun start\`, or any command that starts the critters daemon. This will launch a second daemon instance that cleans up work directories — including yours — and destroy your in-progress work. Use \`bun x tsc --noEmit\` for type-checking instead.`;
 
   const custom = readCustomPrompt("execution-prompt.md");
   if (custom) {

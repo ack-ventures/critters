@@ -33,6 +33,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
 		metricsRetentionDays: 90,
 		provider: "linear",
 		critterTypes: [],
+		cli: "claude",
 		...overrides,
 	};
 }

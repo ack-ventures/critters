@@ -346,7 +346,7 @@ async function main() {
   }
 
   // Verify required CLI tools are available
-  await checkPrerequisites();
+  await checkPrerequisites(config);
 
   // Check disk space at startup (warning only)
   try {
