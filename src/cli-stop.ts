@@ -1,5 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 
 function getStopConfig(): { healthPort: number; dashboardToken?: string } {
@@ -44,6 +45,23 @@ export async function runStop(): Promise<void> {
     }
     console.log("Stopping critters daemon...");
   } catch {
+    // Health endpoint unreachable — try PID file fallback
+    const pidFile = join(homedir(), ".critters", "critters.pid");
+    if (existsSync(pidFile)) {
+      try {
+        const pid = parseInt(readFileSync(pidFile, "utf-8").trim(), 10);
+        if (!isNaN(pid)) {
+          process.kill(pid, "SIGTERM");
+          // Clean up PID file — the daemon's shutdown handler will also try,
+          // but it may not run if the process was stuck. Double-delete is safe.
+          try { unlinkSync(pidFile); } catch {}
+          console.log(`Sent SIGTERM to critters daemon (PID ${pid})`);
+          return;
+        }
+      } catch {
+        // PID file exists but process can't be killed
+      }
+    }
     console.error("Critters daemon is not running (or health endpoint is disabled)");
     process.exit(1);
   }

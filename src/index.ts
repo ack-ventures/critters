@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
-import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { startAutoUpdater } from "./auto-updater.js";
@@ -68,7 +68,7 @@ Commands:
 
 Flags:
   --dry-run       Poll once, show what would happen, and exit
-  --no-tmux       Run without tmux (log to file instead)
+  --no-tmux       Run without tmux (daemonize to background, log to file)
   --skip-update   Skip auto-update check on startup
   --config PATH   Use a custom config file
   --type NAME     Filter to a specific critter type (use with --dry-run)
@@ -243,6 +243,57 @@ async function main() {
   if (jsonLogs) {
     enableJsonLogs();
   }
+
+  // --daemonized is an internal flag to prevent the child from forking again
+  const daemonized = Bun.argv.includes("--daemonized");
+
+  // Daemonize when --no-tmux is used (unless dry-run or already daemonized)
+  if (noTmux && !dryRun && !daemonized) {
+    const pidDir = join(homedir(), ".critters");
+    mkdirSync(pidDir, { recursive: true });
+
+    const args = Bun.argv.slice(1).filter((a) => !a.startsWith("/$bunfs/"));
+    args.push("--daemonized");
+
+    const child = spawn(process.execPath, args, {
+      detached: true,
+      stdio: "ignore",
+      env: process.env,
+    });
+    child.unref();
+
+    writeFileSync(join(pidDir, "critters.pid"), String(child.pid));
+
+    console.log(`Critters daemon started (PID ${child.pid}), logging to ~/.critters/critters.log`);
+    process.exit(0);
+  }
+
+  // Clean up stale PID file on startup (only relevant for --no-tmux mode)
+  const pidFile = join(homedir(), ".critters", "critters.pid");
+  if (noTmux && existsSync(pidFile)) {
+    try {
+      const oldPid = parseInt(readFileSync(pidFile, "utf-8").trim(), 10);
+      if (!isNaN(oldPid) && oldPid !== process.pid) {
+        try {
+          process.kill(oldPid, 0); // Check if process exists
+          // Process exists — another daemon may be running
+          logError(`Another critters daemon may be running (PID ${oldPid}). Remove ${pidFile} if this is stale.`);
+          process.exit(1);
+        } catch {
+          // Process doesn't exist — stale PID file, clean it up
+          unlinkSync(pidFile);
+        }
+      }
+    } catch {
+      // PID file unreadable, remove it
+      try { unlinkSync(pidFile); } catch {}
+    }
+
+    // Write our own PID file
+    mkdirSync(join(homedir(), ".critters"), { recursive: true });
+    writeFileSync(pidFile, String(process.pid));
+  }
+
   const typeFilter = (() => {
     const idx = Bun.argv.indexOf("--type");
     return idx !== -1 && Bun.argv[idx + 1] ? Bun.argv[idx + 1] : undefined;
@@ -494,11 +545,22 @@ async function main() {
         process.exit(0);
       } else {
         // Non-tmux: spawn detached child so it survives parent exit
-        const child = Bun.spawn([process.execPath, ...args], {
-          stdio: ["inherit", "inherit", "inherit"],
+        // Must use node:child_process spawn (not Bun.spawn) for detached support
+        restarting = true;
+        const child = spawn(process.execPath, args, {
+          detached: true,
+          stdio: "ignore",
           env: process.env,
         });
         child.unref();
+
+        // Update PID file with new child's PID
+        if (noTmux) {
+          try {
+            writeFileSync(join(homedir(), ".critters", "critters.pid"), String(child.pid));
+          } catch {}
+        }
+
         process.exit(0);
       }
     } catch (err) {
@@ -688,6 +750,7 @@ async function main() {
 
   // Signal handlers
   let shuttingDown = false;
+  let restarting = false;
 
   const shutdown = () => {
     if (shuttingDown) return;
@@ -700,6 +763,11 @@ async function main() {
     if (titleInterval) clearInterval(titleInterval);
     healthServer?.stop();
     watcher.stop();
+
+    // Remove PID file (unless restarting — the new child needs it)
+    if (noTmux && !restarting) {
+      try { unlinkSync(join(homedir(), ".critters", "critters.pid")); } catch {}
+    }
 
     // Graceful exit: give running tasks a moment to clean up
     setTimeout(() => {
