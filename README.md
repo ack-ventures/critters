@@ -249,6 +249,8 @@ Prompt files support `{{identifier}}`, `{{title}}`, `{{description}}`, and other
 
 **Assignee filtering:** Add `trigger.assignee` to only pick up issues assigned to a specific user. Use an email address (e.g., `"alice@company.com"`) or `"me"` for the authenticated user. Useful in shared projects where you don't want critters picking up every labeled issue.
 
+**Quiet mode:** Add `quietComments: true` to suppress status/progress comments (e.g., "picking up task...", "phase completed in..."). Report content and error comments are still posted.
+
 **Model guidance:** Use sonnet or opus for custom types. Haiku often ignores tool-use instructions and produces shallow output.
 
 If `critterTypes` is omitted from config, the daemon synthesizes the default `create` and `review` types from the flat config fields — fully backward compatible.

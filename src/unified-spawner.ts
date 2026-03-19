@@ -314,12 +314,18 @@ export class UnifiedSpawner {
       // Handle status update for create-type tasks
       if (critterType.name === "create") {
         await tracker.updateStatus(task.id, "In Progress", task.groupId, task.identifier);
-        await tracker.comment(task.id, "Cloning repo...");
+        if (!critterType.quietComments) {
+          await tracker.comment(task.id, "Cloning repo...");
+        }
       } else if (isReviewType) {
-        await tracker.comment(task.id, `Review critter (${critterType.phases[0].model}) picking up PR...`);
+        if (!critterType.quietComments) {
+          await tracker.comment(task.id, `Review critter (${critterType.phases[0].model}) picking up PR...`);
+        }
       } else {
         // Custom type — update to first phase status or just comment
-        await tracker.comment(task.id, `Critter [${critterType.name}] (${critterType.phases[0].model}) picking up task...`);
+        if (!critterType.quietComments) {
+          await tracker.comment(task.id, `Critter [${critterType.name}] (${critterType.phases[0].model}) picking up task...`);
+        }
       }
 
       // 1. Clone repo
@@ -348,7 +354,7 @@ export class UnifiedSpawner {
           await createBranch(workDir, branch, task.identifier, task.baseBranch);
         }
 
-        if (resuming) {
+        if (resuming && !critterType.quietComments) {
           await tracker.comment(task.id, "Resuming from previous attempt (branch already exists)...");
         }
       }
@@ -407,7 +413,7 @@ export class UnifiedSpawner {
       const allPhaseStats: { name: string; durationMs: number; costUsd?: number }[] = [];
       let costAlertSent = false;
       for (const phase of critterType.phases) {
-        if (critterType.name === "create") {
+        if (critterType.name === "create" && !critterType.quietComments) {
           await tracker.comment(task.id, `${phase.name === "planning" ? "Planning" : "Plan approved, executing"} (${phase.model})...`);
         }
         logTask(task.identifier, `Starting phase: ${phase.name} | ${shortRepoName(task.repoUrl)} | ${branch || task.prBranch || ""}`);
@@ -490,7 +496,9 @@ export class UnifiedSpawner {
         });
         const phaseStats = `${phase.name} (${phase.model}) completed in ${formatDuration(phaseDuration)}${formatPhaseStats(phaseResult.spawn)}`;
         logTask(task.identifier, phaseStats);
-        await tracker.comment(task.id, phaseStats);
+        if (!critterType.quietComments) {
+          await tracker.comment(task.id, phaseStats);
+        }
 
         // Post phase report as a comment when phase.comment is true
         if (phase.comment) {
@@ -583,7 +591,7 @@ export class UnifiedSpawner {
           comment += `\n\n[Full report](${url})`;
         }
         await tracker.comment(task.id, comment);
-      } else {
+      } else if (!critterType.quietComments) {
         const modelSummary = [...new Set(critterType.phases.map(p => p.model))].join("/");
         await tracker.comment(task.id, `Critter [${critterType.name}] (${modelSummary}, critters v${VERSION}) completed in ${totalDuration}`);
       }
@@ -797,10 +805,12 @@ export class UnifiedSpawner {
       const maxAttempts = autoRetry.maxRetries + 1;
 
       logTask(task.identifier, `Auto-retrying (attempt ${nextAttempt}/${maxAttempts}) in ${Math.round(delayMs / 1000)}s after transient failure: ${lastResult.error}`);
-      try {
-        const tracker = this.getTracker(critterType);
-        await tracker.comment(task.id, `Auto-retrying (attempt ${nextAttempt}/${maxAttempts}) in ${Math.round(delayMs / 1000)}s...\nError: ${lastResult.error}`);
-      } catch { /* best effort */ }
+      if (!critterType.quietComments) {
+        try {
+          const tracker = this.getTracker(critterType);
+          await tracker.comment(task.id, `Auto-retrying (attempt ${nextAttempt}/${maxAttempts}) in ${Math.round(delayMs / 1000)}s...\nError: ${lastResult.error}`);
+        } catch { /* best effort */ }
+      }
 
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }

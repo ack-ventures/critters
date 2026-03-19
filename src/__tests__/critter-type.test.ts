@@ -379,6 +379,40 @@ describe("parseCritterTypes (multi-provider)", () => {
   });
 });
 
+describe("parseCritterType quietComments field", () => {
+  test("parses quietComments when set to true", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5 }],
+      outcomes: { success: { status: "Done" } },
+      quietComments: true,
+    };
+    const ct = parseCritterType("test", raw);
+    expect(ct.quietComments).toBe(true);
+  });
+
+  test("parses quietComments when set to false", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5 }],
+      outcomes: { success: { status: "Done" } },
+      quietComments: false,
+    };
+    const ct = parseCritterType("test", raw);
+    expect(ct.quietComments).toBe(false);
+  });
+
+  test("quietComments defaults to undefined when absent", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5 }],
+      outcomes: { success: { status: "Done" } },
+    };
+    const ct = parseCritterType("test", raw);
+    expect(ct.quietComments).toBeUndefined();
+  });
+});
+
 describe("parseCritterType provider field", () => {
   test("preserves provider field", () => {
     const raw = {

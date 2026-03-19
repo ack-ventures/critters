@@ -38,6 +38,7 @@ export interface CritterTypeConfig {
   strictMcpConfig?: boolean;
   costBudget?: number;
   cli?: string;
+  quietComments?: boolean;
 }
 
 /**
@@ -197,6 +198,7 @@ export function parseCritterType(name: string, raw: Record<string, unknown>): Cr
     strictMcpConfig: raw.strictMcpConfig as boolean | undefined,
     costBudget: raw.costBudget as number | undefined,
     cli: raw.cli as string | undefined,
+    quietComments: raw.quietComments as boolean | undefined,
   };
 
   validateCritterType(ct);
