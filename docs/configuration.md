@@ -153,6 +153,7 @@ critterTypes:
 | `enrichment` | No | — | `"extractPrUrl"` to extract PR URL from issue comments (for review types) |
 | `mcpConfig` | No | Global `mcpConfig` | Path(s) to MCP config JSON file(s) — fully replaces global |
 | `strictMcpConfig` | No | Global `strictMcpConfig` | Per-type override for strict MCP config mode |
+| `quietComments` | No | `false` | Suppress status/progress comments (pickup, phase stats, retry). Report and error comments still post |
 
 ### Phase config
 
