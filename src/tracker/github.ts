@@ -290,8 +290,8 @@ export class GitHubTracker implements IssueTracker {
         if (targetLabel && !labels.includes(targetLabel)) continue;
       }
 
-      // Parse blockers from body
-      const blockedBy = this.parseBlockers(issue.body ?? "", repo);
+      // Parse and resolve blockers from body
+      const blockedBy = await this.resolveBlockers(issue.body ?? "", repo);
 
       tasks.push({
         id: `${owner}/${repoName}/${issue.number}`,
@@ -311,8 +311,8 @@ export class GitHubTracker implements IssueTracker {
     return tasks;
   }
 
-  private parseBlockers(body: string, currentRepo: string): Array<{ identifier: string; status: string }> {
-    const blockers: Array<{ identifier: string; status: string }> = [];
+  private async resolveBlockers(body: string, currentRepo: string): Promise<Array<{ identifier: string; status: string }>> {
+    const refs: Array<{ owner: string; repo: string; number: number; identifier: string }> = [];
 
     for (const match of body.matchAll(BLOCKER_RE)) {
       const fullRef = match.groups?.fullRef;
@@ -320,9 +320,27 @@ export class GitHubTracker implements IssueTracker {
       const localNum = match.groups?.localNum;
 
       if (fullRef && extNum) {
-        blockers.push({ identifier: `${fullRef}#${extNum}`, status: "open" });
+        const [owner, repo] = fullRef.split("/");
+        refs.push({ owner, repo, number: parseInt(extNum, 10), identifier: `${fullRef}#${extNum}` });
       } else if (localNum) {
-        blockers.push({ identifier: `${currentRepo}#${localNum}`, status: "open" });
+        const [owner, repo] = currentRepo.split("/");
+        refs.push({ owner, repo, number: parseInt(localNum, 10), identifier: `${currentRepo}#${localNum}` });
+      }
+    }
+
+    const blockers: Array<{ identifier: string; status: string }> = [];
+    for (const ref of refs) {
+      try {
+        const resp = await this.request("GET", `/repos/${ref.owner}/${ref.repo}/issues/${ref.number}`);
+        const issue = (await resp.json()) as GitHubIssue;
+        // Only include unresolved blockers (matching Linear/Jira behavior)
+        if (issue.state !== "closed") {
+          const labels = (issue.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
+          blockers.push({ identifier: ref.identifier, status: this.resolveStatusName(issue.state, labels) });
+        }
+      } catch {
+        // If we can't fetch the blocker, assume it's still blocking (safe default)
+        blockers.push({ identifier: ref.identifier, status: "unknown" });
       }
     }
 
