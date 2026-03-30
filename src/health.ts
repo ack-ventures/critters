@@ -11,8 +11,8 @@ import type { ActiveCritterDetail } from "./types.js";
 import { getDisplayVersion } from "./updater.js";
 import { formatDuration } from "./utils.js";
 import { VERSION } from "./version.js";
-import type { JiraWebhookPayload, LinearWebhookPayload } from "./webhook.js";
-import { extractJiraWebhookTrigger, extractLinearWebhookTrigger, verifyJiraSignature, verifyLinearSignature } from "./webhook.js";
+import type { GitHubWebhookPayload, JiraWebhookPayload, LinearWebhookPayload } from "./webhook.js";
+import { extractGitHubWebhookTrigger, extractJiraWebhookTrigger, extractLinearWebhookTrigger, verifyGitHubSignature, verifyJiraSignature, verifyLinearSignature } from "./webhook.js";
 
 export interface HealthStatus {
   activeCritters: number;
@@ -71,6 +71,7 @@ export function startHealthServer(
   webhookConfig?: {
     linearWebhookSecret?: string;
     jiraWebhookSecret?: string;
+    githubWebhookSecret?: string;
     critterTypes: CritterTypeConfig[];
   },
 ): { stop: () => void } {
@@ -566,6 +567,43 @@ export function startHealthServer(
         log(`Webhook: Jira event received — ${payload.webhookEvent}`);
 
         const identifier = extractJiraWebhookTrigger(payload, webhookConfig.critterTypes);
+        if (identifier) {
+          log(`Webhook: Triggering poll for ${identifier}`);
+          triggers?.triggerPollForIssue?.(identifier).catch((err) => {
+            logError(`Webhook poll failed for ${identifier}: ${err}`);
+          });
+          return Response.json({ ok: true, triggered: true, identifier });
+        }
+
+        return Response.json({ ok: true, triggered: false });
+      }
+
+      if (url.pathname === "/webhook/github") {
+        if (req.method !== "POST") {
+          return new Response("Method Not Allowed", { status: 405 });
+        }
+        if (!webhookConfig?.githubWebhookSecret) {
+          return Response.json({ error: "GitHub webhooks not configured" }, { status: 404 });
+        }
+
+        const rawBody = await req.text();
+        const signatureHeader = req.headers.get("X-Hub-Signature-256") ?? "";
+
+        if (!verifyGitHubSignature(rawBody, signatureHeader, webhookConfig.githubWebhookSecret)) {
+          log("Webhook: GitHub signature verification failed");
+          return Response.json({ error: "Invalid signature" }, { status: 401 });
+        }
+
+        let payload: GitHubWebhookPayload;
+        try {
+          payload = JSON.parse(rawBody);
+        } catch {
+          return Response.json({ error: "Invalid JSON" }, { status: 400 });
+        }
+
+        log(`Webhook: GitHub event received — ${payload.action}`);
+
+        const identifier = extractGitHubWebhookTrigger(payload, webhookConfig.critterTypes);
         if (identifier) {
           log(`Webhook: Triggering poll for ${identifier}`);
           triggers?.triggerPollForIssue?.(identifier).catch((err) => {

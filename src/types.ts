@@ -75,6 +75,9 @@ export interface Config {
   jiraEmail?: string;
   jiraApiToken?: string;
   jiraStatusMap?: Record<string, string>;
+  githubToken?: string;
+  githubRepos?: string[];
+  githubWebhookSecret?: string;
   slackWebhookUrl?: string;
   slackBotToken?: string;
   slackChannel?: string;
@@ -98,7 +101,7 @@ export interface Config {
   strictMcpConfig?: boolean;
   linearWebhookSecret?: string;
   jiraWebhookSecret?: string;
-  provider: "linear" | "jira";
+  provider: "linear" | "jira" | "github";
   critterTypes: CritterTypeConfig[];
   cli: string;
 }

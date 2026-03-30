@@ -25,7 +25,13 @@ const PROMPT_FILES = [
 
 const DEFAULT_CONFIG = `provider: linear
 # provider: jira
+# provider: github
 # provider: [linear, jira]
+
+# GitHub repos to watch (required when provider is github)
+# githubRepos:
+#   - owner/repo1
+#   - owner/repo2
 
 pollIntervalSeconds: 120
 workDir: /tmp/critters-work

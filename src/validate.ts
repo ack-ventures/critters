@@ -271,6 +271,7 @@ export function validateConfigFile(configPath?: string): { errors: string[]; war
     jiraHost: process.env.JIRA_HOST || undefined,
     jiraEmail: process.env.JIRA_EMAIL || undefined,
     jiraApiToken: process.env.JIRA_API_TOKEN || undefined,
+    githubToken: process.env.GITHUB_TOKEN || undefined,
   });
   errors.push(...credErrors);
 

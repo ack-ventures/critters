@@ -500,6 +500,7 @@ async function main() {
   const webhookConfig = {
     linearWebhookSecret: config.linearWebhookSecret,
     jiraWebhookSecret: config.jiraWebhookSecret,
+    githubWebhookSecret: config.githubWebhookSecret,
     critterTypes: config.critterTypes,
   };
   let healthServer: { stop: () => void } | null = null;
@@ -654,11 +655,15 @@ async function main() {
     const trackersToInit: IssueTracker[] = [];
     for (const provider of neededProviders) {
       if (!newTrackers.has(provider)) {
-        const tracker = createTracker(
-          provider === "jira"
-            ? { type: "jira", host: newConfig.jiraHost, email: newConfig.jiraEmail, apiToken: newConfig.jiraApiToken, statusMap: newConfig.jiraStatusMap }
-            : { type: "linear", apiKey: newConfig.linearApiKey },
-        );
+        let providerConfig;
+        if (provider === "jira") {
+          providerConfig = { type: "jira" as const, host: newConfig.jiraHost, email: newConfig.jiraEmail, apiToken: newConfig.jiraApiToken, statusMap: newConfig.jiraStatusMap };
+        } else if (provider === "github") {
+          providerConfig = { type: "github" as const, apiToken: newConfig.githubToken, githubRepos: newConfig.githubRepos };
+        } else {
+          providerConfig = { type: "linear" as const, apiKey: newConfig.linearApiKey };
+        }
+        const tracker = createTracker(providerConfig);
         newTrackers.set(provider, tracker);
         trackersToInit.push(tracker);
       }
@@ -729,6 +734,7 @@ async function main() {
       healthContext.teamRepos = newConfig.teamRepos;
       webhookConfig.linearWebhookSecret = newConfig.linearWebhookSecret;
       webhookConfig.jiraWebhookSecret = newConfig.jiraWebhookSecret;
+      webhookConfig.githubWebhookSecret = newConfig.githubWebhookSecret;
       webhookConfig.critterTypes = newConfig.critterTypes;
       resetMetadataCache();
       // Hot-reload jsonLogs (CLI flag always takes precedence)
@@ -813,6 +819,13 @@ function createTrackers(config: Config): Map<string, IssueTracker> {
           email: config.jiraEmail,
           apiToken: config.jiraApiToken,
           statusMap: config.jiraStatusMap,
+        }));
+        break;
+      case "github":
+        trackers.set("github", createTracker({
+          type: "github",
+          apiToken: config.githubToken,
+          githubRepos: config.githubRepos,
         }));
         break;
     }
