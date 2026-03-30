@@ -8,6 +8,7 @@ import { getRecentMetrics } from "./metrics.js";
 import { getPrStatuses } from "./pr-status.js";
 import type { IssueTracker, TrackerTeam } from "./tracker/types.js";
 import type { ActiveCritterDetail } from "./types.js";
+import type { KillResult } from "./unified-spawner.js";
 import { getDisplayVersion } from "./updater.js";
 import { formatDuration } from "./utils.js";
 import { VERSION } from "./version.js";
@@ -58,6 +59,7 @@ export function startHealthServer(
     triggerRestart?: () => void;
     triggerStop?: () => void;
     triggerPollForIssue?: (identifier: string) => Promise<number>;
+    triggerKill?: (identifiers: string[]) => KillResult[];
   },
   workDir?: string,
   dashboardToken?: string,
@@ -216,6 +218,31 @@ export function startHealthServer(
         }, 250);
 
         return Response.json({ ok: true, message: "Stopping..." });
+      }
+
+      if (url.pathname === "/kill") {
+        if (req.method !== "POST") {
+          return new Response("Method Not Allowed", { status: 405 });
+        }
+        const authResp = checkAuth(req, dashboardToken);
+        if (authResp) return authResp;
+        if (!triggers?.triggerKill) {
+          return Response.json({ error: "Kill trigger not available" }, { status: 503 });
+        }
+
+        let body: { identifiers?: string[] };
+        try {
+          body = await req.json();
+        } catch {
+          return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+        }
+
+        if (!Array.isArray(body.identifiers) || body.identifiers.length === 0) {
+          return Response.json({ error: "identifiers must be a non-empty array" }, { status: 400 });
+        }
+
+        const results = triggers.triggerKill(body.identifiers);
+        return Response.json(results);
       }
 
       // API: GET /api/logs/<identifier> — returns processed log tail as plain text

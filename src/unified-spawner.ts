@@ -78,6 +78,7 @@ export class UnifiedSpawner {
   /** Per-type running counts */
   private running = new Map<string, number>();
   private activeProcesses = new Set<AbortController>();
+  private abortControllers = new Map<string, AbortController>();
   private stopped = false;
   private cleanupInterval: Timer | null = null;
   private activeWorkDirs = new Set<string>();
@@ -271,6 +272,7 @@ export class UnifiedSpawner {
     if (detail) detail.workDir = workDir;
     const abortController = new AbortController();
     this.activeProcesses.add(abortController);
+    this.abortControllers.set(task.id, abortController);
     const taskStart = Date.now();
 
     // Timeout for the entire task
@@ -621,11 +623,14 @@ export class UnifiedSpawner {
 
       return { success: true };
     } catch (err) {
+      const killedViaCli = !timedOut && !costBudgetExceeded && abortController.signal.aborted;
       const error = costBudgetExceeded
         ? `Cost budget exceeded ($${costBudgetSpent.toFixed(2)} spent, $${costBudgetLimit.toFixed(2)} budget)`
         : timedOut
           ? `Timed out after ${critterType.timeoutMinutes} minutes`
-          : (err instanceof Error ? err.message : String(err));
+          : killedViaCli
+            ? "Killed via CLI"
+            : (err instanceof Error ? err.message : String(err));
       logTaskError(task.identifier, error);
 
       // Auto-retry: skip heavy failure handling if this will be retried
@@ -765,6 +770,7 @@ export class UnifiedSpawner {
       clearTimeout(timeout);
       if (warningTimeout) clearTimeout(warningTimeout);
       this.activeProcesses.delete(abortController);
+      this.abortControllers.delete(task.id);
       this.activeWorkDirs.delete(workDir);
       this.activeCritterMap.delete(task.id);
       this.slackNotifier.clearThread(task.id);
@@ -1036,6 +1042,45 @@ export class UnifiedSpawner {
 
     return { uploaded, fallbackExcerpts: fallbackExcerpts.trim() };
   }
+
+  killByIdentifiers(identifiers: string[]): KillResult[] {
+    const requested = new Set(identifiers);
+    const results: KillResult[] = [];
+
+    for (const [taskId, detail] of this.activeCritterMap.entries()) {
+      if (requested.has(detail.identifier)) {
+        const ac = this.abortControllers.get(taskId);
+        if (ac) {
+          ac.abort();
+          results.push({
+            identifier: detail.identifier,
+            critterType: detail.critterType ?? "unknown",
+            startedAt: detail.startedAt,
+          });
+        }
+      }
+    }
+
+    return results;
+  }
+
+  killByType(typeName: string): KillResult[] {
+    const matching = Array.from(this.activeCritterMap.values())
+      .filter((d) => d.critterType === typeName)
+      .map((d) => d.identifier);
+    return this.killByIdentifiers(matching);
+  }
+
+  killAll(): KillResult[] {
+    const all = Array.from(this.activeCritterMap.values()).map((d) => d.identifier);
+    return this.killByIdentifiers(all);
+  }
+}
+
+export interface KillResult {
+  identifier: string;
+  critterType: string;
+  startedAt: number;
 }
 
 export async function salvagePartialProgress(
