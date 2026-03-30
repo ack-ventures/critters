@@ -2,13 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { createHmac } from "node:crypto";
 import type { CritterTypeConfig } from "../critter-type.js";
 import {
-  extractGitHubWebhookTrigger,
   extractJiraWebhookTrigger,
   extractLinearWebhookTrigger,
-  type GitHubWebhookPayload,
   type JiraWebhookPayload,
   type LinearWebhookPayload,
-  verifyGitHubSignature,
   verifyJiraSignature,
   verifyLinearSignature,
 } from "../webhook.js";
@@ -302,100 +299,5 @@ describe("extractJiraWebhookTrigger", () => {
       },
     };
     expect(extractJiraWebhookTrigger(payload, types)).toBeNull();
-  });
-});
-
-// ── GitHub signature verification ───────────────────────────────────────────
-
-describe("verifyGitHubSignature", () => {
-  const secret = "github-secret";
-
-  test("accepts valid signature with sha256= prefix", () => {
-    const body = '{"action":"opened"}';
-    const sig = `sha256=${sign(body, secret)}`;
-    expect(verifyGitHubSignature(body, sig, secret)).toBe(true);
-  });
-
-  test("accepts valid signature without prefix", () => {
-    const body = '{"action":"opened"}';
-    const sig = sign(body, secret);
-    expect(verifyGitHubSignature(body, sig, secret)).toBe(true);
-  });
-
-  test("rejects invalid signature", () => {
-    const body = '{"action":"opened"}';
-    expect(verifyGitHubSignature(body, "sha256=bad", secret)).toBe(false);
-  });
-
-  test("rejects tampered body", () => {
-    const body = '{"action":"opened"}';
-    const sig = `sha256=${sign(body, secret)}`;
-    expect(verifyGitHubSignature(`${body}x`, sig, secret)).toBe(false);
-  });
-});
-
-// ── GitHub payload parsing ──────────────────────────────────────────────────
-
-describe("extractGitHubWebhookTrigger", () => {
-  const types = [makeCritterType("Critter")];
-
-  test("issue opened with trigger label returns identifier", () => {
-    const payload: GitHubWebhookPayload = {
-      action: "opened",
-      issue: {
-        number: 42,
-        labels: [{ name: "Critter" }],
-        state: "open",
-      },
-      repository: { full_name: "acme/widgets" },
-    };
-    expect(extractGitHubWebhookTrigger(payload, types)).toBe("acme/widgets#42");
-  });
-
-  test("label added returns identifier", () => {
-    const payload: GitHubWebhookPayload = {
-      action: "labeled",
-      issue: {
-        number: 43,
-        labels: [{ name: "Critter" }, { name: "bug" }],
-        state: "open",
-      },
-      repository: { full_name: "acme/widgets" },
-    };
-    expect(extractGitHubWebhookTrigger(payload, types)).toBe("acme/widgets#43");
-  });
-
-  test("non-matching label returns null", () => {
-    const payload: GitHubWebhookPayload = {
-      action: "opened",
-      issue: {
-        number: 44,
-        labels: [{ name: "Bug" }],
-        state: "open",
-      },
-      repository: { full_name: "acme/widgets" },
-    };
-    expect(extractGitHubWebhookTrigger(payload, types)).toBeNull();
-  });
-
-  test("closed action returns null", () => {
-    const payload: GitHubWebhookPayload = {
-      action: "closed",
-      issue: {
-        number: 45,
-        labels: [{ name: "Critter" }],
-        state: "closed",
-      },
-      repository: { full_name: "acme/widgets" },
-    };
-    expect(extractGitHubWebhookTrigger(payload, types)).toBeNull();
-  });
-
-  test("no issue in payload returns null", () => {
-    const payload: GitHubWebhookPayload = {
-      action: "opened",
-      repository: { full_name: "acme/widgets" },
-    };
-    expect(extractGitHubWebhookTrigger(payload, types)).toBeNull();
   });
 });

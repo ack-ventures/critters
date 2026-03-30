@@ -115,7 +115,7 @@ describe("startAutoUpdater", () => {
       TEST_VERSION,
     );
     expect(handle).not.toBeNull();
-    handle?.updateConfig({ autoUpdate: { enabled: false, intervalMinutes: 60 } } as any);
+    handle!.updateConfig({ autoUpdate: { enabled: false, intervalMinutes: 60 } } as any);
     expect(logCalls.some((l) => l.includes("disabled by config reload"))).toBe(true);
     handle?.stop();
   });
@@ -130,7 +130,7 @@ describe("startAutoUpdater", () => {
       TEST_VERSION,
     );
     expect(handle).not.toBeNull();
-    handle?.updateConfig({ autoUpdate: { enabled: true, intervalMinutes: 120 } } as any);
+    handle!.updateConfig({ autoUpdate: { enabled: true, intervalMinutes: 120 } } as any);
     expect(logCalls.some((l) => l.includes("interval changed to 120 minutes"))).toBe(true);
     handle?.stop();
   });
