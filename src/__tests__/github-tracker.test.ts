@@ -169,7 +169,8 @@ describe("GitHubTracker", () => {
       expect(call[0]).toContain("assignee=testuser");
     });
 
-    test("parses blockers from issue body", async () => {
+    test("resolves blockers and excludes closed ones", async () => {
+      // findIssues response (repo 1)
       mockFetchFn.mockResolvedValueOnce(
         mockResponse([
           {
@@ -184,15 +185,83 @@ describe("GitHubTracker", () => {
           },
         ]),
       );
+      // Resolve blocker #10 — still open
+      mockFetchFn.mockResolvedValueOnce(
+        mockResponse({ id: 10, number: 10, state: "open", labels: [], title: "Blocker 10", body: "" }),
+      );
+      // Resolve blocker other/repo#5 — closed
+      mockFetchFn.mockResolvedValueOnce(
+        mockResponse({ id: 5, number: 5, state: "closed", labels: [], title: "Blocker 5", body: "" }),
+      );
+      // findIssues response (repo 2)
       mockFetchFn.mockResolvedValueOnce(mockResponse([]));
 
       const tasks = await tracker.findIssues({ label: "Critter", status: "Todo" });
 
       expect(tasks).toHaveLength(1);
       expect(tasks[0].blockedBy).toEqual([
-        { identifier: "acme/widgets#10", status: "open" },
-        { identifier: "other/repo#5", status: "open" },
+        { identifier: "acme/widgets#10", status: "Todo" },
       ]);
+    });
+
+    test("includes all blockers when all are open", async () => {
+      mockFetchFn.mockResolvedValueOnce(
+        mockResponse([
+          {
+            id: 1001,
+            number: 42,
+            title: "Blocked task",
+            body: "This is blocked by #10 and blocked by other/repo#5",
+            state: "open",
+            html_url: "https://github.com/acme/widgets/issues/42",
+            updated_at: "2026-03-28T12:00:00Z",
+            labels: [{ name: "Critter" }],
+          },
+        ]),
+      );
+      // Both blockers open
+      mockFetchFn.mockResolvedValueOnce(
+        mockResponse({ id: 10, number: 10, state: "open", labels: [], title: "Blocker 10", body: "" }),
+      );
+      mockFetchFn.mockResolvedValueOnce(
+        mockResponse({ id: 5, number: 5, state: "open", labels: [{ name: "critter:in-progress" }], title: "Blocker 5", body: "" }),
+      );
+      mockFetchFn.mockResolvedValueOnce(mockResponse([]));
+
+      const tasks = await tracker.findIssues({ label: "Critter", status: "Todo" });
+
+      expect(tasks).toHaveLength(1);
+      expect(tasks[0].blockedBy).toEqual([
+        { identifier: "acme/widgets#10", status: "Todo" },
+        { identifier: "other/repo#5", status: "In Progress" },
+      ]);
+    });
+
+    test("no blockedBy when all blockers are closed", async () => {
+      mockFetchFn.mockResolvedValueOnce(
+        mockResponse([
+          {
+            id: 1001,
+            number: 42,
+            title: "Unblocked task",
+            body: "This is blocked by #10",
+            state: "open",
+            html_url: "https://github.com/acme/widgets/issues/42",
+            updated_at: "2026-03-28T12:00:00Z",
+            labels: [{ name: "Critter" }],
+          },
+        ]),
+      );
+      // Blocker is closed
+      mockFetchFn.mockResolvedValueOnce(
+        mockResponse({ id: 10, number: 10, state: "closed", labels: [], title: "Blocker 10", body: "" }),
+      );
+      mockFetchFn.mockResolvedValueOnce(mockResponse([]));
+
+      const tasks = await tracker.findIssues({ label: "Critter", status: "Todo" });
+
+      expect(tasks).toHaveLength(1);
+      expect(tasks[0].blockedBy).toBeUndefined();
     });
   });
 
