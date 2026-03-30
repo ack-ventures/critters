@@ -310,9 +310,8 @@ export class GitHubTracker implements IssueTracker {
 
   private parseBlockers(body: string, currentRepo: string): Array<{ identifier: string; status: string }> {
     const blockers: Array<{ identifier: string; status: string }> = [];
-    let match: RegExpExecArray | null;
 
-    while ((match = BLOCKER_RE.exec(body)) !== null) {
+    for (const match of body.matchAll(BLOCKER_RE)) {
       const fullRef = match.groups?.fullRef;
       const extNum = match.groups?.extNum;
       const localNum = match.groups?.localNum;

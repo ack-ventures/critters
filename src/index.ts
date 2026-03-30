@@ -655,15 +655,13 @@ async function main() {
     const trackersToInit: IssueTracker[] = [];
     for (const provider of neededProviders) {
       if (!newTrackers.has(provider)) {
-        let providerConfig;
-        if (provider === "jira") {
-          providerConfig = { type: "jira" as const, host: newConfig.jiraHost, email: newConfig.jiraEmail, apiToken: newConfig.jiraApiToken, statusMap: newConfig.jiraStatusMap };
-        } else if (provider === "github") {
-          providerConfig = { type: "github" as const, apiToken: newConfig.githubToken, githubRepos: newConfig.githubRepos };
-        } else {
-          providerConfig = { type: "linear" as const, apiKey: newConfig.linearApiKey };
-        }
-        const tracker = createTracker(providerConfig);
+        const tracker = createTracker(
+          provider === "jira"
+            ? { type: "jira" as const, host: newConfig.jiraHost, email: newConfig.jiraEmail, apiToken: newConfig.jiraApiToken, statusMap: newConfig.jiraStatusMap }
+            : provider === "github"
+              ? { type: "github" as const, apiToken: newConfig.githubToken, githubRepos: newConfig.githubRepos }
+              : { type: "linear" as const, apiKey: newConfig.linearApiKey },
+        );
         newTrackers.set(provider, tracker);
         trackersToInit.push(tracker);
       }
