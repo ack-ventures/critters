@@ -49,6 +49,7 @@ Commands:
   (none)      Start the daemon
   retry       Retry a failed critter (or --all-failed for bulk retry)
   stop        Stop the daemon gracefully
+  kill        Kill a running critter (or --all, --type <name>)
   restart     Restart the daemon
   kickoff     Trigger an immediate poll cycle
   status      Show daemon status
@@ -96,6 +97,10 @@ Retry flags:
   --since <duration>       Filter to issues updated within duration (e.g. 24h, 3d, 1w)
   --type <name>            Filter to a specific critter type
   --dry-run                Show what would be retried without making changes
+
+Kill flags:
+  --all            Kill all running critters
+  --type <name>    Kill all critters of a specific type
 
 Tail flags:
   --type NAME  Filter to a specific critter type`);
@@ -177,6 +182,12 @@ if (subcommand === "restart") {
 if (subcommand === "stop") {
   const { runStop } = await import("./cli-stop.js");
   await runStop();
+  process.exit(0);
+}
+
+if (subcommand === "kill") {
+  const { runKill } = await import("./cli-kill.js");
+  await runKill(Bun.argv.slice(3));
   process.exit(0);
 }
 
@@ -588,6 +599,7 @@ async function main() {
       triggerRestart: () => restartDaemon(),
       triggerStop: () => process.kill(process.pid, "SIGTERM"),
       triggerPollForIssue: (identifier: string) => watcher.pollForIssue(identifier),
+      triggerKill: (identifiers: string[]) => spawner.killByIdentifiers(identifiers),
     }, config.workDir, config.dashboardToken, healthContext, webhookConfig);
   }
 
