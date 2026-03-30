@@ -1,6 +1,6 @@
 # Critters
 
-Critters is a TypeScript daemon that polls issue trackers ([Linear](https://linear.app), [Jira](https://www.atlassian.com/software/jira), and [GitHub Issues](https://github.com)) for issues labeled "Critter", spawns [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI instances to plan and implement the work, and opens draft pull requests for human review. It runs on [Bun](https://bun.sh) and orchestrates everything through `tmux` panes.
+Critters is a TypeScript daemon that polls issue trackers ([Linear](https://linear.app) and [Jira](https://www.atlassian.com/software/jira)) for issues labeled "Critter", spawns [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI instances to plan and implement the work, and opens draft pull requests for human review. It runs on [Bun](https://bun.sh) and orchestrates everything through `tmux` panes.
 
 Inspired by [Stripe's Minions](https://stripe.dev/blog/minions-stripes-one-shot-end-to-end-coding-agents).
 
@@ -26,7 +26,6 @@ This downloads the latest binary, installs it to your PATH, and walks you throug
 - `critters list-types` — show configured critter types
 - `critters init-repo` — scaffold `.critters.yaml` in the current repo
 - `critters prompt-help` — launch Claude to help design critter types and prompts
-- `critters kill <identifier>` — kill a running critter (`--all`, `--type <name>`)
 - `critters clean` — clean up stale work directories (`--all`, `--dry-run`, `--branches`, `--panes`)
 - `critters release-notes` — show release notes for recent versions
 - `critters validate` — validate config file without starting daemon
@@ -66,7 +65,7 @@ bun install
 
 # Configure
 cp .env.example .env
-# Edit .env and set LINEAR_API_KEY (for Linear), JIRA_HOST, JIRA_EMAIL, JIRA_API_TOKEN (for Jira), and/or GITHUB_TOKEN (for GitHub)
+# Edit .env and set LINEAR_API_KEY (for Linear) and/or JIRA_HOST, JIRA_EMAIL, JIRA_API_TOKEN (for Jira)
 # Optionally set SLACK_WEBHOOK_URL for notifications, or SLACK_BOT_TOKEN + SLACK_CHANNEL for threaded notifications
 
 # Optionally tweak critters.config.yaml
@@ -82,7 +81,7 @@ bun start
 # Clone and configure
 git clone https://github.com/ack-ventures/critters && cd critters
 cp .env.example .env
-# Edit .env — set ANTHROPIC_API_KEY and LINEAR_API_KEY (and/or JIRA_* vars, and/or GITHUB_TOKEN)
+# Edit .env — set ANTHROPIC_API_KEY and LINEAR_API_KEY (and/or JIRA_* vars)
 
 # Start
 docker compose up -d
@@ -106,7 +105,7 @@ For the pre-built image, replace `build: .` with `image: ghcr.io/ack-ventures/cr
 
 ## How it works
 
-1. **Watcher** polls your issue tracker (Linear, Jira, and/or GitHub) every 120 seconds for issues with the "Critter" label in "Todo" status.
+1. **Watcher** polls your issue tracker (Linear and/or Jira) every 120 seconds for issues with the "Critter" label in "Todo" status.
 2. **Spawner** shallow-clones the target repo into a temp directory and creates a feature branch.
 3. **Phase 1 (Planning):** A Claude instance explores the codebase and writes an implementation plan.
 4. **Phase 2 (Execution):** A second Claude instance implements the plan, commits, pushes, and opens a draft PR.
@@ -118,7 +117,7 @@ Settings live in `critters.config.yaml`:
 
 | Field | Default | Description |
 |---|---|---|
-| `provider` | "linear" | Default issue tracker: `"linear"`, `"jira"`, or `"github"` |
+| `provider` | "linear" | Default issue tracker: `"linear"` or `"jira"` |
 | `pollIntervalSeconds` | 120 | How often to poll for issues |
 | `concurrency` | 2 | Max parallel critters |
 | `timeoutMinutes` | 30 | Total timeout per task (both phases) |
@@ -141,7 +140,6 @@ Settings live in `critters.config.yaml`:
 | `cleanupStaleMinutes` | timeout + 30 | Age threshold (minutes) for considering work directories stale |
 | `minDiskSpaceMb` | 1024 | Minimum free disk space (MB) required before cloning a repo |
 | `jiraStatusMap` | {} | Map critter status names to Jira workflow status names |
-| `githubRepos` | [] | List of GitHub repos to poll in `owner/repo` format (required when provider is `"github"`) |
 | `hooks` | {} | Shell commands run on lifecycle events (see below) |
 | `costAlertThreshold` | — | Cost (USD) per task that triggers a Slack alert |
 | `costBudget` | — | Cost (USD) per task that triggers a kill |
@@ -159,7 +157,6 @@ Settings live in `critters.config.yaml`:
 | `tunnel` | — | Tunnel config: `{ enabled, auth, domain }` for ngrok remote access |
 | `linearWebhookSecret` | — | Linear webhook signing secret (env: `LINEAR_WEBHOOK_SECRET`) |
 | `jiraWebhookSecret` | — | Jira webhook secret (env: `JIRA_WEBHOOK_SECRET`) |
-| `githubWebhookSecret` | — | GitHub webhook secret (env: `GITHUB_WEBHOOK_SECRET`) |
 
 Per-repo tool overrides merge with the defaults:
 
@@ -204,21 +201,20 @@ The daemon runs an HTTP server on port 3847 (configurable via `healthPort`, set 
 | `/api/logs/<id>` | GET | Processed log tail for a critter run |
 | `/webhook/linear` | POST | Linear webhook endpoint (requires `linearWebhookSecret`) |
 | `/webhook/jira` | POST | Jira webhook endpoint (requires `jiraWebhookSecret`) |
-| `/webhook/github` | POST | GitHub webhook endpoint (requires `githubWebhookSecret`) |
 
 When `dashboardToken` is configured, POST endpoints require a bearer token. `critters status` queries the health endpoint to display a quick summary in the terminal.
 
 ### Webhooks
 
-Webhook endpoints provide near-instant issue pickup instead of waiting for the next poll. Webhooks are additive — polling continues as the fallback. Set `LINEAR_WEBHOOK_SECRET`, `JIRA_WEBHOOK_SECRET`, and/or `GITHUB_WEBHOOK_SECRET` to enable. The daemon must be reachable from the internet — use the `tunnel` config for ngrok or a reverse proxy.
+Webhook endpoints provide near-instant issue pickup instead of waiting for the next poll. Webhooks are additive — polling continues as the fallback. Set `LINEAR_WEBHOOK_SECRET` and/or `JIRA_WEBHOOK_SECRET` to enable. The daemon must be reachable from the internet — use the `tunnel` config for ngrok or a reverse proxy.
 
 ## Creating tickets
 
-Works with Linear, Jira, and GitHub Issues. For a critter to pick up an issue, it needs:
+Works with both Linear and Jira. For a critter to pick up an issue, it needs:
 
 - **Label:** "Critter" (exact match, configurable)
-- **Status:** "Todo" (Linear), the mapped status via `jiraStatusMap` (Jira), or open with no status labels (GitHub)
-- **Description:** must include `repo: git@github.com:org/repo.git` on its own line (for Linear/Jira, unless a project or team mapping exists in the config; auto-derived for GitHub Issues)
+- **Status:** "Todo" (Linear) or the mapped status via `jiraStatusMap` (Jira)
+- **Description:** must include `repo: git@github.com:org/repo.git` on its own line (unless a project or team mapping exists in the config)
 
 Optionally, assign the issue to the relevant project and include implementation guidance in the description -- the critter reads it as its task spec.
 
@@ -271,9 +267,9 @@ Critters is a general-purpose agent orchestrator — the built-in create and rev
 
 See [CLAUDE.md](CLAUDE.md#use-cases) for complete config examples.
 
-## Multi-provider (Linear, Jira, and GitHub)
+## Multi-provider (Linear + Jira)
 
-A single daemon can poll Linear, Jira, and/or GitHub. Set the default provider at the top level, then use `provider` on each critter type to override:
+A single daemon can poll both Linear and Jira. Set the default provider at the top level, then use `provider` on each critter type to override:
 
 ```yaml
 provider: linear  # default
@@ -308,9 +304,9 @@ critterTypes:
     timeoutMinutes: 30
 ```
 
-`provider` accepts a single value (`"linear"`, `"jira"`, `"github"`) or an array (`[linear, jira, github]`). When an array is used, the type is expanded internally so each provider is polled independently — no need to duplicate config.
+`provider` accepts a single value (`"linear"`, `"jira"`) or an array (`[linear, jira]`). When an array is used, the type is expanded internally so each provider is polled independently — no need to duplicate config.
 
-Only the env vars for providers you actually use are required. A Linear-only config doesn't need `JIRA_*` or `GITHUB_TOKEN` vars.
+Only the env vars for providers you actually use are required. A Linear-only config doesn't need `JIRA_*` vars.
 
 See [CLAUDE.md](CLAUDE.md) for full multi-provider docs, Jira differences, and more config examples.
 

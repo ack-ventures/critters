@@ -1,4 +1,3 @@
-import { GitHubTracker } from "./github.js";
 import { JiraTracker } from "./jira.js";
 import { LinearTracker } from "./linear.js";
 import type { IssueTracker, ProviderConfig } from "./types.js";
@@ -19,16 +18,7 @@ export function createTracker(providerConfig: ProviderConfig): IssueTracker {
       }
       return new JiraTracker(providerConfig.host, providerConfig.email, providerConfig.apiToken, providerConfig.statusMap);
     }
-    case "github": {
-      if (!providerConfig.apiToken) {
-        throw new Error("GitHub tracker requires GITHUB_TOKEN");
-      }
-      if (!providerConfig.githubRepos || providerConfig.githubRepos.length === 0) {
-        throw new Error("GitHub tracker requires at least one repo in githubRepos config");
-      }
-      return new GitHubTracker(providerConfig.apiToken, providerConfig.githubRepos, providerConfig.statusMap);
-    }
     default:
-      throw new Error(`Unknown tracker provider: ${(providerConfig as ProviderConfig).type}`);
+      throw new Error(`Unknown tracker provider: ${providerConfig.type}`);
   }
 }

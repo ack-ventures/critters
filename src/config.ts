@@ -80,15 +80,12 @@ export function loadConfig(configPath?: string): Config {
   const jiraHost = process.env.JIRA_HOST || undefined;
   const jiraEmail = process.env.JIRA_EMAIL || undefined;
   const jiraApiToken = process.env.JIRA_API_TOKEN || undefined;
-  const githubToken = process.env.GITHUB_TOKEN || undefined;
   const slackWebhookUrl = process.env.SLACK_WEBHOOK_URL || undefined;
   const slackBotToken = process.env.SLACK_BOT_TOKEN || undefined;
   const slackChannel = process.env.SLACK_CHANNEL || undefined;
   const dashboardToken = (yaml.dashboardToken as string) ?? process.env.DASHBOARD_TOKEN ?? undefined;
   const linearWebhookSecret = (yaml.linearWebhookSecret as string) ?? process.env.LINEAR_WEBHOOK_SECRET ?? undefined;
   const jiraWebhookSecret = (yaml.jiraWebhookSecret as string) ?? process.env.JIRA_WEBHOOK_SECRET ?? undefined;
-  const githubWebhookSecret = (yaml.githubWebhookSecret as string) ?? process.env.GITHUB_WEBHOOK_SECRET ?? undefined;
-  const githubRepos = (yaml.githubRepos as string[]) ?? undefined;
 
   const repos: Record<string, RepoConfig> = {};
   if (yaml.repos && typeof yaml.repos === "object") {
@@ -145,7 +142,7 @@ export function loadConfig(configPath?: string): Config {
       }
     : undefined;
 
-  const provider = ((yaml.provider as string) ?? "linear") as "linear" | "jira" | "github";
+  const provider = ((yaml.provider as string) ?? "linear") as "linear" | "jira";
 
   const config: Config = {
     pollIntervalSeconds: (yaml.pollIntervalSeconds as number) ?? 30,
@@ -182,9 +179,6 @@ export function loadConfig(configPath?: string): Config {
     jiraEmail,
     jiraApiToken,
     jiraStatusMap: (yaml.jiraStatusMap as Record<string, string>) ?? undefined,
-    githubToken,
-    githubRepos,
-    githubWebhookSecret,
     slackWebhookUrl,
     slackBotToken,
     slackChannel,
@@ -302,7 +296,7 @@ export function validateRepoUrls(repos: Record<string, { url: string }>, teamRep
 export function checkProviderCredentials(
   critterTypes: CritterTypeConfig[],
   defaultProvider: string,
-  env: { linearApiKey?: string; jiraHost?: string; jiraEmail?: string; jiraApiToken?: string; githubToken?: string },
+  env: { linearApiKey?: string; jiraHost?: string; jiraEmail?: string; jiraApiToken?: string },
 ): string[] {
   const errors: string[] = [];
   const neededProviders = new Set<string>();
@@ -322,10 +316,6 @@ export function checkProviderCredentials(
     if (missing.length > 0) {
       errors.push(`${missing.join(", ")} not set in environment or .env (required by at least one critter type using the Jira provider)`);
     }
-  }
-
-  if (neededProviders.has("github") && !env.githubToken) {
-    errors.push("GITHUB_TOKEN not set in environment or .env (required by at least one critter type using the GitHub provider)");
   }
 
   return errors;
@@ -430,7 +420,6 @@ function validateConfig(config: Config): void {
     jiraHost: config.jiraHost,
     jiraEmail: config.jiraEmail,
     jiraApiToken: config.jiraApiToken,
-    githubToken: config.githubToken,
   });
   if (credErrors.length > 0) {
     throw new Error(credErrors[0]);

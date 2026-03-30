@@ -149,13 +149,11 @@ export class UnifiedWatcher {
           this.config,
         );
 
-        if (!resolved && !task.repoUrl) {
+        if (!resolved) {
           log(`[DRY RUN] [${critterType.name}] Skipping ${task.identifier} "${task.title}" — no repo URL found`);
           skipped++;
           continue;
         }
-        const dryRunRepoUrl = resolved?.url ?? task.repoUrl;
-        const dryRunRepoSource = resolved?.source ?? "from tracker";
 
         // Check blockers (for create-like types)
         if (task.blockedBy && task.blockedBy.length > 0) {
@@ -163,7 +161,7 @@ export class UnifiedWatcher {
             .map((b) => `${b.identifier} (${b.status})`)
             .join(", ");
           log(`[DRY RUN] [${critterType.name}] Would pick up ${task.identifier} "${task.title}"`);
-          log(`  repo: ${dryRunRepoUrl} (${dryRunRepoSource})`);
+          log(`  repo: ${resolved.url} (${resolved.source})`);
           log(`  blocked by: ${blockerList}`);
           blocked++;
           continue;
@@ -186,11 +184,11 @@ export class UnifiedWatcher {
             continue;
           }
           log(`[DRY RUN] [${critterType.name}] Would pick up ${task.identifier} "${task.title}"`);
-          log(`  repo: ${dryRunRepoUrl} (${dryRunRepoSource})`);
+          log(`  repo: ${resolved.url} (${resolved.source})`);
           log(`  PR: ${prInfo.prUrl}`);
         } else {
           log(`[DRY RUN] [${critterType.name}] Would pick up ${task.identifier} "${task.title}"`);
-          log(`  repo: ${dryRunRepoUrl} (${dryRunRepoSource})`);
+          log(`  repo: ${resolved.url} (${resolved.source})`);
           log(`  blocked by: (none)`);
         }
         wouldPickUp++;
@@ -268,7 +266,7 @@ export class UnifiedWatcher {
       teamId: task.groupId,
       projectId: task.projectId,
     };
-    const repoUrl = resolveRepoUrl(critterTask, this.config) || task.repoUrl;
+    const repoUrl = resolveRepoUrl(critterTask, this.config);
     if (!repoUrl) {
       logTask(task.identifier, "Could not determine repository — skipping");
       try {
