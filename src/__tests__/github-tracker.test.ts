@@ -337,8 +337,20 @@ describe("GitHubTracker", () => {
   });
 
   describe("ensureStatus", () => {
-    test("is a no-op for GitHub", async () => {
+    test("creates the corresponding status label in all repos", async () => {
+      mockFetchFn.mockResolvedValue(mockResponse({}));
+
       await tracker.ensureStatus("acme/widgets", "Critter Failed");
+
+      expect(mockFetchFn).toHaveBeenCalledTimes(2);
+      const calls = mockFetchFn.mock.calls as Array<[string, RequestInit]>;
+      expect(calls[0][0]).toContain("/repos/acme/widgets/labels");
+      expect(calls[1][0]).toContain("/repos/acme/api/labels");
+      expect(JSON.parse(calls[0][1].body as string)).toMatchObject({ name: "critter:failed" });
+    });
+
+    test("is a no-op for unknown status names", async () => {
+      await tracker.ensureStatus("acme/widgets", "SomeUnknownStatus");
       expect(mockFetchFn).not.toHaveBeenCalled();
     });
   });
