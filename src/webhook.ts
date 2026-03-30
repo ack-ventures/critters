@@ -118,3 +118,45 @@ export function extractJiraWebhookTrigger(
 
   return null;
 }
+
+// ── GitHub Webhooks ─────────────────────────────────────────────────────────
+
+export interface GitHubWebhookPayload {
+  action: string;
+  issue?: {
+    number: number;
+    labels: Array<{ name: string }>;
+    state: string;
+  };
+  repository: {
+    full_name: string;
+  };
+}
+
+export function verifyGitHubSignature(body: string, signatureHeader: string, secret: string): boolean {
+  const expected = createHmac("sha256", secret).update(body).digest("hex");
+  const provided = signatureHeader.replace(/^sha256=/, "");
+  if (expected.length !== provided.length) return false;
+  return timingSafeEqual(Buffer.from(expected), Buffer.from(provided));
+}
+
+export function extractGitHubWebhookTrigger(
+  payload: GitHubWebhookPayload,
+  critterTypes: CritterTypeConfig[],
+): string | null {
+  if (!payload.issue) return null;
+
+  const labels = payload.issue.labels.map((l) => l.name);
+  const labelSet = new Set(labels);
+  const triggerLabels = new Set(critterTypes.map((ct) => ct.trigger.label));
+
+  if (payload.action === "opened" || payload.action === "labeled") {
+    for (const label of labelSet) {
+      if (triggerLabels.has(label)) {
+        return `${payload.repository.full_name}#${payload.issue.number}`;
+      }
+    }
+  }
+
+  return null;
+}

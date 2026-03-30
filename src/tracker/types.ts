@@ -72,10 +72,11 @@ export interface TrackerTask {
 }
 
 export interface ProviderConfig {
-  type: "linear" | "jira";
+  type: "linear" | "jira" | "github";
   apiKey?: string;
   host?: string;
   email?: string;
   apiToken?: string;
   statusMap?: Record<string, string>;
+  githubRepos?: string[];
 }

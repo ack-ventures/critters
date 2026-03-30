@@ -32,14 +32,13 @@ export async function runRetry(identifier: string, force: boolean): Promise<void
   // Find which provider handles this identifier's trigger label.
   // For retry, we need to figure out which tracker to use. We'll try the default
   // provider first since we don't know which critter type this issue belongs to.
-  const tracker = createTracker({
-    type: config.provider,
-    apiKey: config.linearApiKey,
-    host: config.jiraHost,
-    email: config.jiraEmail,
-    apiToken: config.jiraApiToken,
-    statusMap: config.jiraStatusMap,
-  });
+  const tracker = createTracker(
+    config.provider === "github"
+      ? { type: "github", apiToken: config.githubToken, githubRepos: config.githubRepos }
+      : config.provider === "jira"
+        ? { type: "jira", host: config.jiraHost, email: config.jiraEmail, apiToken: config.jiraApiToken, statusMap: config.jiraStatusMap }
+        : { type: "linear", apiKey: config.linearApiKey },
+  );
 
   const issue = await tracker.findIssueByIdentifier(identifier);
   if (!issue) {
@@ -154,14 +153,13 @@ export async function runRetryAllFailed(options: {
   for (const ct of typesToQuery) {
     const provider = ct.provider ?? config.provider;
     if (!trackerMap.has(provider)) {
-      trackerMap.set(provider, createTracker({
-        type: provider,
-        apiKey: config.linearApiKey,
-        host: config.jiraHost,
-        email: config.jiraEmail,
-        apiToken: config.jiraApiToken,
-        statusMap: config.jiraStatusMap,
-      }));
+      trackerMap.set(provider, createTracker(
+        provider === "github"
+          ? { type: "github", apiToken: config.githubToken, githubRepos: config.githubRepos }
+          : provider === "jira"
+            ? { type: "jira", host: config.jiraHost, email: config.jiraEmail, apiToken: config.jiraApiToken, statusMap: config.jiraStatusMap }
+            : { type: "linear", apiKey: config.linearApiKey },
+      ));
     }
   }
 

@@ -33,7 +33,7 @@ export interface CritterTypeConfig {
   concurrency: number;
   timeoutMinutes: number;
   enrichment?: string;
-  provider?: "linear" | "jira";
+  provider?: "linear" | "jira" | "github";
   mcpConfig?: string | string[];
   strictMcpConfig?: boolean;
   costBudget?: number;
@@ -193,7 +193,7 @@ export function parseCritterType(name: string, raw: Record<string, unknown>): Cr
     concurrency: (raw.concurrency as number) ?? 2,
     timeoutMinutes: (raw.timeoutMinutes as number) ?? 30,
     enrichment: raw.enrichment as string | undefined,
-    provider: raw.provider as "linear" | "jira" | undefined,
+    provider: raw.provider as "linear" | "jira" | "github" | undefined,
     mcpConfig: raw.mcpConfig as string | string[] | undefined,
     strictMcpConfig: raw.strictMcpConfig as boolean | undefined,
     costBudget: raw.costBudget as number | undefined,
@@ -216,7 +216,7 @@ export function parseCritterTypes(name: string, raw: Record<string, unknown>): C
   if (Array.isArray(providerRaw) && providerRaw.length > 1) {
     const results: CritterTypeConfig[] = [];
     for (const p of providerRaw) {
-      const provider = p as "linear" | "jira";
+      const provider = p as "linear" | "jira" | "github";
       const ct = parseCritterType(`${name}:${provider}`, { ...raw, provider });
       results.push(ct);
     }

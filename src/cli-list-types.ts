@@ -31,7 +31,7 @@ function loadCritterTypes(configPath?: string): { types: CritterTypeConfig[]; de
   const raw = readFileSync(resolved, "utf-8");
   const yaml = parseYaml(raw) as Record<string, unknown>;
 
-  const defaultProvider = ((yaml.provider as string) ?? "linear") as "linear" | "jira";
+  const defaultProvider = ((yaml.provider as string) ?? "linear") as "linear" | "jira" | "github";
 
   const rawTypes = yaml.critterTypes as Record<string, Record<string, unknown>> | undefined;
 

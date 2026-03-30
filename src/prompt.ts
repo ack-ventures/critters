@@ -30,6 +30,7 @@ export function cleanLinearMarkdown(text: string): string {
  */
 export function cleanDescription(text: string, provider?: string): string {
   if (provider === "jira") return text;
+  if (provider === "github") return text;
   return cleanLinearMarkdown(text);
 }
 
