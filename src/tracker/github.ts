@@ -175,8 +175,11 @@ export class GitHubTracker implements IssueTracker {
     return null;
   }
 
-  async ensureStatus(_groupId: string, _name: string): Promise<void> {
-    // GitHub doesn't have workflow states — statuses are tracked via labels
+  async ensureStatus(_groupId: string, name: string): Promise<void> {
+    const label = this.statusLabelMap[name];
+    if (label) {
+      await this.ensureLabel(label);
+    }
   }
 
   async ensureLabel(name: string): Promise<void> {
