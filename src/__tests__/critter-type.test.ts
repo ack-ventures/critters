@@ -117,6 +117,16 @@ describe("synthesizeDefaultTypes", () => {
     expect(types[1].phases[0].prompt).toBe("builtin:review");
     expect(types[1].phases[0].tools).toBe("review");
   });
+
+  test("create type has claimStatus 'In Progress'", () => {
+    const types = synthesizeDefaultTypes(baseConfig());
+    expect(types[0].claimStatus).toBe("In Progress");
+  });
+
+  test("review type does not have claimStatus", () => {
+    const types = synthesizeDefaultTypes(baseConfig());
+    expect(types[1].claimStatus).toBeUndefined();
+  });
 });
 
 describe("parseCritterType", () => {
@@ -274,6 +284,27 @@ describe("parseCritterType", () => {
     };
     const ct = parseCritterType("test", raw);
     expect(ct.enrichment).toBe("extractPrUrl");
+  });
+
+  test("parses claimStatus when set", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5 }],
+      outcomes: { success: { status: "Done" } },
+      claimStatus: "Reviewing",
+    };
+    const ct = parseCritterType("test", raw);
+    expect(ct.claimStatus).toBe("Reviewing");
+  });
+
+  test("claimStatus defaults to undefined when absent", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5 }],
+      outcomes: { success: { status: "Done" } },
+    };
+    const ct = parseCritterType("test", raw);
+    expect(ct.claimStatus).toBeUndefined();
   });
 });
 

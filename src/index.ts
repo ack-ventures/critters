@@ -865,6 +865,7 @@ async function ensureLabelsAndStatuses(config: Config, trackers: Map<string, Iss
         for (const outcome of Object.values(ct.outcomes)) {
           if (outcome.status) statusesToEnsure.add(outcome.status);
         }
+        if (ct.claimStatus) statusesToEnsure.add(ct.claimStatus);
       }
 
       const standardStatuses = new Set(["Done", "In Progress", "In Review", "Todo", "Backlog", "Canceled", "Cancelled"]);

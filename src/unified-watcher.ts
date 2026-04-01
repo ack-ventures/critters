@@ -24,8 +24,8 @@ export class UnifiedWatcher {
   private config: Config;
   private trackers: Map<string, IssueTracker>;
   private spawner: UnifiedSpawner | null;
-  /** Per-type dedup: Map<typeName, Set<taskId>> */
-  private activeIssueIds = new Map<string, Set<string>>();
+  /** Global dedup: prevents the same issue from being dispatched by multiple critter types */
+  private activeIssueIds = new Set<string>();
   private stopped = false;
   private polling = false;
   private onPoll?: () => void;
@@ -239,16 +239,15 @@ export class UnifiedWatcher {
   }
 
   private async tryDispatch(task: TrackerTask, critterType: CritterTypeConfig, tracker: IssueTracker): Promise<boolean> {
-    // Per-type dedup
-    if (!this.activeIssueIds.has(critterType.name)) {
-      this.activeIssueIds.set(critterType.name, new Set());
-    }
-    const activeIds = this.activeIssueIds.get(critterType.name)!;
+    // Global dedup: prevent the same issue from being dispatched by any critter type
+    if (this.activeIssueIds.has(task.id)) return false;
 
-    if (activeIds.has(task.id)) return false;
+    // Claim the slot immediately to prevent concurrent dispatch
+    this.activeIssueIds.add(task.id);
 
     // Check blockers
     if (task.blockedBy && task.blockedBy.length > 0) {
+      this.activeIssueIds.delete(task.id);
       const blockerList = task.blockedBy
         .map((b) => `${b.identifier} (${b.status})`)
         .join(", ");
@@ -277,6 +276,7 @@ export class UnifiedWatcher {
       } catch {
         // Best effort
       }
+      this.activeIssueIds.delete(task.id);
       return false;
     }
     task.repoUrl = repoUrl;
@@ -291,22 +291,24 @@ export class UnifiedWatcher {
     // Per-type enrichment
     if (critterType.enrichment === "extractPrUrl") {
       const enriched = await this.enrichReviewTask(task, tracker);
-      if (!enriched) return false;
+      if (!enriched) {
+        this.activeIssueIds.delete(task.id);
+        return false;
+      }
     }
 
-    activeIds.add(task.id);
     logTask(task.identifier, `Picked up [${critterType.name}]: ${task.title}`);
 
     // Dispatch
     this.spawner?.dispatch(task, critterType).then((result) => {
-      activeIds.delete(task.id);
+      this.activeIssueIds.delete(task.id);
       if (result.success) {
         logTask(task.identifier, "Completed successfully");
       } else {
         logTask(task.identifier, `Failed: ${result.error}`);
       }
     }).catch((err) => {
-      activeIds.delete(task.id);
+      this.activeIssueIds.delete(task.id);
       logTaskError(task.identifier, `Dispatch failed: ${err}`);
     });
 
