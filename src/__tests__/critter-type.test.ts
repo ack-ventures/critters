@@ -297,14 +297,14 @@ describe("parseCritterType", () => {
     expect(ct.claimStatus).toBe("Reviewing");
   });
 
-  test("claimStatus defaults to undefined when absent", () => {
+  test("claimStatus defaults to 'In Progress' when absent", () => {
     const raw = {
       trigger: { label: "X", status: "Y" },
       phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5 }],
       outcomes: { success: { status: "Done" } },
     };
     const ct = parseCritterType("test", raw);
-    expect(ct.claimStatus).toBeUndefined();
+    expect(ct.claimStatus).toBe("In Progress");
   });
 });
 
