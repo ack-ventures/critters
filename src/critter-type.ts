@@ -201,7 +201,7 @@ export function parseCritterType(name: string, raw: Record<string, unknown>): Cr
     costBudget: raw.costBudget as number | undefined,
     cli: raw.cli as string | undefined,
     quietComments: raw.quietComments as boolean | undefined,
-    claimStatus: raw.claimStatus as string | undefined,
+    claimStatus: (raw.claimStatus as string | undefined) ?? "In Progress",
   };
 
   validateCritterType(ct);
