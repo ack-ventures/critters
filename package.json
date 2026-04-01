@@ -1,6 +1,6 @@
 {
   "name": "critters",
-  "version": "1.4.4",
+  "version": "1.5.0",
   "description": "TypeScript daemon that watches Linear for issues and spawns Claude Code CLI instances to produce draft PRs",
   "license": "MIT",
   "repository": {
