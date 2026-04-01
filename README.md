@@ -251,7 +251,7 @@ Prompt files support `{{identifier}}`, `{{title}}`, `{{description}}`, and other
 
 **Quiet mode:** Add `quietComments: true` to suppress status/progress comments (e.g., "picking up task...", "phase completed in..."). Report content and error comments are still posted.
 
-**Claim status:** Add `claimStatus: "In Progress"` to immediately transition an issue out of its trigger status when a critter picks it up. This prevents duplicate dispatch when an issue matches multiple critter types or across process restarts. The default `create` type sets this to `"In Progress"` automatically; custom types default to no claim status.
+**Claim status:** Critter types with `trigger.statusType: "unstarted"` automatically transition issues to "In Progress" when picked up, preventing duplicate dispatch. Override with `claimStatus: "Reviewing"` (or any status), or set `claimStatus: null` to disable. Types without `statusType: "unstarted"` (e.g., review types) don't claim by default.
 
 **Model guidance:** Use sonnet or opus for custom types. Haiku often ignores tool-use instructions and produces shallow output.
 
