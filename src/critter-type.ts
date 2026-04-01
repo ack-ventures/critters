@@ -39,6 +39,7 @@ export interface CritterTypeConfig {
   costBudget?: number;
   cli?: string;
   quietComments?: boolean;
+  claimStatus?: string;
 }
 
 /**
@@ -76,6 +77,7 @@ export function synthesizeDefaultTypes(config: Config): CritterTypeConfig[] {
     },
     concurrency: config.concurrency,
     timeoutMinutes: config.timeoutMinutes,
+    claimStatus: "In Progress",
   };
 
   const reviewType: CritterTypeConfig = {
@@ -199,6 +201,7 @@ export function parseCritterType(name: string, raw: Record<string, unknown>): Cr
     costBudget: raw.costBudget as number | undefined,
     cli: raw.cli as string | undefined,
     quietComments: raw.quietComments as boolean | undefined,
+    claimStatus: raw.claimStatus as string | undefined,
   };
 
   validateCritterType(ct);

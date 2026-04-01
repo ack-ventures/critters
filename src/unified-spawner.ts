@@ -313,9 +313,13 @@ export class UnifiedSpawner {
         mkdirSync(this.config.workDir, { recursive: true });
       }
 
-      // Handle status update for create-type tasks
+      // Claim status: move issue out of trigger status immediately to prevent duplicate dispatch
+      if (critterType.claimStatus) {
+        await tracker.updateStatus(task.id, critterType.claimStatus, task.groupId, task.identifier);
+      }
+
+      // Post picking-up comments
       if (critterType.name === "create") {
-        await tracker.updateStatus(task.id, "In Progress", task.groupId, task.identifier);
         if (!critterType.quietComments) {
           await tracker.comment(task.id, "Cloning repo...");
         }
@@ -324,7 +328,6 @@ export class UnifiedSpawner {
           await tracker.comment(task.id, `Review critter (${critterType.phases[0].model}) picking up PR...`);
         }
       } else {
-        // Custom type — update to first phase status or just comment
         if (!critterType.quietComments) {
           await tracker.comment(task.id, `Critter [${critterType.name}] (${critterType.phases[0].model}) picking up task...`);
         }
