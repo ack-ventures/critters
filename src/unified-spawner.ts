@@ -1,7 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { readPartialCost, resolveMcpConfig } from "./claude.js";
 import { getCliAdapter } from "./cli/registry.js";
-import type { CritterTypeConfig } from "./critter-type.js";
+import { isReviewCritterType, type CritterTypeConfig } from "./critter-type.js";
 import {
   autoCommit,
   cleanupStaleWorkDirs,
@@ -261,7 +261,7 @@ export class UnifiedSpawner {
 
   private async runTask(task: TrackerTask, critterType: CritterTypeConfig): Promise<TaskResult> {
     const tracker = this.getTracker(critterType);
-    const isReviewType = critterType.name === "review";
+    const isReviewType = isReviewCritterType(critterType);
     const workDirPrefix = isReviewType ? "review-" : "";
     const branch = critterType.repo.branch
       ? branchName(task.identifier, task.title, this.config.branchPrefix)
@@ -556,9 +556,24 @@ export class UnifiedSpawner {
           }
         }
 
-        // Handle review phase outcomes inline
-        if (phase.prompt === "builtin:review") {
-          return this.handleReviewOutcome(task, critterType, phaseResult.data, phaseResult.spawn, workDir, taskStart, tracker);
+        // Handle review phase outcomes inline (builtin or custom review types)
+        if (isReviewType) {
+          const data = phaseResult.data;
+          // GenericPhaseRunner doesn't set reviewDecision; infer from PR state
+          if (data.reviewDecision == null) {
+            if (task.prNumber) {
+              const prState = await runCommand("gh",
+                ["pr", "view", String(task.prNumber), "--json", "state", "--jq", ".state"],
+                { cwd: workDir });
+              data.reviewDecision = prState.stdout.trim() === "MERGED" ? "merged" : "needs_changes";
+              if (data.reviewDecision === "needs_changes") {
+                data.reviewReason = "See review comments on the PR";
+              }
+            } else {
+              throw new Error("Review type has no PR number — cannot determine review outcome");
+            }
+          }
+          return this.handleReviewOutcome(task, critterType, data, phaseResult.spawn, workDir, taskStart, tracker);
         }
 
         // Handle execution phase outcomes inline

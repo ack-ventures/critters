@@ -109,6 +109,10 @@ export function synthesizeDefaultTypes(config: Config): CritterTypeConfig[] {
   return [createType, reviewType];
 }
 
+export function isReviewCritterType(ct: CritterTypeConfig): boolean {
+  return "merged" in ct.outcomes || "needsChanges" in ct.outcomes;
+}
+
 export function validateCritterType(ct: CritterTypeConfig): void {
   if (!ct.name) {
     throw new Error("Critter type must have a name");

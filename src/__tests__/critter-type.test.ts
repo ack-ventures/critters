@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   type CritterTypeConfig,
+  isReviewCritterType,
   parseCritterType,
   parseCritterTypes,
   synthesizeDefaultTypes,
@@ -370,6 +371,36 @@ describe("validateCritterType", () => {
     expect(() => validateCritterType(validType({
       phases: [{ name: "", prompt: "f.md", model: "opus", maxTurns: 10, tools: "default" }],
     }))).toThrow("invalid phase config");
+  });
+});
+
+describe("isReviewCritterType", () => {
+  function makeType(outcomes: Record<string, { status?: string }>): CritterTypeConfig {
+    return {
+      name: "test",
+      trigger: { label: "X", status: "Y" },
+      repo: { clone: true },
+      phases: [{ name: "p", prompt: "f.md", model: "opus", maxTurns: 10, tools: "default" }],
+      outcomes,
+      concurrency: 2,
+      timeoutMinutes: 30,
+    };
+  }
+
+  test("detects type with merged and needsChanges outcomes", () => {
+    expect(isReviewCritterType(makeType({ merged: { status: "Done" }, needsChanges: { status: "Fix" }, failure: { status: "Failed" } }))).toBe(true);
+  });
+
+  test("detects type with only merged outcome", () => {
+    expect(isReviewCritterType(makeType({ merged: { status: "Done" }, failure: { status: "Failed" } }))).toBe(true);
+  });
+
+  test("detects type with only needsChanges outcome", () => {
+    expect(isReviewCritterType(makeType({ needsChanges: { status: "Fix" }, failure: { status: "Failed" } }))).toBe(true);
+  });
+
+  test("rejects type with only success/failure outcomes", () => {
+    expect(isReviewCritterType(makeType({ success: { status: "Done" }, failure: { status: "Failed" } }))).toBe(false);
   });
 });
 
