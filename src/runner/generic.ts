@@ -15,63 +15,10 @@ This file will be automatically posted to the issue when you're done.
 Do not skip this step — if you don't write the file, your work won't be visible.`;
 
 /**
- * Extract the final response text from a stream-json output file.
- * Used as a fallback when Claude doesn't write .critter-report.md.
- */
-function extractResponseFromLog(jsonLogFile: string): string | null {
-  if (!existsSync(jsonLogFile)) return null;
-
-  try {
-    const content = readFileSync(jsonLogFile, "utf-8");
-    const lines = content.trim().split("\n").filter(Boolean);
-
-    // Look for the result event (contains the final response text)
-    for (let i = lines.length - 1; i >= 0; i--) {
-      try {
-        const obj = JSON.parse(lines[i]);
-        if (obj.type === "result" && typeof obj.result === "string" && obj.result.length > 50) {
-          return obj.result;
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    // Fallback: collect text from all assistant messages
-    const textParts: string[] = [];
-    for (const line of lines) {
-      try {
-        const obj = JSON.parse(line);
-        if (obj.type !== "assistant") continue;
-        if (typeof obj.message?.content === "string") {
-          textParts.push(obj.message.content);
-        } else if (Array.isArray(obj.message?.content)) {
-          const text = obj.message.content
-            .filter((b: { type: string }) => b.type === "text")
-            .map((b: { text: string }) => b.text)
-            .join("\n");
-          if (text) textParts.push(text);
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    if (textParts.length > 0) {
-      return textParts.join("\n\n");
-    }
-  } catch {
-    // File read or parse error
-  }
-
-  return null;
-}
-
-/**
  * Generic phase runner for user-defined custom critter types.
  *
  * Automatically:
- * - Appends a standard instruction telling Claude to write `.critter-report.md`
+ * - Appends a standard instruction telling the active CLI to write `.critter-report.md`
  * - Ensures `Write` is in the allowed tools list
  * - Reads the report file after completion and returns it as `responseText`
  * - Falls back to extracting from stream-json output if no report file
@@ -92,10 +39,10 @@ export class GenericPhaseRunner implements PhaseRunner {
       prompt += skillContent;
     }
 
-    // Append report instruction so Claude knows to write the file
+    // Append report instruction so the CLI knows to write the file
     prompt += REPORT_INSTRUCTION;
 
-    // Ensure Write is available so Claude can create the report file
+    // Ensure Write is available so the CLI can create the report file
     const allowedTools = resolveTools(phase.tools, config, task, repoConfig);
     if (!allowedTools.includes("Write")) {
       allowedTools.push("Write");
@@ -114,7 +61,7 @@ export class GenericPhaseRunner implements PhaseRunner {
       throw new Error(`Phase ${phase.name} failed (exit ${spawn.exitCode}):\n${errTail}`);
     }
 
-    // Read the report file that Claude was instructed to write
+    // Read the report file that the CLI was instructed to write
     const reportPath = `${workDir}/${REPORT_FILE}`;
     let responseText: string | null = null;
     if (existsSync(reportPath)) {
@@ -127,9 +74,10 @@ export class GenericPhaseRunner implements PhaseRunner {
       }
     } else {
       // Fallback: extract from stream-json output
-      logTaskWarn(task.identifier, `No ${REPORT_FILE} found — extracting from Claude output`);
+      logTaskWarn(task.identifier, `No ${REPORT_FILE} found — extracting from CLI output`);
       const jsonLogFile = `${workDir}/.critter-output-${phase.name}.json`;
-      responseText = extractResponseFromLog(jsonLogFile);
+      const lastMessageFile = `${workDir}/.critter-last-message-${phase.name}.txt`;
+      responseText = ctx.cliAdapter.extractFinalResponse(jsonLogFile, lastMessageFile);
       if (responseText) {
         logTask(task.identifier, `Extracted response from output log (${responseText.length} chars)`);
       } else {

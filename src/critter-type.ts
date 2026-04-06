@@ -16,6 +16,7 @@ export interface PhaseConfig {
   skills?: string[];
   comment?: boolean;
   cli?: string;
+  sandbox?: string;
 }
 
 export interface OutcomeConfig {
@@ -173,6 +174,7 @@ export function parseCritterType(name: string, raw: Record<string, unknown>): Cr
     skills: p.skills as string[] | undefined,
     comment: p.comment as boolean | undefined,
     cli: p.cli as string | undefined,
+    sandbox: p.sandbox as string | undefined,
   }));
 
   const ct: CritterTypeConfig = {

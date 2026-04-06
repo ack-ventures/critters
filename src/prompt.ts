@@ -109,6 +109,23 @@ export function getExecutionAllowedTools(config: Config, task: CritterTask, repo
   return [...new Set(tools)];
 }
 
+function buildToolRestrictionGuidance(
+  bashCommands: string[],
+  adapter?: CliAdapter,
+): string {
+  const commandList = bashCommands.join(", ");
+  if (adapter?.supportsToolRestrictions() === false) {
+    return `## Tool Restrictions
+Requested command policy: stay within these commands unless the task cannot proceed: ${commandList}.
+The active CLI cannot enforce the full Critters allowlist mechanically, so treat this as a hard workflow rule and rely on the sandbox for the actual execution boundary.
+If a command is blocked or requires approval, do NOT retry it repeatedly — move on and find an alternative approach or skip that step.`;
+  }
+
+  return `## Tool Restrictions
+You have a limited set of tools. Only these Bash commands are available: ${commandList}.
+If a command is blocked or requires approval, do NOT retry it — move on and find an alternative approach or skip that step.`;
+}
+
 export function buildPlanningPrompt(task: CritterTask, adapter?: CliAdapter, repoConfig?: PerRepoConfig | null): string {
   const cleanedDescription = stripBranchLine(stripRepoLine(task.description));
 
@@ -172,9 +189,7 @@ Your plan should include:
 - Any dependencies or setup needed
 - Testing approach
 
-## Tool Restrictions
-You have a limited set of tools. Only these Bash commands are available: git, ls, cat, npm, node.
-If a command is blocked or requires approval, do NOT retry it — move on and find an alternative approach or skip that step.
+${buildToolRestrictionGuidance(["git", "ls", "cat", "npm", "node"], adapter)}
 Never run \`bun run src/index.ts\`, \`bun start\`, or any command that starts the critters daemon — it will destroy your working directory.
 
 ${adapter?.promptGuidance() ?? "## Reading Large Files\nThe Read tool supports `offset` and `limit` parameters \u2014 use these to read large files in chunks rather than attempting to read the entire file at once."}`;
@@ -246,12 +261,11 @@ The file should be a checklist mirroring the plan's sections, e.g.:
 \`\`\`
 ${(options?.commitPlans ?? true) ? "Commit the checkpoint file alongside your code changes (include it in the same commit, not separately)." : "Do NOT commit files under `critters/` — they are internal working files, not part of the target repo."}
 
-## Tool Restrictions
-You have a limited set of tools. Only these Bash commands are available: ${bashTools.join(", ")}.
-Commands like chmod, bunx, perl, python3, curl, and others are NOT available.
+${buildToolRestrictionGuidance(bashTools, adapter)}
+Commands like chmod, bunx, perl, python3, curl, and others are outside the requested policy.
 Use "bun x" instead of "bunx" to run package binaries.
 ${getOsGuidance()}
-If a command is blocked or requires approval, do NOT retry it — move on and find an alternative approach or skip that step. Never retry a blocked command more than once.
+Never retry a blocked command more than once.
 
 ## Important: Do NOT run the project entry point
 Never run \`bun run src/index.ts\`, \`bun start\`, or any command that starts the critters daemon. This will launch a second daemon instance that cleans up work directories — including yours — and destroy your in-progress work. Use \`bun x tsc --noEmit\` for type-checking instead.`;

@@ -275,6 +275,27 @@ critterTypes:
     expect(result.warnings.some((w) => w.includes("Low maxTurns (3)") && w.includes("phase 'run'"))).toBe(true);
   });
 
+  test("invalid phase sandbox collects error", () => {
+    const path = writeYaml(`
+defaultAllowedTools:
+  - "Read"
+critterTypes:
+  review:
+    trigger: { label: "Critter Review", status: "In Review" }
+    phases:
+      - name: review
+        prompt: builtin:review
+        model: gpt-5.4
+        maxTurns: 10
+        sandbox: not-a-sandbox
+    outcomes:
+      success: { status: "Done" }
+      failure: { status: "Critter Failed" }
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors.some((e) => e.includes('Invalid sandbox "not-a-sandbox"'))).toBe(true);
+  });
+
   test("warnings don't cause errors and summary includes warning count", () => {
     const path = writeYaml(`
 concurrency: 8

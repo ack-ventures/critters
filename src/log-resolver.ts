@@ -1,4 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { getCliAdapter, getCliAdapterByBinary } from "./cli/registry.js";
+import type { CliAdapter } from "./cli/types.js";
 
 const PHASE_FILE_MAP: Record<string, string> = {
   planning: "plan",
@@ -116,6 +118,29 @@ export function resolveAllPhases(dir: string): Array<{ phase: string; logFile: s
   return results;
 }
 
+export function resolveCliAdapterForLog(logFile: string): CliAdapter {
+  const match = logFile.match(/\.critter-output-(.+)\.json$/);
+  if (!match) {
+    return getCliAdapter("claude");
+  }
+
+  const metaFile = logFile.replace(`.critter-output-${match[1]}.json`, `.critter-meta-${match[1]}.json`);
+  if (!existsSync(metaFile)) {
+    return getCliAdapter("claude");
+  }
+
+  try {
+    const meta = JSON.parse(readFileSync(metaFile, "utf-8")) as { cli?: string };
+    if (meta.cli) {
+      return getCliAdapterByBinary(meta.cli);
+    }
+  } catch {
+    // Fall through to default
+  }
+
+  return getCliAdapter("claude");
+}
+
 export function formatToolUse(block: { name: string; input?: Record<string, unknown> }): string {
   const name = block.name;
   const input = block.input ?? {};
@@ -200,37 +225,18 @@ export function extractPhaseResult(logFile: string): {
   outputTokens?: number;
   cacheReadTokens?: number;
 } | null {
-  try {
-    const content = readFileSync(logFile, "utf-8");
-    const allLines = content.split("\n").filter((l) => l.trim());
-    // Scan last ~10 lines for the result event
-    const tail = allLines.slice(-10);
-    for (const line of tail) {
-      try {
-        const obj = JSON.parse(line);
-        if (obj.type === "result") {
-          let inputTokens = 0;
-          let outputTokens = 0;
-          let cacheReadTokens = 0;
-          if (obj.modelUsage && typeof obj.modelUsage === "object") {
-            for (const model of Object.values(obj.modelUsage) as Record<string, number>[]) {
-              inputTokens += (model.inputTokens ?? 0) + (model.cacheCreationInputTokens ?? 0);
-              outputTokens += model.outputTokens ?? 0;
-              cacheReadTokens += model.cacheReadInputTokens ?? 0;
-            }
-          }
-          return {
-            costUsd: typeof obj.total_cost_usd === "number" ? obj.total_cost_usd : undefined,
-            numTurns: typeof obj.num_turns === "number" ? obj.num_turns : undefined,
-            inputTokens: inputTokens || undefined,
-            outputTokens: outputTokens || undefined,
-            cacheReadTokens: cacheReadTokens || undefined,
-          };
-        }
-      } catch {}
-    }
-  } catch {}
-  return null;
+  const adapter = resolveCliAdapterForLog(logFile);
+  const parsed = adapter.parseOutputLog(logFile, "log-resolver");
+  if (
+    parsed.costUsd == null &&
+    parsed.numTurns == null &&
+    parsed.inputTokens == null &&
+    parsed.outputTokens == null &&
+    parsed.cacheReadTokens == null
+  ) {
+    return null;
+  }
+  return parsed;
 }
 
 export function readLogTail(logFile: string, lines: number): string {
@@ -238,39 +244,27 @@ export function readLogTail(logFile: string, lines: number): string {
     const content = readFileSync(logFile, "utf-8");
     const allLines = content.split("\n").filter((l) => l.trim());
     const tail = allLines.slice(-lines);
-    return extractReadableContent(tail);
+    return extractReadableContent(tail, resolveCliAdapterForLog(logFile));
   } catch {
     return "";
   }
 }
 
-function extractReadableContent(jsonLines: string[]): string {
+export function renderReadableLines(jsonLines: string[], adapter: CliAdapter): string[] {
   const output: string[] = [];
 
   for (const line of jsonLines) {
-    try {
-      const obj = JSON.parse(line);
-      if (obj.type === "assistant" && obj.message?.content) {
-        for (const block of obj.message.content) {
-          if (block.type === "text" && block.text) {
-            output.push(stripAnsi(block.text));
-          } else if (block.type === "tool_use") {
-            output.push(formatToolUse(block));
-          }
-        }
-      } else if (obj.type === "result" && obj.result) {
-        output.push(stripAnsi(`[Result: cost=$${(obj.cost_usd ?? 0).toFixed(2)}, turns=${obj.num_turns ?? "?"}]`));
-      } else if (obj.type === "user") {
-        const userLine = formatUserEvent(obj);
-        if (userLine) {
-          output.push(userLine);
-        }
-      }
-    } catch {
-      // Not valid JSON, include raw line stripped of ANSI
+    const rendered = adapter.renderOutputLine(line);
+    if (rendered.length > 0) {
+      output.push(...rendered.map((entry) => stripAnsi(entry)));
+    } else if (!line.trim().startsWith("{")) {
       output.push(stripAnsi(line));
     }
   }
 
-  return output.join("\n");
+  return output;
+}
+
+function extractReadableContent(jsonLines: string[], adapter: CliAdapter): string {
+  return renderReadableLines(jsonLines, adapter).join("\n");
 }

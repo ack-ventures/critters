@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { CodexAdapter } from "../cli/codex.js";
 import {
   buildExecutionPrompt,
   buildPlanningPrompt,
   parseBaseBranch,
   readCustomPrompt,
 } from "../prompt.js";
+import { buildPromptVars } from "../prompt-template.js";
 import type { CritterTask } from "../types.js";
 
 describe("readCustomPrompt", () => {
@@ -161,6 +163,12 @@ describe("buildExecutionPrompt with custom content", () => {
     expect(prompt).toContain("Add login button");
     expect(prompt).toContain("git, gh, bun");
   });
+
+  test("uses capability-based tool wording for adapters without strict allowlists", () => {
+    const prompt = buildExecutionPrompt(task, allowedTools, { cliAdapter: new CodexAdapter() });
+    expect(prompt).toContain("Requested command policy");
+    expect(prompt).toContain("cannot enforce the full Critters allowlist mechanically");
+  });
 });
 
 describe("buildExecutionPrompt checkpointing", () => {
@@ -221,6 +229,28 @@ describe("buildExecutionPrompt checkpointing", () => {
     const prompt = buildExecutionPrompt(customTask, allowedTools);
     expect(prompt).toContain("critters/plans/XYZ-99.checkpoint.md");
     expect(prompt).not.toContain("ACK-42");
+  });
+});
+
+describe("buildPromptVars", () => {
+  test("includes PR context when available", () => {
+    const vars = buildPromptVars({
+      id: "task-1",
+      identifier: "ACK-42",
+      title: "Add login button",
+      description: "Add a login button",
+      repoUrl: "git@github.com:org/repo.git",
+      group: "Core",
+      groupId: "team-1",
+      prUrl: "https://github.com/org/repo/pull/42",
+      prNumber: 42,
+      prBranch: "critter/ACK-42-add-login-button",
+      labels: [],
+    }, "/tmp/workdir", "critter/ACK-42-add-login-button");
+
+    expect(vars.prUrl).toBe("https://github.com/org/repo/pull/42");
+    expect(vars.prNumber).toBe("42");
+    expect(vars.prBranch).toBe("critter/ACK-42-add-login-button");
   });
 });
 

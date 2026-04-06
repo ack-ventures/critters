@@ -220,6 +220,12 @@ export function validateConfigFile(configPath?: string): { errors: string[]; war
   // Validate skill file paths
   for (const ct of critterTypes) {
     for (const phase of ct.phases) {
+      if (
+        phase.sandbox !== undefined &&
+        !["read-only", "workspace-write", "danger-full-access"].includes(phase.sandbox)
+      ) {
+        errors.push(`Invalid sandbox "${phase.sandbox}" (type "${ct.name}", phase "${phase.name}")`);
+      }
       if (phase.skills) {
         for (const skillRef of phase.skills) {
           const filePath = skillRef.startsWith("~")

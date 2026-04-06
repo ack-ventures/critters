@@ -24,6 +24,10 @@ export function buildReviewPrompt(task: ReviewTask, adapter?: CliAdapter | PerRe
 
   const cleanedDescription = stripBranchLine(stripRepoLine(task.description));
   const readingGuidance = actualAdapter?.promptGuidance() ?? "## Reading Large Files\nThe Read tool supports `offset` and `limit` parameters \u2014 use these to read large files in chunks rather than attempting to read the entire file at once.";
+  const strictToolRestrictions = actualAdapter?.supportsToolRestrictions() !== false;
+  const toolRestrictionGuidance = strictToolRestrictions
+    ? "Only the requested read-only review tools and Bash commands are available."
+    : "Stay within the requested read-only review workflow and commands even if the CLI sandbox technically allows more.";
 
   let prompt = `You are reviewing a pull request for issue ${task.identifier}: ${task.title}
 
@@ -75,12 +79,15 @@ Compare the PR against the original task description above. Check:
 **If the PR needs changes** (real issues, not just style nits):
 1. Write clear, actionable feedback explaining what needs to change and why
 2. Run: \`gh pr review ${task.prNumber} --request-changes -b "<your feedback>"\`
-3. Output: REVIEW_RESULT:NEEDS_CHANGES:<one-line summary>
+3. Only after the PR feedback has been posted successfully, output: \`REVIEW_RESULT:NEEDS_CHANGES:<one-line summary>\`
 
 ## Rules
 - You MUST output exactly one REVIEW_RESULT line as the very last thing you write
 - Format: REVIEW_RESULT:MERGED or REVIEW_RESULT:NEEDS_CHANGES:<reason>
 - Do NOT modify any files or create commits — you are a reviewer only
+- ${toolRestrictionGuidance}
+- Do not output \`REVIEW_RESULT:NEEDS_CHANGES\` unless you have successfully created a GitHub PR review or PR comment with the actionable feedback.
+- Treat issue-specific planning artifacts under \`critters/plans/\` as intentional and acceptable to commit when they correspond to the current issue. Do not request changes solely because those plan files are present.
 - Be pragmatic: minor style nits or trivial improvements should NOT block a merge. Only request changes for genuine correctness, security, or completeness issues.
 - If the PR is mostly good with a minor issue, approve it with a note rather than requesting changes.
 

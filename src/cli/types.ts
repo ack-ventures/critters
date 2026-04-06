@@ -14,10 +14,12 @@ export interface ToolNameMap {
 export interface SpawnOptions {
   prompt: string;
   promptFile: string;
+  lastMessageFile: string;
   allowedTools: string[];
   workDir: string;
   maxTurns: number;
   model: string;
+  sandbox?: string;
   mcpConfig?: string[];
   strictMcpConfig?: boolean;
 }
@@ -45,6 +47,11 @@ export interface ParsedOutputLine {
   numTurns?: number;
 }
 
+export interface ReviewDecision {
+  decision: "merged" | "needs_changes" | "unknown";
+  reason?: string;
+}
+
 export interface CliAdapter {
   readonly name: string;
   readonly binary: string;
@@ -57,8 +64,11 @@ export interface CliAdapter {
   parseOutputLog(logFile: string, identifier: string): ParsedOutput;
   readPartialCost(logFile: string): number;
   extractTextFromLog(logFile: string): string[];
+  extractFinalResponse(logFile: string, lastMessageFile: string): string | null;
+  extractReviewDecision(logFile: string, lastMessageFile: string): ReviewDecision;
   formatToolUse(block: { name: string; input?: Record<string, unknown> }): string;
   parseOutputLine(line: string): ParsedOutputLine | null;
+  renderOutputLine(line: string): string[];
 
   // Configuration mapping
   getDisplayFilter(): string | null;

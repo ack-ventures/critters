@@ -37,6 +37,7 @@ async function spawnInTmux(
   allowedTools: string[],
   workDir: string,
   maxTurns: number,
+  sandbox: string | undefined,
   identifier: string,
   title: string,
   phase: string,
@@ -53,6 +54,7 @@ async function spawnInTmux(
   const exitCodeFile = `${workDir}/.critter-exit-code-${phase}`;
   const scriptFile = `${workDir}/.critter-run-${phase}.sh`;
   const jsonLogFile = `${workDir}/.critter-output-${phase}.json`;
+  const lastMessageFile = `${workDir}/.critter-last-message-${phase}.txt`;
   const errLog = `${workDir}/.critter-err-${phase}.log`;
 
   // Write prompt to work dir
@@ -76,10 +78,12 @@ async function spawnInTmux(
   const cmd = adapter.buildCommand({
     prompt,
     promptFile,
+    lastMessageFile,
     allowedTools,
     workDir,
     maxTurns,
     model,
+    sandbox,
     mcpConfig,
     strictMcpConfig,
   });
@@ -239,6 +243,7 @@ async function spawnSubprocess(
   allowedTools: string[],
   workDir: string,
   maxTurns: number,
+  sandbox: string | undefined,
   identifier: string,
   title: string,
   phase: string,
@@ -251,6 +256,7 @@ async function spawnSubprocess(
   const repoShort = shortRepoName(repoUrl);
   const promptFile = `${workDir}/.critter-prompt-${phase}`;
   const jsonLogFile = `${workDir}/.critter-output-${phase}.json`;
+  const lastMessageFile = `${workDir}/.critter-last-message-${phase}.txt`;
   const errLog = `${workDir}/.critter-err-${phase}.log`;
 
   // Write prompt to file (avoids ARG_MAX limits for large prompts)
@@ -261,10 +267,12 @@ async function spawnSubprocess(
   const cmd = adapter.buildCommand({
     prompt,
     promptFile,
+    lastMessageFile,
     allowedTools,
     workDir,
     maxTurns,
     model,
+    sandbox,
     mcpConfig,
     strictMcpConfig,
   });
@@ -334,13 +342,13 @@ export async function spawnForPhase(
 
   if (config.noTmux) {
     return spawnSubprocess(
-      cliAdapter, prompt, allowedTools, workDir, ctx.phase.maxTurns,
+      cliAdapter, prompt, allowedTools, workDir, ctx.phase.maxTurns, ctx.phase.sandbox,
       task.identifier, task.title, phaseTag, ctx.phase.model,
       task.repoUrl, signal, ctx.mcpConfig, ctx.strictMcpConfig,
     );
   }
   return spawnInTmux(
-    cliAdapter, prompt, allowedTools, workDir, ctx.phase.maxTurns,
+    cliAdapter, prompt, allowedTools, workDir, ctx.phase.maxTurns, ctx.phase.sandbox,
     task.identifier, task.title, phaseTag, config.tmuxSession,
     ctx.phase.model, task.repoUrl, signal, ctx.mcpConfig, ctx.strictMcpConfig,
   );

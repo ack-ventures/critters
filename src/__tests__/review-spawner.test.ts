@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
-import { parseReviewOutcome } from "../runner/review.js";
+import { hasNewPrFeedback, parseReviewOutcome } from "../runner/review.js";
 import { createTempDir } from "./helpers.js";
 
 let tempDir: string;
@@ -85,5 +85,34 @@ describe("parseReviewOutcome", () => {
 
     const outcome = parseReviewOutcome(logFile);
     expect(outcome.decision).toBe("merged");
+  });
+});
+
+describe("hasNewPrFeedback", () => {
+  test("returns true when a new review appears", () => {
+    expect(
+      hasNewPrFeedback(
+        { commentIds: new Set(["c1"]), reviewIds: new Set(["r1"]) },
+        { commentIds: new Set(["c1"]), reviewIds: new Set(["r1", "r2"]) },
+      ),
+    ).toBe(true);
+  });
+
+  test("returns true when a new comment appears", () => {
+    expect(
+      hasNewPrFeedback(
+        { commentIds: new Set(["c1"]), reviewIds: new Set(["r1"]) },
+        { commentIds: new Set(["c1", "c2"]), reviewIds: new Set(["r1"]) },
+      ),
+    ).toBe(true);
+  });
+
+  test("returns false when feedback sets are unchanged", () => {
+    expect(
+      hasNewPrFeedback(
+        { commentIds: new Set(["c1"]), reviewIds: new Set(["r1"]) },
+        { commentIds: new Set(["c1"]), reviewIds: new Set(["r1"]) },
+      ),
+    ).toBe(false);
   });
 });

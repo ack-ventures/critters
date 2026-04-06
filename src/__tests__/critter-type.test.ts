@@ -265,6 +265,18 @@ describe("parseCritterType", () => {
     expect(ct.phases[0].skills).toEqual(["~/.critters/skills/a.md", "~/.critters/skills/b.md"]);
   });
 
+  test("parses sandbox field on phases", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [
+        { name: "review", prompt: "file.md", model: "gpt-5.4", maxTurns: 10, sandbox: "danger-full-access" },
+      ],
+      outcomes: { success: { status: "Done" } },
+    };
+    const ct = parseCritterType("test", raw);
+    expect(ct.phases[0].sandbox).toBe("danger-full-access");
+  });
+
   test("skills defaults to undefined when not specified", () => {
     const raw = {
       trigger: { label: "X", status: "Y" },
