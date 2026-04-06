@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { ClaudeCodeAdapter } from "../cli/claude.js";
 import { spawnForPhase } from "../cli/spawn.js";
 import { logTask } from "../logger.js";
 import { buildPromptVars, resolveSkills } from "../prompt-template.js";
@@ -11,48 +11,46 @@ export interface ReviewOutcome {
   reason?: string;
 }
 
-export function parseReviewOutcome(logFilePath: string): ReviewOutcome {
-  if (!existsSync(logFilePath)) {
-    return { decision: "unknown" };
+export interface PrFeedbackSnapshot {
+  commentIds: Set<string>;
+  reviewIds: Set<string>;
+}
+
+export function parseReviewOutcome(logFilePath: string, lastMessageFile?: string): ReviewOutcome {
+  const adapter = new ClaudeCodeAdapter();
+  return adapter.extractReviewDecision(logFilePath, lastMessageFile ?? "");
+}
+
+export function hasNewPrFeedback(before: PrFeedbackSnapshot, after: PrFeedbackSnapshot): boolean {
+  for (const id of after.commentIds) {
+    if (!before.commentIds.has(id)) return true;
+  }
+  for (const id of after.reviewIds) {
+    if (!before.reviewIds.has(id)) return true;
+  }
+  return false;
+}
+
+async function fetchPrFeedbackSnapshot(prNumber: number, workDir: string): Promise<PrFeedbackSnapshot> {
+  const result = await runCommand(
+    "gh",
+    ["pr", "view", String(prNumber), "--json", "comments,reviews"],
+    { cwd: workDir },
+  );
+
+  if (result.code !== 0) {
+    throw new Error(`Failed to inspect PR feedback: ${result.stderr || result.stdout}`);
   }
 
-  try {
-    const content = readFileSync(logFilePath, "utf-8");
-    const lines = content.trim().split("\n").filter(Boolean);
+  const parsed = JSON.parse(result.stdout) as {
+    comments?: Array<{ id?: string }>;
+    reviews?: Array<{ id?: string }>;
+  };
 
-    for (let i = lines.length - 1; i >= 0; i--) {
-      let text: string;
-      try {
-        const obj = JSON.parse(lines[i]);
-        if (obj.type === "assistant" && typeof obj.message?.content === "string") {
-          text = obj.message.content;
-        } else if (obj.type === "assistant" && Array.isArray(obj.message?.content)) {
-          text = obj.message.content
-            .filter((b: { type: string }) => b.type === "text")
-            .map((b: { text: string }) => b.text)
-            .join("\n");
-        } else if (obj.type === "result" && typeof obj.result === "string") {
-          text = obj.result;
-        } else {
-          continue;
-        }
-      } catch {
-        continue;
-      }
-
-      const match = text.match(/REVIEW_RESULT:(MERGED|NEEDS_CHANGES)(?::(.+))?/);
-      if (match) {
-        if (match[1] === "MERGED") {
-          return { decision: "merged" };
-        }
-        return { decision: "needs_changes", reason: match[2] || "No reason provided" };
-      }
-    }
-  } catch {
-    // File read or parse error
-  }
-
-  return { decision: "unknown" };
+  return {
+    commentIds: new Set((parsed.comments ?? []).flatMap((c) => typeof c.id === "string" ? [c.id] : [])),
+    reviewIds: new Set((parsed.reviews ?? []).flatMap((r) => typeof r.id === "string" ? [r.id] : [])),
+  };
 }
 
 export class ReviewPhaseRunner implements PhaseRunner {
@@ -110,6 +108,10 @@ export class ReviewPhaseRunner implements PhaseRunner {
       }
     }
 
+    const feedbackBefore = task.prNumber
+      ? await fetchPrFeedbackSnapshot(task.prNumber, workDir)
+      : null;
+
     // Build review prompt — adapt TrackerTask to ReviewTask
     const reviewTask = {
       issueId: task.id,
@@ -143,9 +145,10 @@ export class ReviewPhaseRunner implements PhaseRunner {
       throw new Error(`Review failed (exit ${spawn.exitCode}):\n${errTail}`);
     }
 
-    // Parse review outcome from Claude's output
+    // Parse review outcome from the active CLI output
     const jsonLogFile = `${workDir}/.critter-output-review.json`;
-    const outcome = parseReviewOutcome(jsonLogFile);
+    const lastMessageFile = `${workDir}/.critter-last-message-review.txt`;
+    const outcome = ctx.cliAdapter.extractReviewDecision(jsonLogFile, lastMessageFile);
 
     // Fallback: if no sentinel, check if PR was actually merged
     if (outcome.decision === "unknown" && task.prNumber) {
@@ -156,6 +159,13 @@ export class ReviewPhaseRunner implements PhaseRunner {
       );
       if (fallbackState.stdout.trim() === "MERGED") {
         outcome.decision = "merged";
+      }
+    }
+
+    if (outcome.decision === "needs_changes" && task.prNumber && feedbackBefore) {
+      const feedbackAfter = await fetchPrFeedbackSnapshot(task.prNumber, workDir);
+      if (!hasNewPrFeedback(feedbackBefore, feedbackAfter)) {
+        throw new Error("Review returned NEEDS_CHANGES without leaving any PR review or PR comment");
       }
     }
 

@@ -11,6 +11,7 @@ import type {
   CliCommand,
   ParsedOutput,
   ParsedOutputLine,
+  ReviewDecision,
   SpawnOptions,
   ToolNameMap,
 } from "./types.js";
@@ -187,6 +188,26 @@ export class ClaudeCodeAdapter implements CliAdapter {
     }
   }
 
+  extractFinalResponse(logFile: string, _lastMessageFile: string): string | null {
+    if (!existsSync(logFile)) return null;
+
+    const texts = this.extractTextFromLog(logFile);
+    for (let i = texts.length - 1; i >= 0; i--) {
+      if (texts[i].trim().length > 0) {
+        return texts[i];
+      }
+    }
+    return null;
+  }
+
+  extractReviewDecision(logFile: string, lastMessageFile: string): ReviewDecision {
+    const response = this.extractFinalResponse(logFile, lastMessageFile);
+    if (!response) {
+      return { decision: "unknown" };
+    }
+    return parseReviewDecisionFromText(response);
+  }
+
   formatToolUse(block: {
     name: string;
     input?: Record<string, unknown>;
@@ -239,6 +260,33 @@ export class ClaudeCodeAdapter implements CliAdapter {
     } catch {
       return null;
     }
+  }
+
+  renderOutputLine(line: string): string[] {
+    try {
+      const obj = JSON.parse(line);
+      if (obj.type === "assistant" && obj.message?.content) {
+        const rendered: string[] = [];
+        for (const block of obj.message.content) {
+          if (block.type === "text" && typeof block.text === "string" && block.text.trim()) {
+            rendered.push(block.text);
+          } else if (block.type === "tool_use") {
+            rendered.push(this.formatToolUse(block));
+          }
+        }
+        return rendered;
+      }
+      if (obj.type === "result") {
+        return [`[Result: cost=$${(obj.total_cost_usd ?? obj.cost_usd ?? 0).toFixed(2)}, turns=${obj.num_turns ?? "?"}]`];
+      }
+      if (obj.type === "user") {
+        const rendered = formatClaudeUserEvent(obj);
+        return rendered ? rendered.split("\n") : [];
+      }
+    } catch {
+      return [line];
+    }
+    return [];
   }
 
   getDisplayFilter(): string | null {
@@ -311,6 +359,66 @@ The Read tool supports \`offset\` and \`limit\` parameters \u2014 use these to r
 
     return { mcpConfig: resolved, strictMcpConfig: strict };
   }
+}
+
+export function parseReviewDecisionFromText(text: string): ReviewDecision {
+  const match = text.match(/REVIEW_RESULT:(MERGED|NEEDS_CHANGES)(?::(.+))?/);
+  if (!match) {
+    return { decision: "unknown" };
+  }
+  if (match[1] === "MERGED") {
+    return { decision: "merged" };
+  }
+  return { decision: "needs_changes", reason: match[2] || "No reason provided" };
+}
+
+function formatClaudeUserEvent(obj: Record<string, unknown>): string | null {
+  const toolResult = obj.tool_use_result as Record<string, unknown> | undefined;
+
+  if (toolResult && typeof toolResult === "object") {
+    const lines: string[] = [];
+
+    if (toolResult.stdout || toolResult.stderr) {
+      if (typeof toolResult.stdout === "string" && toolResult.stdout.length > 0) {
+        const stdoutLines = toolResult.stdout.split("\n").filter((l: string) => l.length > 0);
+        if (stdoutLines.length > 10) {
+          lines.push(...stdoutLines.slice(0, 10), `  ... (${stdoutLines.length} lines total)`);
+        } else {
+          lines.push(...stdoutLines);
+        }
+      }
+      if (typeof toolResult.stderr === "string" && toolResult.stderr.length > 0) {
+        const stderrLines = toolResult.stderr.split("\n").filter((l: string) => l.length > 0);
+        const truncated = stderrLines.length > 10
+          ? [...stderrLines.slice(0, 10), `  ... (${stderrLines.length} lines total)`]
+          : stderrLines;
+        lines.push(...truncated.map((l: string) => `stderr: ${l}`));
+      }
+      return lines.length > 0 ? lines.join("\n") : null;
+    }
+
+    if (toolResult.type === "create") {
+      return `✓ Created ${toolResult.filePath ?? ""}`;
+    }
+
+    if (toolResult.status === "completed") {
+      return `✓ Subagent done (${toolResult.totalTokens ?? 0} tokens)`;
+    }
+
+    return null;
+  }
+
+  const message = obj.message as { content?: Array<Record<string, unknown>> } | undefined;
+  if (message?.content) {
+    const errors = message.content
+      .filter((c) => c.type === "tool_result" && c.is_error === true)
+      .map((c) => String(c.content ?? "error"));
+    if (errors.length > 0) {
+      return `✗ ${errors.join(", ").slice(0, 200)}`;
+    }
+  }
+
+  return null;
 }
 
 function buildMcpArgs(

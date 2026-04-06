@@ -2,7 +2,7 @@ import { statSync } from "node:fs";
 import { checkAuth } from "./auth.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import { renderDashboard, renderIssuePage } from "./dashboard.js";
-import { formatToolUse, formatUserEvent, readLogTail, resolveLogFile, resolveWorkDirForIdentifier, stripAnsi } from "./log-resolver.js";
+import { readLogTail, renderReadableLines, resolveCliAdapterForLog, resolveLogFile, resolveWorkDirForIdentifier } from "./log-resolver.js";
 import { log, logError } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
 import { getPrStatuses } from "./pr-status.js";
@@ -317,30 +317,9 @@ export function startHealthServer(
                     slice.text().then((newContent) => {
                       fileOffset = currentSize;
                       const lines = newContent.split("\n").filter((l) => l.trim());
-                      for (const line of lines) {
-                        try {
-                          const obj = JSON.parse(line);
-                          if (obj.type === "assistant" && obj.message?.content) {
-                            for (const block of obj.message.content) {
-                              if (block.type === "text" && block.text) {
-                                send(stripAnsi(block.text));
-                              } else if (block.type === "tool_use") {
-                                send(formatToolUse(block));
-                              }
-                            }
-                          } else if (obj.type === "result") {
-                            send(`[Result: cost=$${(obj.cost_usd ?? 0).toFixed(2)}, turns=${obj.num_turns ?? "?"}]`);
-                          } else if (obj.type === "user") {
-                            const userLine = formatUserEvent(obj);
-                            if (userLine) {
-                              for (const ul of userLine.split("\n")) {
-                                send(ul);
-                              }
-                            }
-                          }
-                        } catch {
-                          send(stripAnsi(line));
-                        }
+                      const adapter = resolveCliAdapterForLog(logFile);
+                      for (const rendered of renderReadableLines(lines, adapter)) {
+                        send(rendered);
                       }
                     }).catch(() => {});
                   }

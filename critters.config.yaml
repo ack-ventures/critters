@@ -1,6 +1,7 @@
 provider: linear
 # provider: jira
 # provider: [linear, jira]
+cli: claude
 
 pollIntervalSeconds: 120
 workDir: /tmp/critters-work
@@ -49,39 +50,61 @@ critterTypes:
     trigger: { label: "Critter", status: "Todo", statusType: "unstarted" }
     # trigger.assignee: "alice@company.com"  # optional: only pick up issues assigned to this user
     repo: { clone: true, branch: true }
+    concurrency: 1
+    timeoutMinutes: 30
     phases:
       - name: planning
         prompt: builtin:planning
+        cli: claude
         model: opus
         maxTurns: 50
         tools: readonly
       - name: execution
         prompt: builtin:execution
+        cli: claude
         model: opus
         maxTurns: 75
         tools: default
     outcomes:
-      success: { status: "In Review" }
+      success: { status: "In Review", removeLabel: true }
       failure: { status: "Critter Failed" }
-    concurrency: 2
-    timeoutMinutes: 30
 
   review:
     trigger: { label: "Critter Review", status: "In Review" }
     repo: { clone: true }
+    concurrency: 1
+    timeoutMinutes: 15
+    enrichment: extractPrUrl
     phases:
       - name: review
         prompt: builtin:review
-        model: opus
+        cli: codex
+        model: gpt-5.4
         maxTurns: 30
         tools: review
+        sandbox: danger-full-access
     outcomes:
       merged: { status: "Done" }
-      needsChanges: { status: "Human Review" }
+      needsChanges: { status: "Todo" }
       failure: { status: "Critter Failed" }
-    concurrency: 2
-    timeoutMinutes: 15
+
+  fix-review-comments:
+    trigger: { label: "Critter Review", status: "Todo", statusType: "unstarted" }
+    repo: { clone: true, branch: true }
+    concurrency: 1
+    timeoutMinutes: 30
     enrichment: extractPrUrl
+    phases:
+      - name: fix-review-comments
+        prompt: ./prompts/fix-review-comments.md
+        cli: codex
+        model: gpt-5.4
+        maxTurns: 50
+        tools: default
+        sandbox: danger-full-access
+    outcomes:
+      success: { status: "In Review" }
+      failure: { status: "Critter Failed" }
 
 # Shell hooks — commands run on lifecycle events
 # Environment variables available: CRITTER_ISSUE_ID, CRITTER_IDENTIFIER,

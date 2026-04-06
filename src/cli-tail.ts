@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import type { Subprocess } from "bun";
 import { parse as parseYaml } from "yaml";
 import { STREAM_FILTER } from "./jq-filter.js";
+import { renderReadableLines, resolveCliAdapterForLog } from "./log-resolver.js";
 
 const FILTER_TMP_PATH = "/tmp/critters-tail-filter.jq";
 
@@ -39,7 +40,8 @@ interface ActiveDetail {
 }
 
 interface TrackedProcess {
-  proc: Subprocess;
+  proc?: Subprocess;
+  interval?: Timer;
   reader: Promise<void>;
   phase: string;
 }
@@ -125,6 +127,11 @@ async function readLines(
 }
 
 function startTail(identifier: string, phase: string, logFile: string): TrackedProcess {
+  const adapter = resolveCliAdapterForLog(logFile);
+  if (!adapter.getDisplayFilter()) {
+    return startTailWithoutFilter(identifier, phase, logFile);
+  }
+
   const color = getColor(identifier);
   const prefix = `${color}[${identifier}/${phaseFileTag(phase)}]${RESET}`;
 
@@ -136,6 +143,46 @@ function startTail(identifier: string, phase: string, logFile: string): TrackedP
   const readerPromise = readLines(proc.stdout as ReadableStream<Uint8Array>, prefix).catch(() => {});
 
   return { proc, reader: readerPromise, phase };
+}
+
+function startTailWithoutFilter(identifier: string, phase: string, logFile: string): TrackedProcess {
+  const color = getColor(identifier);
+  const prefix = `${color}[${identifier}/${phaseFileTag(phase)}]${RESET}`;
+  const adapter = resolveCliAdapterForLog(logFile);
+  let fileOffset = 0;
+
+  const readerPromise = (async () => {
+    try {
+      const initial = readFileSync(logFile, "utf-8");
+      fileOffset = Buffer.byteLength(initial);
+      const initialLines = initial.split("\n").filter((line) => line.trim());
+      for (const line of renderReadableLines(initialLines, adapter)) {
+        process.stdout.write(`${prefix} ${line}\n`);
+      }
+    } catch {
+      // Poller may recover if the file becomes readable shortly afterwards.
+    }
+  })();
+
+  const interval = setInterval(async () => {
+    try {
+      const file = Bun.file(logFile);
+      const currentSize = file.size;
+      if (currentSize <= fileOffset) return;
+
+      const slice = await file.slice(fileOffset, currentSize).text();
+      fileOffset = currentSize;
+      const lines = slice.split("\n").filter((line) => line.trim());
+      for (const line of renderReadableLines(lines, adapter)) {
+        process.stdout.write(`${prefix} ${line}\n`);
+      }
+    } catch {
+      // Keep polling on transient read errors.
+    }
+  }, 500);
+  interval.unref();
+
+  return { interval, reader: readerPromise, phase };
 }
 
 async function fetchActiveDetails(healthPort: number): Promise<ActiveDetail[]> {
@@ -202,7 +249,8 @@ export async function tailCommand(args: string[]): Promise<void> {
         if (!currentIds.has(id)) {
           const color = getColor(id);
           console.log(`${color}[${id} completed]${RESET}`);
-          try { tp.proc.kill(); } catch {}
+          try { tp.proc?.kill(); } catch {}
+          if (tp.interval) clearInterval(tp.interval);
           tracked.delete(id);
         }
       }
@@ -220,7 +268,8 @@ export async function tailCommand(args: string[]): Promise<void> {
           console.log(`${color}[${d.identifier}]${RESET} Tailing ${d.phase} phase — ${d.repo}`);
         } else if (existing.phase !== d.phase) {
           // Phase changed — kill old tail and start new one
-          try { existing.proc.kill(); } catch {}
+          try { existing.proc?.kill(); } catch {}
+          if (existing.interval) clearInterval(existing.interval);
           const logFile = resolveLogFile(d);
           if (!logFile) continue;
           const tp = startTail(d.identifier, d.phase, logFile);
@@ -244,7 +293,8 @@ export async function tailCommand(args: string[]): Promise<void> {
   const cleanup = () => {
     clearInterval(pollInterval);
     for (const [, tp] of tracked) {
-      try { tp.proc.kill(); } catch {}
+      try { tp.proc?.kill(); } catch {}
+      if (tp.interval) clearInterval(tp.interval);
     }
   };
 

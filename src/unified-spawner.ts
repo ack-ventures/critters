@@ -1,5 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { readPartialCost, resolveMcpConfig } from "./claude.js";
+import { resolvePhaseMcpConfig } from "./cli/mcp.js";
 import { getCliAdapter } from "./cli/registry.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import {
@@ -402,9 +402,6 @@ export class UnifiedSpawner {
       // Ensure plans directory exists
       mkdirSync(`${workDir}/critters/plans`, { recursive: true });
 
-      // Resolve MCP config (once per task, not per phase)
-      const { mcpConfig, strictMcpConfig } = resolveMcpConfig(critterType, this.config);
-
       // Load per-repo config
       const repoConfig = existsSync(`${workDir}/.critters.yaml`)
         ? loadRepoConfig(workDir)
@@ -430,6 +427,7 @@ export class UnifiedSpawner {
         // Resolve CLI adapter: phase > type > global config, default "claude"
         const cliName = phase.cli ?? critterType.cli ?? this.config.cli ?? "claude";
         const cliAdapter = getCliAdapter(cliName);
+        const { mcpConfig, strictMcpConfig } = resolvePhaseMcpConfig(cliAdapter, critterType, this.config);
 
         const ctx: PhaseContext = {
           task,
@@ -461,7 +459,7 @@ export class UnifiedSpawner {
         const phaseTag = phaseFileTag(phase.name);
         const outputFile = `${workDir}/.critter-output-${phaseTag}.json`;
         const costMonitorInterval = setInterval(() => {
-          const currentPhaseCost = readPartialCost(outputFile);
+          const currentPhaseCost = cliAdapter.readPartialCost(outputFile);
           const completedPhaseCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
           const totalCost = completedPhaseCost + currentPhaseCost;
           // Update active detail for dashboard

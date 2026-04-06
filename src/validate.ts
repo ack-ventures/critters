@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
+import { assertValidCliAdapterName } from "./cli/adapter-names.js";
 import { checkProviderCredentials, resolveConfigPath, validateRepoUrls, validateWorkDir } from "./config.js";
 import { type CritterTypeConfig, parseCritterTypes, synthesizeDefaultTypes } from "./critter-type.js";
 import { loadEnvFallback } from "./env.js";
@@ -141,6 +142,14 @@ export function validateConfigFile(configPath?: string): { errors: string[]; war
     errors.push("Invalid config: defaultAllowedTools must be a non-empty array of tool patterns");
   }
 
+  if (typeof yaml.cli === "string") {
+    try {
+      assertValidCliAdapterName(yaml.cli, "Invalid config");
+    } catch (e) {
+      errors.push((e as Error).message);
+    }
+  }
+
   // Validate repo URLs
   const repos: Record<string, RepoConfig> = {};
   if (yaml.repos && typeof yaml.repos === "object") {
@@ -220,6 +229,12 @@ export function validateConfigFile(configPath?: string): { errors: string[]; war
   // Validate skill file paths
   for (const ct of critterTypes) {
     for (const phase of ct.phases) {
+      if (
+        phase.sandbox !== undefined &&
+        !["read-only", "workspace-write", "danger-full-access"].includes(phase.sandbox)
+      ) {
+        errors.push(`Invalid sandbox "${phase.sandbox}" (type "${ct.name}", phase "${phase.name}")`);
+      }
       if (phase.skills) {
         for (const skillRef of phase.skills) {
           const filePath = skillRef.startsWith("~")

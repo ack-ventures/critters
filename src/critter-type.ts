@@ -1,3 +1,4 @@
+import { assertValidCliAdapterName } from "./cli/adapter-names.js";
 import type { Config } from "./types.js";
 
 export interface TriggerConfig {
@@ -16,6 +17,7 @@ export interface PhaseConfig {
   skills?: string[];
   comment?: boolean;
   cli?: string;
+  sandbox?: string;
 }
 
 export interface OutcomeConfig {
@@ -128,9 +130,15 @@ export function validateCritterType(ct: CritterTypeConfig): void {
   if (ct.costBudget != null && ct.costBudget <= 0) {
     throw new Error(`Critter type "${ct.name}": costBudget must be > 0`);
   }
+  if (ct.cli) {
+    assertValidCliAdapterName(ct.cli, `Critter type "${ct.name}"`);
+  }
   for (const phase of ct.phases) {
     if (!phase.name || !phase.prompt || !phase.model || phase.maxTurns <= 0) {
       throw new Error(`Critter type "${ct.name}", phase "${phase.name}": invalid phase config`);
+    }
+    if (phase.cli) {
+      assertValidCliAdapterName(phase.cli, `Critter type "${ct.name}", phase "${phase.name}"`);
     }
   }
 }
@@ -173,6 +181,7 @@ export function parseCritterType(name: string, raw: Record<string, unknown>): Cr
     skills: p.skills as string[] | undefined,
     comment: p.comment as boolean | undefined,
     cli: p.cli as string | undefined,
+    sandbox: p.sandbox as string | undefined,
   }));
 
   const ct: CritterTypeConfig = {

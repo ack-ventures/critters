@@ -1,6 +1,6 @@
 # Critters
 
-Critters is a TypeScript daemon that polls issue trackers ([Linear](https://linear.app) and [Jira](https://www.atlassian.com/software/jira)) for issues labeled "Critter", spawns [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI instances to plan and implement the work, and opens draft pull requests for human review. It runs on [Bun](https://bun.sh) and orchestrates everything through `tmux` panes.
+Critters is a TypeScript daemon that polls issue trackers ([Linear](https://linear.app) and [Jira](https://www.atlassian.com/software/jira)) for issues labeled "Critter", spawns coding CLI instances ([Claude Code](https://docs.anthropic.com/en/docs/claude-code) and/or Codex) to plan and implement the work, and opens draft pull requests for human review. It runs on [Bun](https://bun.sh) and orchestrates everything through `tmux` panes.
 
 Inspired by [Stripe's Minions](https://stripe.dev/blog/minions-stripes-one-shot-end-to-end-coding-agents).
 
@@ -56,7 +56,7 @@ critters
 
 ## Development quick start
 
-**Prerequisites:** [Bun](https://bun.sh), [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (authenticated), [`gh` CLI](https://cli.github.com) (authenticated), `tmux`, `jq`
+**Prerequisites:** [Bun](https://bun.sh), [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (authenticated) and/or Codex, [`gh` CLI](https://cli.github.com) (authenticated), `tmux`, `jq`
 
 ```bash
 # Clone and install
@@ -107,8 +107,8 @@ For the pre-built image, replace `build: .` with `image: ghcr.io/ack-ventures/cr
 
 1. **Watcher** polls your issue tracker (Linear and/or Jira) every 120 seconds for issues with the "Critter" label in "Todo" status.
 2. **Spawner** shallow-clones the target repo into a temp directory and creates a feature branch.
-3. **Phase 1 (Planning):** A Claude instance explores the codebase and writes an implementation plan.
-4. **Phase 2 (Execution):** A second Claude instance implements the plan, commits, pushes, and opens a draft PR.
+3. **Phase 1 (Planning):** A configured coding CLI instance explores the codebase and writes an implementation plan.
+4. **Phase 2 (Execution):** A configured coding CLI instance implements the plan, commits, pushes, and opens a draft PR.
 5. Status updates flow back to the issue tracker: Todo &rarr; In Progress &rarr; In Review (on PR) or Critter Failed (on error).
 
 ## Critter lifecycle
@@ -169,16 +169,16 @@ Settings live in `critters.config.yaml`:
 | `timeoutMinutes` | 30 | Total timeout per task (both phases) |
 | `workDir` | /tmp/critters-work | Temp clone directory |
 | `triggerLabel` | "Critter" | Label that triggers pickup |
-| `maxPlanningTurns` | 50 | Max Claude turns for planning phase |
-| `maxExecutionTurns` | 75 | Max Claude turns for execution phase |
+| `maxPlanningTurns` | 50 | Max turns for planning phase |
+| `maxExecutionTurns` | 75 | Max turns for execution phase |
 | `defaultAllowedTools` | see file | Tools critters can use |
 | `repos` | {} | Project ID &rarr; repo URL + extra tools |
 | `teamRepos` | {} | Team ID &rarr; fallback repo URL |
 | `defaultRepo` | — | Final fallback repo URL when not in description, project config, or team config |
 | `tmuxSession` | "critters" | Name of the tmux session to use |
 | `branchPrefix` | "critter" | Prefix for feature branch names (`<prefix>/<ID>-<slug>`) |
-| `planningModel` | "opus" | Claude model for planning phase |
-| `executionModel` | "opus" | Claude model for execution phase |
+| `planningModel` | "opus" | Model for planning phase |
+| `executionModel` | "opus" | Model for execution phase |
 | `healthPort` | 3847 | HTTP server port for dashboard and health checks (0 to disable) |
 | `dashboardToken` | — | Shared secret for dashboard POST endpoints (also reads `DASHBOARD_TOKEN` env var) |
 | `maxLogSizeMb` | 10 | Max log file size in MB before rotation (with `--no-tmux`) |
@@ -190,10 +190,12 @@ Settings live in `critters.config.yaml`:
 | `costAlertThreshold` | — | Cost (USD) per task that triggers a Slack alert |
 | `costBudget` | — | Cost (USD) per task that triggers a kill |
 | `reviewTriggerLabel` | "Critter Review" | Label that triggers review pickup |
-| `reviewModel` | "opus" | Claude model for reviews |
+| `reviewModel` | "opus" | Model for reviews |
 | `reviewConcurrency` | 2 | Max parallel review critters |
 | `reviewTimeoutMinutes` | 15 | Timeout per review |
-| `maxReviewTurns` | 30 | Max Claude turns per review |
+| `maxReviewTurns` | 30 | Max turns per review |
+| `cli` | "claude" | Default CLI adapter: `"claude"` or `"codex"` |
+| `phases[].sandbox` | — | Optional phase-level sandbox override for adapters that support it, e.g. Codex `read-only`, `workspace-write`, or `danger-full-access` |
 | `autoRetry` | — | Auto-retry config: `{ maxRetries, baseDelaySeconds, maxDelaySeconds }` |
 | `circuitBreaker` | — | Circuit breaker config: `{ failureThreshold, maxBackoffMinutes }` |
 | `mcpConfig` | — | Path(s) to MCP config JSON file(s), applied to all critters |
@@ -214,6 +216,32 @@ repos:
       - "Bash(python:*)"
       - "Bash(pip:*)"
 ```
+
+You can choose the CLI globally, per critter type, or per phase:
+
+```yaml
+cli: claude
+
+critterTypes:
+  create:
+    phases:
+      - name: planning
+        prompt: builtin:planning
+        cli: codex
+        model: gpt-5.2
+        maxTurns: 50
+        tools: readonly
+      - name: execution
+        prompt: builtin:execution
+        cli: claude
+        model: opus
+        maxTurns: 75
+        tools: default
+```
+
+Critters preserves the existing `tools` config for both adapters. Claude enforces the allowlist directly; Codex uses sandboxing plus prompt-level restrictions, so enforcement is capability-based rather than identical.
+
+For Codex phases that need outbound GitHub access through `gh`, set a phase `sandbox` explicitly. In practice, PR review and review-fixing phases often need `danger-full-access`, because Codex `workspace-write` can block the GitHub API calls that `gh` relies on.
 
 ### Hooks
 

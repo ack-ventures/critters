@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { LinearClient } from "@linear/sdk";
 import { loadWorkDir } from "./config.js";
 import { STREAM_FILTER } from "./jq-filter.js";
-import { findWorkDirs, phaseFileTag } from "./log-resolver.js";
+import { findWorkDirs, phaseFileTag, renderReadableLines, resolveCliAdapterForLog } from "./log-resolver.js";
 
 const IDENTIFIER_RE = /^[A-Z]+-\d+$/;
 const FILTER_TMP_PATH = "/tmp/critters-logs-filter.jq";
@@ -88,16 +88,69 @@ async function displayWithJq(logFile: string): Promise<void> {
   }
 }
 
+function displayWithoutJq(logFile: string): void {
+  const content = readFileSync(logFile, "utf-8");
+  const lines = content.split("\n").filter((line) => line.trim());
+  const adapter = resolveCliAdapterForLog(logFile);
+  const rendered = renderReadableLines(lines, adapter);
+  if (rendered.length > 0) {
+    process.stdout.write(`${rendered.join("\n")}\n`);
+  }
+}
+
 function fileContainsResult(logFile: string): boolean {
   const content = readFileSync(logFile, "utf-8");
-  return content.includes('"type":"result"');
+  if (content.includes('"type":"result"')) {
+    return true;
+  }
+
+  const lastMessageFile = logFile.replace(".json", ".txt").replace("/.critter-output-", "/.critter-last-message-");
+  return existsSync(lastMessageFile) && statSync(lastMessageFile).size > 0;
 }
 
 async function followLogs(logFile: string): Promise<void> {
+  const adapter = resolveCliAdapterForLog(logFile);
+
   // If the run is already complete, just display normally
   if (fileContainsResult(logFile)) {
-    await displayWithJq(logFile);
+    if (adapter.getDisplayFilter()) {
+      await displayWithJq(logFile);
+    } else {
+      displayWithoutJq(logFile);
+    }
     return;
+  }
+
+  if (!adapter.getDisplayFilter()) {
+    displayWithoutJq(logFile);
+    let fileOffset = statSync(logFile).size;
+    const pollInterval = setInterval(async () => {
+      try {
+        const currentSize = statSync(logFile).size;
+        if (currentSize > fileOffset) {
+          const slice = await Bun.file(logFile).slice(fileOffset, currentSize).text();
+          fileOffset = currentSize;
+          const lines = slice.split("\n").filter((line) => line.trim());
+          const rendered = renderReadableLines(lines, adapter);
+          if (rendered.length > 0) {
+            process.stdout.write(`${rendered.join("\n")}\n`);
+          }
+        }
+
+        if (fileContainsResult(logFile)) {
+          clearInterval(pollInterval);
+          process.exit(0);
+        }
+      } catch {
+        // Keep polling on transient read errors.
+      }
+    }, 500);
+
+    process.on("SIGINT", () => {
+      clearInterval(pollInterval);
+      process.exit(0);
+    });
+    return await new Promise(() => {});
   }
 
   writeFilterFile();
@@ -170,7 +223,11 @@ async function showLocalLogs(workDir: string, identifier: string, phase: Phase |
     if (follow) {
       await followLogs(logFile);
     } else {
-      await displayWithJq(logFile);
+      if (resolveCliAdapterForLog(logFile).getDisplayFilter()) {
+        await displayWithJq(logFile);
+      } else {
+        displayWithoutJq(logFile);
+      }
     }
     return true;
   }
@@ -183,8 +240,10 @@ async function showLocalLogs(workDir: string, identifier: string, phase: Phase |
     if (existsSync(logFile) && statSync(logFile).size > 0) {
       if (follow) {
         await followLogs(logFile);
-      } else {
+      } else if (resolveCliAdapterForLog(logFile).getDisplayFilter()) {
         await displayWithJq(logFile);
+      } else {
+        displayWithoutJq(logFile);
       }
       return true;
     }
@@ -198,8 +257,10 @@ async function showLocalLogs(workDir: string, identifier: string, phase: Phase |
       if (existsSync(logFile) && statSync(logFile).size > 0) {
         if (follow) {
           await followLogs(logFile);
-        } else {
+        } else if (resolveCliAdapterForLog(logFile).getDisplayFilter()) {
           await displayWithJq(logFile);
+        } else {
+          displayWithoutJq(logFile);
         }
         return true;
       }

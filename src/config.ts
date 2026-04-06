@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { parse as parseYaml } from "yaml";
+import { assertValidCliAdapterName } from "./cli/adapter-names.js";
 import { type CritterTypeConfig, parseCritterTypes as parseCritterTypesFromYaml, synthesizeDefaultTypes, validateCritterType } from "./critter-type.js";
 import { log } from "./logger.js";
 import type { AutoRetryConfig, AutoUpdateConfig, CircuitBreakerConfig, Config, RepoConfig, TunnelConfig } from "./types.js";
@@ -414,6 +415,7 @@ function validateConfig(config: Config): void {
   if (config.defaultRepo && !GIT_URL_RE.test(config.defaultRepo)) {
     throw new Error(`Invalid git URL for defaultRepo: ${config.defaultRepo}`);
   }
+  assertValidCliAdapterName(config.cli, "Invalid config");
   validateRepoUrls(config.repos, config.teamRepos);
   const credErrors = checkProviderCredentials(config.critterTypes, config.provider, {
     linearApiKey: config.linearApiKey,

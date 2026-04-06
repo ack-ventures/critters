@@ -61,6 +61,9 @@ export function buildPromptVars(
     workDir,
     group: task.group,
     groupId: task.groupId,
+    prUrl: task.prUrl ?? "",
+    prNumber: task.prNumber != null ? String(task.prNumber) : "",
+    prBranch: task.prBranch ?? "",
   };
 }
 
