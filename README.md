@@ -56,7 +56,7 @@ critters
 
 ## Development quick start
 
-**Prerequisites:** [Bun](https://bun.sh), [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) and/or Codex, [`gh` CLI](https://cli.github.com) (authenticated), `tmux`, `jq`
+**Prerequisites:** [Bun](https://bun.sh), [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (authenticated) and/or Codex, [`gh` CLI](https://cli.github.com) (authenticated), `tmux`, `jq`
 
 ```bash
 # Clone and install
@@ -110,6 +110,52 @@ For the pre-built image, replace `build: .` with `image: ghcr.io/ack-ventures/cr
 3. **Phase 1 (Planning):** A configured coding CLI instance explores the codebase and writes an implementation plan.
 4. **Phase 2 (Execution):** A configured coding CLI instance implements the plan, commits, pushes, and opens a draft PR.
 5. Status updates flow back to the issue tracker: Todo &rarr; In Progress &rarr; In Review (on PR) or Critter Failed (on error).
+
+## Critter lifecycle
+
+The built-in critter types form a pipeline:
+
+```
+Todo → In Progress → In Review → review ──┬──► Done (merged)
+         (create)                          │
+                        ┌──────────────────┘
+                        ▼
+                   Human Review
+                        │
+                        └──► fix-review-comments ──► In Review (loops back to review)
+```
+
+1. **create** picks up "Todo" issues, plans and implements the work, opens a draft PR, and moves the issue to "In Review".
+2. **review** picks up "In Review" issues, reviews the PR diff, and either merges it (→ "Done") or requests changes (→ "Human Review").
+3. **fix-review-comments** (optional, user-configured) picks up "Human Review" issues, reads the review feedback from the PR, addresses it, and moves the issue back to "In Review" — sending it through review again.
+
+Without `fix-review-comments`, issues that need changes stop at "Human Review" for manual intervention (or `critters retry --force`).
+
+To enable the loop, add a `fix-review-comments` type to your config:
+
+```yaml
+critterTypes:
+  # ... create and review types ...
+
+  fix-review-comments:
+    trigger: { label: "Critter Review", status: "Human Review" }
+    repo: { clone: true, branch: true }
+    phases:
+      - name: fix
+        prompt: ~/.critters/prompts/fix-review.md
+        model: opus
+        maxTurns: 50
+        tools: default
+    outcomes:
+      success: { status: "In Review" }
+      failure: { status: "Critter Failed" }
+    concurrency: 2
+    timeoutMinutes: 20
+    enrichment: extractPrUrl
+    claimStatus: "In Progress"
+```
+
+The prompt file should instruct Claude to read the PR review feedback (for example with `gh pr view --comments` plus `gh api repos/:owner/:repo/pulls/:number/comments` for inline review comments), make the requested fixes, commit, and push. Use `builtin:execution` prompts as a starting point. `claimStatus` prevents duplicate dispatch if two poll cycles trigger before the fix completes.
 
 ## Configuration
 
