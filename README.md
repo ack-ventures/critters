@@ -155,7 +155,7 @@ critterTypes:
     claimStatus: "In Progress"
 ```
 
-The prompt file should instruct Claude to read the PR review comments (`gh pr view` and `gh pr reviews`), make the requested fixes, commit, and push. Use `builtin:execution` prompts as a starting point. `claimStatus` prevents duplicate dispatch if two poll cycles trigger before the fix completes.
+The prompt file should instruct Claude to read the PR review feedback (for example with `gh pr view --comments` plus `gh api repos/:owner/:repo/pulls/:number/comments` for inline review comments), make the requested fixes, commit, and push. Use `builtin:execution` prompts as a starting point. `claimStatus` prevents duplicate dispatch if two poll cycles trigger before the fix completes.
 
 ## Configuration
 
