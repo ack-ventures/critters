@@ -42,11 +42,24 @@ describe("CodexAdapter", () => {
         JSON.stringify({ type: "turn.started" }),
         JSON.stringify({ type: "turn.started" }),
         JSON.stringify({
+          type: "response.updated",
+          token_usage: {
+            input_tokens: 40,
+            output_tokens: 15,
+            cached_input_tokens: 4,
+          },
+        }),
+        JSON.stringify({
           type: "response.completed",
-          usage: {
+          token_usage: {
+            input_tokens: 100,
+            output_tokens: 30,
+            cached_input_tokens: 9,
+          },
+          total_token_usage: {
             input_tokens: 120,
             output_tokens: 45,
-            cache_read_input_tokens: 12,
+            cached_input_tokens: 12,
           },
           total_cost_usd: 0.42,
         }),
@@ -58,6 +71,31 @@ describe("CodexAdapter", () => {
         outputTokens: 45,
         cacheReadTokens: 12,
         costUsd: 0.42,
+      });
+    } finally {
+      tmp.cleanup();
+    }
+  });
+
+  test("leaves cost empty when Codex emits usage without an explicit cost field", () => {
+    const tmp = createTempDir();
+    try {
+      const adapter = new CodexAdapter();
+      const logFile = `${tmp.path}/output.json`;
+      writeFileSync(logFile, JSON.stringify({
+        type: "response.completed",
+        total_token_usage: {
+          input_tokens: 25,
+          output_tokens: 10,
+          cached_input_tokens: 3,
+        },
+      }));
+
+      expect(adapter.parseOutputLog(logFile, "ACK-2")).toEqual({
+        inputTokens: 25,
+        outputTokens: 10,
+        cacheReadTokens: 3,
+        costUsd: undefined,
       });
     } finally {
       tmp.cleanup();

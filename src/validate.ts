@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
+import { assertValidCliAdapterName } from "./cli/adapter-names.js";
 import { checkProviderCredentials, resolveConfigPath, validateRepoUrls, validateWorkDir } from "./config.js";
 import { type CritterTypeConfig, parseCritterTypes, synthesizeDefaultTypes } from "./critter-type.js";
 import { loadEnvFallback } from "./env.js";
@@ -139,6 +140,14 @@ export function validateConfigFile(configPath?: string): { errors: string[]; war
   const defaultAllowedTools = yaml.defaultAllowedTools as string[] | undefined;
   if (!Array.isArray(defaultAllowedTools) || defaultAllowedTools.length === 0) {
     errors.push("Invalid config: defaultAllowedTools must be a non-empty array of tool patterns");
+  }
+
+  if (typeof yaml.cli === "string") {
+    try {
+      assertValidCliAdapterName(yaml.cli, "Invalid config");
+    } catch (e) {
+      errors.push((e as Error).message);
+    }
   }
 
   // Validate repo URLs

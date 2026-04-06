@@ -296,6 +296,37 @@ critterTypes:
     expect(result.errors.some((e) => e.includes('Invalid sandbox "not-a-sandbox"'))).toBe(true);
   });
 
+  test("invalid top-level cli collects error", () => {
+    const path = writeYaml(`
+defaultAllowedTools:
+  - "Read"
+cli: codexx
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors.some((e) => e.includes('unknown CLI adapter "codexx"'))).toBe(true);
+  });
+
+  test("invalid phase cli collects error", () => {
+    const path = writeYaml(`
+defaultAllowedTools:
+  - "Read"
+critterTypes:
+  review:
+    trigger: { label: "Critter Review", status: "In Review" }
+    phases:
+      - name: review
+        prompt: builtin:review
+        model: gpt-5.4
+        maxTurns: 10
+        cli: codexx
+    outcomes:
+      success: { status: "Done" }
+      failure: { status: "Critter Failed" }
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors.some((e) => e.includes('unknown CLI adapter "codexx"'))).toBe(true);
+  });
+
   test("warnings don't cause errors and summary includes warning count", () => {
     const path = writeYaml(`
 concurrency: 8

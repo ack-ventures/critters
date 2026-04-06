@@ -277,6 +277,27 @@ describe("parseCritterType", () => {
     expect(ct.phases[0].sandbox).toBe("danger-full-access");
   });
 
+  test("rejects invalid type-level cli values", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5 }],
+      outcomes: { success: { status: "Done" } },
+      cli: "cluade",
+    };
+
+    expect(() => parseCritterType("test", raw)).toThrow('unknown CLI adapter "cluade"');
+  });
+
+  test("rejects invalid phase-level cli values", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5, cli: "codexx" }],
+      outcomes: { success: { status: "Done" } },
+    };
+
+    expect(() => parseCritterType("test", raw)).toThrow('unknown CLI adapter "codexx"');
+  });
+
   test("skills defaults to undefined when not specified", () => {
     const raw = {
       trigger: { label: "X", status: "Y" },

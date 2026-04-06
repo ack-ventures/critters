@@ -1,4 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { resolvePhaseMcpConfig } from "./cli/mcp.js";
 import { getCliAdapter } from "./cli/registry.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import {
@@ -426,10 +427,7 @@ export class UnifiedSpawner {
         // Resolve CLI adapter: phase > type > global config, default "claude"
         const cliName = phase.cli ?? critterType.cli ?? this.config.cli ?? "claude";
         const cliAdapter = getCliAdapter(cliName);
-        const { mcpConfig, strictMcpConfig } = cliAdapter.resolveMcpConfig(critterType, this.config);
-        if (mcpConfig.length > 0 && !cliAdapter.supportsMcp()) {
-          throw new Error(`${cliAdapter.name} does not support MCP config for phase "${phase.name}"`);
-        }
+        const { mcpConfig, strictMcpConfig } = resolvePhaseMcpConfig(cliAdapter, critterType, this.config);
 
         const ctx: PhaseContext = {
           task,

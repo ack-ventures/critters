@@ -1,3 +1,4 @@
+import { getRegisteredAdapterNames } from "./adapter-names.js";
 import { ClaudeCodeAdapter } from "./claude.js";
 import { CodexAdapter } from "./codex.js";
 import type { CliAdapter } from "./types.js";
@@ -24,7 +25,7 @@ export function getCliAdapter(name: string): CliAdapter {
   const adapter = adapters.get(name);
   if (!adapter) {
     throw new Error(
-      `Unknown CLI adapter "${name}". Available adapters: ${[...adapters.keys()].join(", ")}`,
+      `Unknown CLI adapter "${name}". Available adapters: ${getRegisteredAdapterNames().join(", ")}`,
     );
   }
   return adapter;
@@ -34,7 +35,7 @@ export function getCliAdapterByBinary(binary: string): CliAdapter {
   const adapter = adaptersByBinary.get(binary);
   if (!adapter) {
     throw new Error(
-      `Unknown CLI binary "${binary}". Available adapters: ${[...adapters.keys()].join(", ")}`,
+      `Unknown CLI binary "${binary}". Available adapters: ${getRegisteredAdapterNames().join(", ")}`,
     );
   }
   return adapter;
@@ -44,5 +45,5 @@ export function getCliAdapterByBinary(binary: string): CliAdapter {
  * Get all registered CLI adapter names.
  */
 export function getRegisteredAdapters(): string[] {
-  return [...adapters.keys()];
+  return getRegisteredAdapterNames();
 }

@@ -118,6 +118,11 @@ teamRepos:
     expect(config.jsonLogs).toBe(true);
   });
 
+  test("rejects invalid top-level cli values", () => {
+    const yaml = `defaultAllowedTools:\n  - "Read"\ncli: codexx\n`;
+    expect(() => loadConfig(writeYaml(yaml))).toThrow('unknown CLI adapter "codexx"');
+  });
+
   test("parses minDiskSpaceMb from YAML", () => {
     const yaml = `
 defaultAllowedTools:

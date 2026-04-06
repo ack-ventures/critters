@@ -64,6 +64,7 @@ export class CodexAdapter implements CliAdapter {
       let outputTokens = 0;
       let cacheReadTokens = 0;
       let costUsd: number | undefined;
+      let sawTotalUsage = false;
 
       for (const line of lines) {
         try {
@@ -77,12 +78,49 @@ export class CodexAdapter implements CliAdapter {
             costUsd = cost;
           }
 
-          inputTokens += readNumber(obj, ["input_tokens", "inputTokens", "input_tokens_total"]) ?? 0;
-          outputTokens += readNumber(obj, ["output_tokens", "outputTokens", "output_tokens_total"]) ?? 0;
-          cacheReadTokens += readNumber(obj, ["cache_read_input_tokens", "cacheReadInputTokens", "cache_read_tokens"]) ?? 0;
-        } catch {
-          continue;
-        }
+          const totalUsage = readObject(obj, ["total_token_usage", "totalTokenUsage"]);
+          if (totalUsage) {
+            sawTotalUsage = true;
+            inputTokens = readNumber(totalUsage, ["input_tokens", "inputTokens", "input_tokens_total"]) ?? 0;
+            outputTokens = readNumber(totalUsage, ["output_tokens", "outputTokens", "output_tokens_total"]) ?? 0;
+            cacheReadTokens = readNumber(totalUsage, [
+              "cached_input_tokens",
+              "cachedInputTokens",
+              "cache_read_input_tokens",
+              "cacheReadInputTokens",
+              "cache_read_tokens",
+            ]) ?? 0;
+            continue;
+          }
+
+          if (!sawTotalUsage) {
+            const usage = readObject(obj, ["token_usage", "tokenUsage"]);
+            if (usage) {
+              inputTokens += readNumber(usage, ["input_tokens", "inputTokens", "input_tokens_total"]) ?? 0;
+              outputTokens += readNumber(usage, ["output_tokens", "outputTokens", "output_tokens_total"]) ?? 0;
+              cacheReadTokens += readNumber(usage, [
+                "cached_input_tokens",
+                "cachedInputTokens",
+                "cache_read_input_tokens",
+                "cacheReadInputTokens",
+                "cache_read_tokens",
+              ]) ?? 0;
+              continue;
+            }
+          }
+
+          if (!sawTotalUsage) {
+            inputTokens += readNumber(obj, ["input_tokens", "inputTokens", "input_tokens_total"]) ?? 0;
+            outputTokens += readNumber(obj, ["output_tokens", "outputTokens", "output_tokens_total"]) ?? 0;
+            cacheReadTokens += readNumber(obj, [
+              "cached_input_tokens",
+              "cachedInputTokens",
+              "cache_read_input_tokens",
+              "cacheReadInputTokens",
+              "cache_read_tokens",
+            ]) ?? 0;
+          }
+        } catch {}
       }
 
       return {
@@ -112,9 +150,7 @@ export class CodexAdapter implements CliAdapter {
         try {
           const obj = JSON.parse(line) as Record<string, unknown>;
           texts.push(...extractTextCandidates(obj));
-        } catch {
-          continue;
-        }
+        } catch {}
       }
     } catch {
       return [];
@@ -293,6 +329,31 @@ function readNumber(obj: unknown, candidateKeys: string[]): number | undefined {
       const value = record[key];
       if (typeof value === "number" && Number.isFinite(value)) {
         return value;
+      }
+    }
+    queue.push(...Object.values(record));
+  }
+
+  return undefined;
+}
+
+function readObject(obj: unknown, candidateKeys: string[]): Record<string, unknown> | undefined {
+  if (obj == null || typeof obj !== "object") return undefined;
+  const queue: unknown[] = [obj];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (current == null || typeof current !== "object") continue;
+    if (Array.isArray(current)) {
+      queue.push(...current);
+      continue;
+    }
+
+    const record = current as Record<string, unknown>;
+    for (const key of candidateKeys) {
+      const value = record[key];
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        return value as Record<string, unknown>;
       }
     }
     queue.push(...Object.values(record));

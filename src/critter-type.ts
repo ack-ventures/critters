@@ -1,3 +1,4 @@
+import { assertValidCliAdapterName } from "./cli/adapter-names.js";
 import type { Config } from "./types.js";
 
 export interface TriggerConfig {
@@ -129,9 +130,15 @@ export function validateCritterType(ct: CritterTypeConfig): void {
   if (ct.costBudget != null && ct.costBudget <= 0) {
     throw new Error(`Critter type "${ct.name}": costBudget must be > 0`);
   }
+  if (ct.cli) {
+    assertValidCliAdapterName(ct.cli, `Critter type "${ct.name}"`);
+  }
   for (const phase of ct.phases) {
     if (!phase.name || !phase.prompt || !phase.model || phase.maxTurns <= 0) {
       throw new Error(`Critter type "${ct.name}", phase "${phase.name}": invalid phase config`);
+    }
+    if (phase.cli) {
+      assertValidCliAdapterName(phase.cli, `Critter type "${ct.name}", phase "${phase.name}"`);
     }
   }
 }
