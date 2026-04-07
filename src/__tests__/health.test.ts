@@ -4,7 +4,7 @@ import type { CritterTypeConfig } from "../critter-type.js";
 import { type HealthStatus, resetMetadataCache, resetMetricsSummaryCache, startHealthServer } from "../health.js";
 import { initMetrics, recordMetric } from "../metrics.js";
 import type { IssueTracker } from "../tracker/types.js";
-import { createTempDir } from "./helpers.js";
+import { createTempDir, makeTestCritterType } from "./helpers.js";
 
 let tempDir: string;
 let cleanup: () => void;
@@ -383,25 +383,13 @@ function createMockTracker(overrides?: Partial<IssueTracker>): IssueTracker {
   };
 }
 
-function createMockCritterType(overrides?: Partial<CritterTypeConfig>): CritterTypeConfig {
-  return {
-    name: "create",
-    trigger: { label: "Critter", status: "Todo" },
-    repo: { clone: true, branch: true },
-    phases: [{ name: "execution", prompt: "builtin:execution", model: "opus", maxTurns: 75, tools: "default" }],
-    outcomes: { success: { status: "In Review" } },
-    concurrency: 2,
-    timeoutMinutes: 30,
-    ...overrides,
-  };
-}
 
 describe("GET /api/v1/metadata", () => {
   test("returns providers and critter types with mock trackers", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
     const port = 10000 + Math.floor(Math.random() * 50000);
     const trackers = new Map([["linear", createMockTracker()]]);
-    const critterTypes = [createMockCritterType()];
+    const critterTypes = [makeTestCritterType()];
     server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, undefined, {
       trackers,
       critterTypes,
@@ -432,7 +420,7 @@ describe("GET /api/v1/metadata", () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
     const port = 10000 + Math.floor(Math.random() * 50000);
     const trackers = new Map([["jira", createMockTracker({ provider: "jira" })]]);
-    const critterTypes = [createMockCritterType({ provider: undefined })];
+    const critterTypes = [makeTestCritterType({ provider: undefined })];
     server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, undefined, {
       trackers,
       critterTypes,
@@ -467,7 +455,7 @@ describe("POST /api/v1/issues", () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
     const port = 10000 + Math.floor(Math.random() * 50000);
     const trackers = new Map([["linear", createMockTracker()]]);
-    const critterTypes = [createMockCritterType()];
+    const critterTypes = [makeTestCritterType()];
     server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, undefined, {
       trackers,
       critterTypes,

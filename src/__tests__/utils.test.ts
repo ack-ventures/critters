@@ -17,6 +17,7 @@ import {
   slugify,
   tailLines,
 } from "../utils.js";
+import { makeTestConfig } from "./helpers.js";
 
 // ---------------------------------------------------------------------------
 // src/utils.ts
@@ -432,53 +433,21 @@ describe("src/prompt.ts", () => {
       teamId: "team-1",
     };
 
-    const baseConfig: Config = {
-      pollIntervalSeconds: 120,
-      concurrency: 2,
-      timeoutMinutes: 30,
-      workDir: "/tmp",
-      triggerLabel: "Critter",
-      maxPlanningTurns: 50,
-      maxExecutionTurns: 50,
-      defaultAllowedTools: [],
-      repos: {},
-      teamRepos: {},
-      tmuxSession: "critters",
-      branchPrefix: "critter",
-      noTmux: false,
-      planningModel: "opus",
-      executionModel: "opus",
-      reviewTriggerLabel: "Critter Review",
-      reviewModel: "opus",
-      reviewConcurrency: 2,
-      reviewTimeoutMinutes: 15,
-      maxReviewTurns: 30,
-      maxLogSizeMb: 10,
-      minDiskSpaceMb: 1024,
-      healthPort: 3847,
-      metricsRetentionDays: 90,
-      linearApiKey: "test",
-      provider: "linear",
-      critterTypes: [],
-      cli: "claude",
-    };
-
     test("from description (highest priority)", () => {
       const task = {
         ...baseTask,
         description: "repo: git@github.com:org/repo.git",
       };
-      expect(resolveRepoUrl(task, baseConfig)).toBe(
+      expect(resolveRepoUrl(task, makeTestConfig())).toBe(
         "git@github.com:org/repo.git",
       );
     });
 
     test("from project config (2nd priority)", () => {
       const task = { ...baseTask, projectId: "proj-1" };
-      const config = {
-        ...baseConfig,
+      const config = makeTestConfig({
         repos: { "proj-1": { url: "git@github.com:org/project-repo.git" } },
-      };
+      });
       expect(resolveRepoUrl(task, config)).toBe(
         "git@github.com:org/project-repo.git",
       );
@@ -486,17 +455,16 @@ describe("src/prompt.ts", () => {
 
     test("from team config (3rd priority)", () => {
       const task = { ...baseTask };
-      const config = {
-        ...baseConfig,
+      const config = makeTestConfig({
         teamRepos: { "team-1": "git@github.com:org/team-repo.git" },
-      };
+      });
       expect(resolveRepoUrl(task, config)).toBe(
         "git@github.com:org/team-repo.git",
       );
     });
 
     test("returns null when nothing matches", () => {
-      expect(resolveRepoUrl(baseTask, baseConfig)).toBeNull();
+      expect(resolveRepoUrl(baseTask, makeTestConfig())).toBeNull();
     });
 
     test("description takes priority over project config", () => {
@@ -505,10 +473,9 @@ describe("src/prompt.ts", () => {
         description: "repo: git@github.com:org/desc-repo.git",
         projectId: "proj-1",
       };
-      const config = {
-        ...baseConfig,
+      const config = makeTestConfig({
         repos: { "proj-1": { url: "git@github.com:org/project-repo.git" } },
-      };
+      });
       expect(resolveRepoUrl(task, config)).toBe(
         "git@github.com:org/desc-repo.git",
       );
@@ -516,11 +483,10 @@ describe("src/prompt.ts", () => {
 
     test("project config takes priority over team config", () => {
       const task = { ...baseTask, projectId: "proj-1" };
-      const config = {
-        ...baseConfig,
+      const config = makeTestConfig({
         repos: { "proj-1": { url: "git@github.com:org/project-repo.git" } },
         teamRepos: { "team-1": "git@github.com:org/team-repo.git" },
-      };
+      });
       expect(resolveRepoUrl(task, config)).toBe(
         "git@github.com:org/project-repo.git",
       );

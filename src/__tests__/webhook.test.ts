@@ -9,20 +9,7 @@ import {
   verifyJiraSignature,
   verifyLinearSignature,
 } from "../webhook.js";
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function makeCritterType(label: string): CritterTypeConfig {
-  return {
-    name: "test",
-    trigger: { label, status: "Todo" },
-    repo: { clone: true },
-    phases: [{ name: "exec", prompt: "builtin:execution", model: "opus", maxTurns: 10, tools: "default" }],
-    outcomes: { success: { status: "Done" } },
-    concurrency: 1,
-    timeoutMinutes: 10,
-  };
-}
+import { makeTestCritterType } from "./helpers.js";
 
 function sign(body: string, secret: string): string {
   return createHmac("sha256", secret).update(body).digest("hex");
@@ -88,7 +75,7 @@ describe("verifyJiraSignature", () => {
 // ── Linear payload parsing ───────────────────────────────────────────────────
 
 describe("extractLinearWebhookTrigger", () => {
-  const types = [makeCritterType("Critter"), makeCritterType("Code Audit")];
+  const types = [makeTestCritterType({ trigger: { label: "Critter", status: "Todo" } }), makeTestCritterType({ trigger: { label: "Code Audit", status: "Todo" } })];
 
   test("issue created with trigger label returns identifier", () => {
     const payload: LinearWebhookPayload = {
@@ -194,7 +181,7 @@ describe("extractLinearWebhookTrigger", () => {
 // ── Jira payload parsing ─────────────────────────────────────────────────────
 
 describe("extractJiraWebhookTrigger", () => {
-  const types = [makeCritterType("Critter")];
+  const types = [makeTestCritterType({ trigger: { label: "Critter", status: "Todo" } })];
 
   test("issue created with trigger label returns key", () => {
     const payload: JiraWebhookPayload = {

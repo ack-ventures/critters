@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runHook, triggerHook } from "../hooks.js";
 import type { Config } from "../types.js";
-import { createTempDir } from "./helpers.js";
+import { createTempDir, makeTestConfig } from "./helpers.js";
 
 let tempDir: string;
 let cleanup: () => void;
@@ -17,40 +17,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
 });
-
-function makeConfig(hooks?: Config["hooks"]): Config {
-  return {
-    pollIntervalSeconds: 30,
-    concurrency: 1,
-    timeoutMinutes: 30,
-    workDir: "/tmp/critters-test",
-    triggerLabel: "Critter",
-    maxPlanningTurns: 50,
-    maxExecutionTurns: 75,
-    defaultAllowedTools: ["Read"],
-    repos: {},
-    teamRepos: {},
-    tmuxSession: "critters",
-    branchPrefix: "critter",
-    noTmux: false,
-    planningModel: "opus",
-    executionModel: "opus",
-    reviewTriggerLabel: "Critter Review",
-    reviewModel: "opus",
-    reviewConcurrency: 1,
-    reviewTimeoutMinutes: 15,
-    maxReviewTurns: 30,
-    maxLogSizeMb: 10,
-    minDiskSpaceMb: 1024,
-    healthPort: 0,
-    metricsRetentionDays: 90,
-    linearApiKey: "test-key",
-    hooks,
-    provider: "linear",
-    critterTypes: [],
-    cli: "claude",
-  };
-}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -122,8 +88,8 @@ describe("runHook", () => {
 describe("triggerHook", () => {
   test("calls runHook when hook exists", async () => {
     const outFile = join(tempDir, "trigger.txt");
-    const config = makeConfig({
-      onTaskStarted: `echo triggered > "${outFile}"`,
+    const config = makeTestConfig({
+      hooks: { onTaskStarted: `echo triggered > "${outFile}"` },
     });
     triggerHook(config, "onTaskStarted", {
       CRITTER_ISSUE_ID: "ABC-789",
@@ -134,7 +100,7 @@ describe("triggerHook", () => {
   });
 
   test("is a no-op when hook is missing", () => {
-    const config = makeConfig();
+    const config = makeTestConfig();
     // Should not throw or do anything
     expect(() => {
       triggerHook(config, "onPrCreated", { CRITTER_ISSUE_ID: "ABC-1" });
@@ -142,14 +108,14 @@ describe("triggerHook", () => {
   });
 
   test("is a no-op when hook is empty string", () => {
-    const config = makeConfig({ onPrCreated: "" });
+    const config = makeTestConfig({ hooks: { onPrCreated: "" } });
     expect(() => {
       triggerHook(config, "onPrCreated", { CRITTER_ISSUE_ID: "ABC-1" });
     }).not.toThrow();
   });
 
   test("is a no-op when hooks object is undefined", () => {
-    const config = makeConfig(undefined);
+    const config = makeTestConfig();
     expect(() => {
       triggerHook(config, "onTaskFailed", { CRITTER_ISSUE_ID: "ABC-1" });
     }).not.toThrow();
