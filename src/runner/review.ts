@@ -3,8 +3,9 @@ import { spawnForPhase } from "../cli/spawn.js";
 import { logTask } from "../logger.js";
 import { buildPromptVars, resolveSkills } from "../prompt-template.js";
 import { buildReviewPrompt, getReviewAllowedTools } from "../review-prompt.js";
-import { runCommand, tailLines } from "../utils.js";
+import { runCommand } from "../utils.js";
 import type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
+import { validatePhaseResult } from "./validate.js";
 
 export interface ReviewOutcome {
   decision: "merged" | "needs_changes" | "unknown";
@@ -136,14 +137,7 @@ export class ReviewPhaseRunner implements PhaseRunner {
 
     const spawn = await spawnForPhase(ctx, prompt, allowedTools, "review");
 
-    if (spawn.timedOut) {
-      throw new Error("Timed out during review phase");
-    }
-
-    if (spawn.exitCode !== 0) {
-      const errTail = tailLines(spawn.stderr || spawn.stdout, 20);
-      throw new Error(`Review failed (exit ${spawn.exitCode}):\n${errTail}`);
-    }
+    validatePhaseResult(spawn, "review");
 
     // Parse review outcome from the active CLI output
     const jsonLogFile = `${workDir}/.critter-output-review.json`;

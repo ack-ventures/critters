@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { PhaseConfig } from "./critter-type.js";
+import { ToolPreset } from "./enums.js";
 import {
   getExecutionAllowedTools,
   getPlanningAllowedTools,
@@ -82,16 +83,16 @@ export function resolveTools(
 ): string[] {
   if (typeof toolsSpec === "string") {
     switch (toolsSpec) {
-      case "readonly":
+      case ToolPreset.Readonly:
         return getPlanningAllowedTools();
-      case "default":
+      case ToolPreset.Default:
         return getExecutionAllowedTools(
           config,
           // Adapt TrackerTask to the CritterTask shape expected by getExecutionAllowedTools
           { issueId: task.id, identifier: task.identifier, title: task.title, description: task.description, repoUrl: task.repoUrl, teamId: task.groupId, projectId: task.projectId },
           repoConfig,
         );
-      case "review":
+      case ToolPreset.Review:
         return getReviewAllowedTools();
       default:
         throw new Error(`Unknown tools preset: ${toolsSpec}`);

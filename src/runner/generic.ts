@@ -2,8 +2,8 @@ import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import { spawnForPhase } from "../cli/spawn.js";
 import { logTask, logTaskWarn } from "../logger.js";
 import { buildPromptVars, resolvePrompt, resolveSkills, resolveTools } from "../prompt-template.js";
-import { tailLines } from "../utils.js";
 import type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
+import { validatePhaseResult } from "./validate.js";
 
 const REPORT_FILE = ".critter-report.md";
 
@@ -52,14 +52,7 @@ export class GenericPhaseRunner implements PhaseRunner {
 
     const spawn = await spawnForPhase(ctx, prompt, allowedTools, phase.name);
 
-    if (spawn.timedOut) {
-      throw new Error(`Timed out during ${phase.name} phase`);
-    }
-
-    if (spawn.exitCode !== 0) {
-      const errTail = tailLines(spawn.stderr || spawn.stdout, 20);
-      throw new Error(`Phase ${phase.name} failed (exit ${spawn.exitCode}):\n${errTail}`);
-    }
+    validatePhaseResult(spawn, phase.name);
 
     // Read the report file that the CLI was instructed to write
     const reportPath = `${workDir}/${REPORT_FILE}`;
