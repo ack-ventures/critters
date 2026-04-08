@@ -1,7 +1,7 @@
 import { statSync } from "node:fs";
 import { checkAuth } from "./auth.js";
 import type { CritterTypeConfig } from "./critter-type.js";
-import { renderDashboard, renderIssuePage } from "./dashboard.js";
+import { renderDashboard, renderIssuePage } from "./dashboard/index.js";
 import { readLogTail, renderReadableLines, resolveCliAdapterForLog, resolveLogFile, resolveWorkDirForIdentifier } from "./log-resolver.js";
 import { log, logError } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
@@ -197,7 +197,7 @@ export function startHealthServer(
 
         // Use setTimeout to let the HTTP response flush before process replacement
         setTimeout(() => {
-          triggers.triggerRestart!();
+          triggers.triggerRestart?.();
         }, 250);
 
         return Response.json({ ok: true, message: "Restarting..." });
@@ -214,7 +214,7 @@ export function startHealthServer(
         }
 
         setTimeout(() => {
-          triggers.triggerStop!();
+          triggers.triggerStop?.();
         }, 250);
 
         return Response.json({ ok: true, message: "Stopping..." });
