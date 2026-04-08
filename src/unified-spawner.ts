@@ -1057,6 +1057,3 @@ export interface KillResult {
   startedAt: number;
 }
 
-export { applyOutcome, type TaskResult } from "./task-outcome.js";
-// Re-exports for backward compatibility
-export { addPrTimeoutComment, buildLogFileList, salvagePartialProgress } from "./task-salvage.js";

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildLogFileList } from "../unified-spawner.js";
+import { buildLogFileList } from "../task-salvage.js";
 
 describe("buildLogFileList", () => {
   test("builds correct file list for planning + execution phases", () => {
