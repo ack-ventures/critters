@@ -20,7 +20,7 @@ export function createTestRepo(): { path: string; cleanup: () => void } {
 }
 
 export function makeTestConfig(overrides?: Partial<Config>): Config {
-  return {
+  const base = {
     pollIntervalSeconds: 120,
     concurrency: 2,
     timeoutMinutes: 30,
@@ -46,10 +46,74 @@ export function makeTestConfig(overrides?: Partial<Config>): Config {
     healthPort: 3847,
     metricsRetentionDays: 90,
     linearApiKey: "test-key",
-    provider: "linear",
+    provider: "linear" as const,
     critterTypes: [],
     cli: "claude",
     ...overrides,
+  };
+
+  return {
+    ...base,
+    // Grouped properties
+    polling: {
+      intervalSeconds: base.pollIntervalSeconds,
+      circuitBreaker: base.circuitBreaker,
+    },
+    slack: {
+      webhookUrl: base.slackWebhookUrl,
+      botToken: base.slackBotToken,
+      channel: base.slackChannel,
+    },
+    jira: {
+      host: base.jiraHost,
+      email: base.jiraEmail,
+      apiToken: base.jiraApiToken,
+      statusMap: base.jiraStatusMap,
+      webhookSecret: base.jiraWebhookSecret,
+    },
+    linear: {
+      apiKey: base.linearApiKey,
+      webhookSecret: base.linearWebhookSecret,
+    },
+    daemon: {
+      workDir: base.workDir,
+      tmuxSession: base.tmuxSession,
+      noTmux: base.noTmux,
+      healthPort: base.healthPort,
+      dashboardToken: base.dashboardToken,
+      jsonLogs: base.jsonLogs,
+      branchPrefix: base.branchPrefix,
+    },
+    limits: {
+      maxLogSizeMb: base.maxLogSizeMb,
+      minDiskSpaceMb: base.minDiskSpaceMb,
+      metricsRetentionDays: base.metricsRetentionDays,
+      costAlertThreshold: base.costAlertThreshold,
+      costBudget: base.costBudget,
+      cleanupIntervalMinutes: base.cleanupIntervalMinutes,
+      cleanupStaleMinutes: base.cleanupStaleMinutes,
+    },
+    defaults: {
+      triggerLabel: base.triggerLabel,
+      maxPlanningTurns: base.maxPlanningTurns,
+      maxExecutionTurns: base.maxExecutionTurns,
+      defaultAllowedTools: base.defaultAllowedTools,
+      planningModel: base.planningModel,
+      executionModel: base.executionModel,
+      reviewTriggerLabel: base.reviewTriggerLabel,
+      reviewModel: base.reviewModel,
+      reviewConcurrency: base.reviewConcurrency,
+      reviewTimeoutMinutes: base.reviewTimeoutMinutes,
+      maxReviewTurns: base.maxReviewTurns,
+    },
+    // Allow grouped overrides to take precedence
+    ...(overrides?.polling ? { polling: overrides.polling } : {}),
+    ...(overrides?.slack ? { slack: overrides.slack } : {}),
+    ...(overrides?.jira ? { jira: overrides.jira } : {}),
+    ...(overrides?.linear ? { linear: overrides.linear } : {}),
+    ...(overrides?.daemon ? { daemon: overrides.daemon } : {}),
+    ...(overrides?.limits ? { limits: overrides.limits } : {}),
+    ...(overrides?.defaults ? { defaults: overrides.defaults } : {}),
   };
 }
 

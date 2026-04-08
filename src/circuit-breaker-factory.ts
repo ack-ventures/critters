@@ -10,9 +10,9 @@ export function createCircuitBreaker(
   slackNotifier: SlackNotifier,
 ): CircuitBreaker {
   const breaker = new CircuitBreaker(provider, {
-    failureThreshold: config.circuitBreaker?.failureThreshold ?? 3,
-    baseDelayMs: config.pollIntervalSeconds * 2 * 1000,
-    maxDelayMs: (config.circuitBreaker?.maxBackoffMinutes ?? 30) * 60 * 1000,
+    failureThreshold: config.polling.circuitBreaker?.failureThreshold ?? 3,
+    baseDelayMs: config.polling.intervalSeconds * 2 * 1000,
+    maxDelayMs: (config.polling.circuitBreaker?.maxBackoffMinutes ?? 30) * 60 * 1000,
     onStateChange: (providerName, from, to) => {
       if (to === "open") {
         const msg = `⚠️ Circuit breaker OPEN for ${providerName} — backing off after ${breaker.getStatus().consecutiveFailures} consecutive failures`;
@@ -20,7 +20,7 @@ export function createCircuitBreaker(
         if (slackNotifier.isConfigured) {
           slackNotifier.notify(`__circuit_breaker_${providerName}__`, msg);
         } else {
-          sendSlackNotification(config.slackWebhookUrl, msg);
+          sendSlackNotification(config.slack.webhookUrl, msg);
         }
       } else if (to === "closed" && from !== "closed") {
         const msg = `✅ Circuit breaker CLOSED for ${providerName} — API recovered, resuming normal polling`;
@@ -28,7 +28,7 @@ export function createCircuitBreaker(
         if (slackNotifier.isConfigured) {
           slackNotifier.notify(`__circuit_breaker_${providerName}__`, msg);
         } else {
-          sendSlackNotification(config.slackWebhookUrl, msg);
+          sendSlackNotification(config.slack.webhookUrl, msg);
         }
       }
     },

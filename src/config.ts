@@ -145,33 +145,112 @@ export function loadConfig(configPath?: string): Config {
 
   const provider = ((yaml.provider as string) ?? "linear") as "linear" | "jira";
 
+  const pollIntervalSeconds = (yaml.pollIntervalSeconds as number) ?? 30;
+  const triggerLabel = (yaml.triggerLabel as string) ?? "Critter";
+  const maxPlanningTurns = (yaml.maxPlanningTurns as number) ?? 50;
+  const maxExecutionTurns = (yaml.maxExecutionTurns as number) ?? 75;
+  const defaultAllowedTools = (yaml.defaultAllowedTools as string[]) ?? [];
+  const tmuxSession = (yaml.tmuxSession as string) ?? "critters";
+  const branchPrefix = (yaml.branchPrefix as string) ?? "critter";
+  const jsonLogs = (yaml.jsonLogs as boolean) ?? undefined;
+  const planningModel = (yaml.planningModel as string) ?? "opus";
+  const executionModel = (yaml.executionModel as string) ?? "opus";
+  const reviewTriggerLabel = (yaml.reviewTriggerLabel as string) ?? "Critter Review";
+  const reviewModel = (yaml.reviewModel as string) ?? "opus";
+  const reviewConcurrency = (yaml.reviewConcurrency as number) ?? 2;
+  const reviewTimeoutMinutes = (yaml.reviewTimeoutMinutes as number) ?? 15;
+  const maxReviewTurns = (yaml.maxReviewTurns as number) ?? 30;
+  const maxLogSizeMb = (yaml.maxLogSizeMb as number) ?? 10;
+  const minDiskSpaceMb = typeof yaml.minDiskSpaceMb === "number" ? yaml.minDiskSpaceMb : 1024;
+  const healthPort = (yaml.healthPort as number) ?? 3847;
+  const metricsRetentionDays = (yaml.metricsRetentionDays as number) ?? 90;
+  const cleanupIntervalMinutes = (yaml.cleanupIntervalMinutes as number) ?? undefined;
+  const cleanupStaleMinutes = (yaml.cleanupStaleMinutes as number) ?? undefined;
+  const costAlertThreshold = (yaml.costAlertThreshold as number) ?? undefined;
+  const costBudget = (yaml.costBudget as number) ?? undefined;
+  const jiraStatusMap = (yaml.jiraStatusMap as Record<string, string>) ?? undefined;
+
   const config: Config = {
-    pollIntervalSeconds: (yaml.pollIntervalSeconds as number) ?? 30,
+    // Grouped properties
+    polling: {
+      intervalSeconds: pollIntervalSeconds,
+      circuitBreaker,
+    },
+    slack: {
+      webhookUrl: slackWebhookUrl,
+      botToken: slackBotToken,
+      channel: slackChannel,
+    },
+    jira: {
+      host: jiraHost,
+      email: jiraEmail,
+      apiToken: jiraApiToken,
+      statusMap: jiraStatusMap,
+      webhookSecret: jiraWebhookSecret,
+    },
+    linear: {
+      apiKey: linearApiKey,
+      webhookSecret: linearWebhookSecret,
+    },
+    daemon: {
+      workDir: resolvedWorkDir,
+      tmuxSession,
+      noTmux: false,
+      healthPort,
+      dashboardToken,
+      jsonLogs,
+      branchPrefix,
+    },
+    limits: {
+      maxLogSizeMb,
+      minDiskSpaceMb,
+      metricsRetentionDays,
+      costAlertThreshold,
+      costBudget,
+      cleanupIntervalMinutes,
+      cleanupStaleMinutes,
+    },
+    defaults: {
+      triggerLabel,
+      maxPlanningTurns,
+      maxExecutionTurns,
+      defaultAllowedTools,
+      planningModel,
+      executionModel,
+      reviewTriggerLabel,
+      reviewModel,
+      reviewConcurrency,
+      reviewTimeoutMinutes,
+      maxReviewTurns,
+    },
+
+    // Flat fields (backward compat)
+    pollIntervalSeconds,
     concurrency: (yaml.concurrency as number) ?? 2,
     timeoutMinutes: (yaml.timeoutMinutes as number) ?? 30,
     workDir: resolvedWorkDir,
-    cleanupIntervalMinutes: (yaml.cleanupIntervalMinutes as number) ?? undefined,
-    cleanupStaleMinutes: (yaml.cleanupStaleMinutes as number) ?? undefined,
-    triggerLabel: (yaml.triggerLabel as string) ?? "Critter",
-    maxPlanningTurns: (yaml.maxPlanningTurns as number) ?? 50,
-    maxExecutionTurns: (yaml.maxExecutionTurns as number) ?? 75,
-    defaultAllowedTools: (yaml.defaultAllowedTools as string[]) ?? [],
-    tmuxSession: (yaml.tmuxSession as string) ?? "critters",
-    branchPrefix: (yaml.branchPrefix as string) ?? "critter",
+    cleanupIntervalMinutes,
+    cleanupStaleMinutes,
+    triggerLabel,
+    maxPlanningTurns,
+    maxExecutionTurns,
+    defaultAllowedTools,
+    tmuxSession,
+    branchPrefix,
     noTmux: false,
-    jsonLogs: (yaml.jsonLogs as boolean) ?? undefined,
-    planningModel: (yaml.planningModel as string) ?? "opus",
-    executionModel: (yaml.executionModel as string) ?? "opus",
-    reviewTriggerLabel: (yaml.reviewTriggerLabel as string) ?? "Critter Review",
-    reviewModel: (yaml.reviewModel as string) ?? "opus",
-    reviewConcurrency: (yaml.reviewConcurrency as number) ?? 2,
-    reviewTimeoutMinutes: (yaml.reviewTimeoutMinutes as number) ?? 15,
-    maxReviewTurns: (yaml.maxReviewTurns as number) ?? 30,
-    maxLogSizeMb: (yaml.maxLogSizeMb as number) ?? 10,
-    minDiskSpaceMb: typeof yaml.minDiskSpaceMb === "number" ? yaml.minDiskSpaceMb : 1024,
-    healthPort: (yaml.healthPort as number) ?? 3847,
+    jsonLogs,
+    planningModel,
+    executionModel,
+    reviewTriggerLabel,
+    reviewModel,
+    reviewConcurrency,
+    reviewTimeoutMinutes,
+    maxReviewTurns,
+    maxLogSizeMb,
+    minDiskSpaceMb,
+    healthPort,
     dashboardToken,
-    metricsRetentionDays: (yaml.metricsRetentionDays as number) ?? 90,
+    metricsRetentionDays,
     repos,
     teamRepos,
     defaultRepo: (yaml.defaultRepo as string) ?? undefined,
@@ -179,12 +258,12 @@ export function loadConfig(configPath?: string): Config {
     jiraHost,
     jiraEmail,
     jiraApiToken,
-    jiraStatusMap: (yaml.jiraStatusMap as Record<string, string>) ?? undefined,
+    jiraStatusMap,
     slackWebhookUrl,
     slackBotToken,
     slackChannel,
-    costAlertThreshold: (yaml.costAlertThreshold as number) ?? undefined,
-    costBudget: (yaml.costBudget as number) ?? undefined,
+    costAlertThreshold,
+    costBudget,
     hooks,
     autoRetry,
     autoUpdate,
@@ -329,53 +408,53 @@ function validateConfig(config: Config): void {
   if (config.timeoutMinutes <= 0) {
     throw new Error(`Invalid config: timeoutMinutes must be > 0, got ${config.timeoutMinutes}`);
   }
-  if (config.pollIntervalSeconds < 5) {
-    throw new Error(`Invalid config: pollIntervalSeconds must be >= 5, got ${config.pollIntervalSeconds}`);
+  if (config.polling.intervalSeconds < 5) {
+    throw new Error(`Invalid config: pollIntervalSeconds must be >= 5, got ${config.polling.intervalSeconds}`);
   }
-  if (config.maxPlanningTurns <= 0) {
-    throw new Error(`Invalid config: maxPlanningTurns must be > 0, got ${config.maxPlanningTurns}`);
+  if (config.defaults.maxPlanningTurns <= 0) {
+    throw new Error(`Invalid config: maxPlanningTurns must be > 0, got ${config.defaults.maxPlanningTurns}`);
   }
-  if (config.maxExecutionTurns <= 0) {
-    throw new Error(`Invalid config: maxExecutionTurns must be > 0, got ${config.maxExecutionTurns}`);
+  if (config.defaults.maxExecutionTurns <= 0) {
+    throw new Error(`Invalid config: maxExecutionTurns must be > 0, got ${config.defaults.maxExecutionTurns}`);
   }
-  if (config.reviewConcurrency < 1) {
-    throw new Error(`Invalid config: reviewConcurrency must be >= 1, got ${config.reviewConcurrency}`);
+  if (config.defaults.reviewConcurrency < 1) {
+    throw new Error(`Invalid config: reviewConcurrency must be >= 1, got ${config.defaults.reviewConcurrency}`);
   }
-  if (config.reviewTimeoutMinutes <= 0) {
-    throw new Error(`Invalid config: reviewTimeoutMinutes must be > 0, got ${config.reviewTimeoutMinutes}`);
+  if (config.defaults.reviewTimeoutMinutes <= 0) {
+    throw new Error(`Invalid config: reviewTimeoutMinutes must be > 0, got ${config.defaults.reviewTimeoutMinutes}`);
   }
-  if (config.maxReviewTurns <= 0) {
-    throw new Error(`Invalid config: maxReviewTurns must be > 0, got ${config.maxReviewTurns}`);
+  if (config.defaults.maxReviewTurns <= 0) {
+    throw new Error(`Invalid config: maxReviewTurns must be > 0, got ${config.defaults.maxReviewTurns}`);
   }
-  if (config.maxLogSizeMb <= 0) {
-    throw new Error(`Invalid config: maxLogSizeMb must be > 0, got ${config.maxLogSizeMb}`);
+  if (config.limits.maxLogSizeMb <= 0) {
+    throw new Error(`Invalid config: maxLogSizeMb must be > 0, got ${config.limits.maxLogSizeMb}`);
   }
-  if (config.minDiskSpaceMb <= 0) {
-    throw new Error(`Invalid config: minDiskSpaceMb must be > 0, got ${config.minDiskSpaceMb}`);
+  if (config.limits.minDiskSpaceMb <= 0) {
+    throw new Error(`Invalid config: minDiskSpaceMb must be > 0, got ${config.limits.minDiskSpaceMb}`);
   }
-  if (config.metricsRetentionDays < 1) {
-    throw new Error(`Invalid config: metricsRetentionDays must be >= 1, got ${config.metricsRetentionDays}`);
+  if (config.limits.metricsRetentionDays < 1) {
+    throw new Error(`Invalid config: metricsRetentionDays must be >= 1, got ${config.limits.metricsRetentionDays}`);
   }
-  if (config.healthPort !== 0 && (config.healthPort < 1024 || config.healthPort > 65535)) {
-    throw new Error(`Invalid config: healthPort must be 0 (disabled) or 1024-65535, got ${config.healthPort}`);
+  if (config.daemon.healthPort !== 0 && (config.daemon.healthPort < 1024 || config.daemon.healthPort > 65535)) {
+    throw new Error(`Invalid config: healthPort must be 0 (disabled) or 1024-65535, got ${config.daemon.healthPort}`);
   }
-  if (!Array.isArray(config.defaultAllowedTools) || config.defaultAllowedTools.length === 0) {
+  if (!Array.isArray(config.defaults.defaultAllowedTools) || config.defaults.defaultAllowedTools.length === 0) {
     throw new Error("Invalid config: defaultAllowedTools must be a non-empty array of tool patterns");
   }
-  if (!/^[a-zA-Z0-9._-]+$/.test(config.branchPrefix)) {
-    throw new Error(`Invalid config: branchPrefix must match /^[a-zA-Z0-9._-]+$/, got "${config.branchPrefix}"`);
+  if (!/^[a-zA-Z0-9._-]+$/.test(config.daemon.branchPrefix)) {
+    throw new Error(`Invalid config: branchPrefix must match /^[a-zA-Z0-9._-]+$/, got "${config.daemon.branchPrefix}"`);
   }
-  if (config.cleanupIntervalMinutes != null && config.cleanupIntervalMinutes <= 0) {
-    throw new Error(`Invalid config: cleanupIntervalMinutes must be > 0, got ${config.cleanupIntervalMinutes}`);
+  if (config.limits.cleanupIntervalMinutes != null && config.limits.cleanupIntervalMinutes <= 0) {
+    throw new Error(`Invalid config: cleanupIntervalMinutes must be > 0, got ${config.limits.cleanupIntervalMinutes}`);
   }
-  if (config.cleanupStaleMinutes != null && config.cleanupStaleMinutes <= 0) {
-    throw new Error(`Invalid config: cleanupStaleMinutes must be > 0, got ${config.cleanupStaleMinutes}`);
+  if (config.limits.cleanupStaleMinutes != null && config.limits.cleanupStaleMinutes <= 0) {
+    throw new Error(`Invalid config: cleanupStaleMinutes must be > 0, got ${config.limits.cleanupStaleMinutes}`);
   }
-  if (config.costAlertThreshold != null && config.costAlertThreshold <= 0) {
-    throw new Error(`Invalid config: costAlertThreshold must be > 0, got ${config.costAlertThreshold}`);
+  if (config.limits.costAlertThreshold != null && config.limits.costAlertThreshold <= 0) {
+    throw new Error(`Invalid config: costAlertThreshold must be > 0, got ${config.limits.costAlertThreshold}`);
   }
-  if (config.costBudget != null && config.costBudget <= 0) {
-    throw new Error(`Invalid config: costBudget must be > 0, got ${config.costBudget}`);
+  if (config.limits.costBudget != null && config.limits.costBudget <= 0) {
+    throw new Error(`Invalid config: costBudget must be > 0, got ${config.limits.costBudget}`);
   }
   if (config.autoUpdate) {
     if (config.autoUpdate.intervalMinutes < 1) {
@@ -393,15 +472,15 @@ function validateConfig(config: Config): void {
       throw new Error(`Invalid config: autoRetry.maxDelaySeconds must be >= baseDelaySeconds, got ${config.autoRetry.maxDelaySeconds}`);
     }
   }
-  if (config.circuitBreaker) {
-    if (config.circuitBreaker.failureThreshold != null && config.circuitBreaker.failureThreshold < 1) {
-      throw new Error(`Invalid config: circuitBreaker.failureThreshold must be >= 1, got ${config.circuitBreaker.failureThreshold}`);
+  if (config.polling.circuitBreaker) {
+    if (config.polling.circuitBreaker.failureThreshold != null && config.polling.circuitBreaker.failureThreshold < 1) {
+      throw new Error(`Invalid config: circuitBreaker.failureThreshold must be >= 1, got ${config.polling.circuitBreaker.failureThreshold}`);
     }
-    if (config.circuitBreaker.maxBackoffMinutes != null && config.circuitBreaker.maxBackoffMinutes <= 0) {
-      throw new Error(`Invalid config: circuitBreaker.maxBackoffMinutes must be > 0, got ${config.circuitBreaker.maxBackoffMinutes}`);
+    if (config.polling.circuitBreaker.maxBackoffMinutes != null && config.polling.circuitBreaker.maxBackoffMinutes <= 0) {
+      throw new Error(`Invalid config: circuitBreaker.maxBackoffMinutes must be > 0, got ${config.polling.circuitBreaker.maxBackoffMinutes}`);
     }
   }
-  if (config.slackBotToken && !config.slackChannel) {
+  if (config.slack.botToken && !config.slack.channel) {
     throw new Error("SLACK_CHANNEL must be set when SLACK_BOT_TOKEN is configured");
   }
   if (config.tunnel?.enabled && config.tunnel?.auth) {
@@ -409,7 +488,7 @@ function validateConfig(config: Config): void {
       throw new Error(`Invalid config: tunnel.auth must be in "user:password" format, got "${config.tunnel.auth}"`);
     }
   }
-  if (config.tunnel?.enabled && config.healthPort === 0) {
+  if (config.tunnel?.enabled && config.daemon.healthPort === 0) {
     log("Warning: tunnel.enabled is true but healthPort is 0 — no tunnel will be started");
   }
   if (config.defaultRepo && !GIT_URL_RE.test(config.defaultRepo)) {
@@ -418,10 +497,10 @@ function validateConfig(config: Config): void {
   assertValidCliAdapterName(config.cli, "Invalid config");
   validateRepoUrls(config.repos, config.teamRepos);
   const credErrors = checkProviderCredentials(config.critterTypes, config.provider, {
-    linearApiKey: config.linearApiKey,
-    jiraHost: config.jiraHost,
-    jiraEmail: config.jiraEmail,
-    jiraApiToken: config.jiraApiToken,
+    linearApiKey: config.linear.apiKey,
+    jiraHost: config.jira.host,
+    jiraEmail: config.jira.email,
+    jiraApiToken: config.jira.apiToken,
   });
   if (credErrors.length > 0) {
     throw new Error(credErrors[0]);

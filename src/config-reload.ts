@@ -43,6 +43,7 @@ export function createConfigReloadHandler(ctx: DaemonContext): (newConfig: Confi
   return (newConfig: Config) => {
     // Preserve runtime flag
     newConfig.noTmux = ctx.config.noTmux;
+    newConfig.daemon.noTmux = ctx.config.daemon.noTmux;
 
     // Override immutable fields with current values, warn if changed
     for (const field of immutableFields) {
@@ -74,8 +75,8 @@ export function createConfigReloadHandler(ctx: DaemonContext): (newConfig: Confi
       if (!newTrackers.has(provider)) {
         const tracker = createTracker(
           provider === "jira"
-            ? { type: "jira", host: newConfig.jiraHost, email: newConfig.jiraEmail, apiToken: newConfig.jiraApiToken, statusMap: newConfig.jiraStatusMap }
-            : { type: "linear", apiKey: newConfig.linearApiKey },
+            ? { type: "jira", host: newConfig.jira.host, email: newConfig.jira.email, apiToken: newConfig.jira.apiToken, statusMap: newConfig.jira.statusMap }
+            : { type: "linear", apiKey: newConfig.linear.apiKey },
         );
         newTrackers.set(provider, tracker);
         trackersToInit.push(tracker);
@@ -94,7 +95,7 @@ export function createConfigReloadHandler(ctx: DaemonContext): (newConfig: Confi
       for (const [_provider, breaker] of ctx.circuitBreakers) {
         breaker.updateOptions({
           failureThreshold: newConfig.circuitBreaker?.failureThreshold ?? 3,
-          baseDelayMs: newConfig.pollIntervalSeconds * 2 * 1000,
+          baseDelayMs: newConfig.polling.intervalSeconds * 2 * 1000,
           maxDelayMs: (newConfig.circuitBreaker?.maxBackoffMinutes ?? 30) * 60 * 1000,
         });
       }
@@ -108,9 +109,9 @@ export function createConfigReloadHandler(ctx: DaemonContext): (newConfig: Confi
       // Update slack notifier
       const { SlackNotifier } = await import("./slack.js");
       const newSlackNotifier = new SlackNotifier({
-        webhookUrl: newConfig.slackWebhookUrl,
-        botToken: newConfig.slackBotToken,
-        channel: newConfig.slackChannel,
+        webhookUrl: newConfig.slack.webhookUrl,
+        botToken: newConfig.slack.botToken,
+        channel: newConfig.slack.channel,
       });
 
       ctx.autoUpdater?.updateConfig(newConfig);
@@ -125,15 +126,15 @@ export function createConfigReloadHandler(ctx: DaemonContext): (newConfig: Confi
       ctx.healthContext.defaultProvider = newConfig.provider;
       ctx.healthContext.repos = newConfig.repos;
       ctx.healthContext.teamRepos = newConfig.teamRepos;
-      ctx.webhookConfig.linearWebhookSecret = newConfig.linearWebhookSecret;
-      ctx.webhookConfig.jiraWebhookSecret = newConfig.jiraWebhookSecret;
+      ctx.webhookConfig.linearWebhookSecret = newConfig.linear.webhookSecret;
+      ctx.webhookConfig.jiraWebhookSecret = newConfig.jira.webhookSecret;
       ctx.webhookConfig.critterTypes = newConfig.critterTypes;
       resetMetadataCache();
       // Hot-reload jsonLogs (CLI flag always takes precedence)
       if (!ctx.jsonLogsCli) {
-        if (newConfig.jsonLogs && !isJsonMode()) {
+        if (newConfig.daemon.jsonLogs && !isJsonMode()) {
           enableJsonLogs();
-        } else if (!newConfig.jsonLogs && isJsonMode()) {
+        } else if (!newConfig.daemon.jsonLogs && isJsonMode()) {
           disableJsonLogs();
         }
       }

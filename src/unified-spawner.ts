@@ -65,9 +65,9 @@ export class UnifiedSpawner {
     this.config = config;
     this.trackers = trackers;
     this.slackNotifier = new SlackNotifier({
-      webhookUrl: config.slackWebhookUrl,
-      botToken: config.slackBotToken,
-      channel: config.slackChannel,
+      webhookUrl: config.slack.webhookUrl,
+      botToken: config.slack.botToken,
+      channel: config.slack.channel,
     });
   }
 
@@ -109,13 +109,13 @@ export class UnifiedSpawner {
   }
 
   cleanupStale(): void {
-    const maxAgeMinutes = this.config.cleanupStaleMinutes
+    const maxAgeMinutes = this.config.limits.cleanupStaleMinutes
       ?? Math.max(...this.config.critterTypes.map(ct => ct.timeoutMinutes)) + 30;
-    cleanupStaleWorkDirs(this.config.workDir, this.activeWorkDirs, maxAgeMinutes);
+    cleanupStaleWorkDirs(this.config.daemon.workDir, this.activeWorkDirs, maxAgeMinutes);
   }
 
   startPeriodicCleanup(): void {
-    const intervalMs = (this.config.cleanupIntervalMinutes ?? 60) * 60 * 1000;
+    const intervalMs = (this.config.limits.cleanupIntervalMinutes ?? 60) * 60 * 1000;
     this.cleanupInterval = setInterval(() => {
       log("Running periodic work directory cleanup...");
       this.cleanupStale();
@@ -192,13 +192,13 @@ export class UnifiedSpawner {
       if (!item) break;
       this.running.set(typeName, runningNow + 1);
       logTask(item.task.identifier, `Task started [${typeName}] (queue: ${queue.length}, running: ${(this.running.get(typeName) ?? 0)})`);
-      logTask(item.task.identifier, `Repo: ${shortRepoName(item.task.repoUrl)} | Branch: ${branchName(item.task.identifier, item.task.title, this.config.branchPrefix)}`);
+      logTask(item.task.identifier, `Repo: ${shortRepoName(item.task.repoUrl)} | Branch: ${branchName(item.task.identifier, item.task.title, this.config.daemon.branchPrefix)}`);
       this.activeCritterMap.set(item.task.id, {
         identifier: item.task.identifier,
         title: item.task.title,
         phase: item.critterType.phases[0]?.name ?? typeName,
         repo: shortRepoName(item.task.repoUrl),
-        branch: item.task.prBranch ?? branchName(item.task.identifier, item.task.title, this.config.branchPrefix),
+        branch: item.task.prBranch ?? branchName(item.task.identifier, item.task.title, this.config.daemon.branchPrefix),
         startedAt: Date.now(),
         prUrl: item.task.prUrl,
         issueUrl: item.task.issueUrl,
@@ -237,9 +237,9 @@ export class UnifiedSpawner {
     const isReviewType = critterType.name === "review";
     const workDirPrefix = isReviewType ? "review-" : "";
     const branch = critterType.repo.branch
-      ? branchName(task.identifier, task.title, this.config.branchPrefix)
+      ? branchName(task.identifier, task.title, this.config.daemon.branchPrefix)
       : "";
-    const workDir = `${this.config.workDir}/${workDirPrefix}${task.identifier}-${Date.now()}`;
+    const workDir = `${this.config.daemon.workDir}/${workDirPrefix}${task.identifier}-${Date.now()}`;
     this.activeWorkDirs.add(workDir);
     const detail = this.activeCritterMap.get(task.id);
     if (detail) detail.workDir = workDir;
@@ -271,7 +271,7 @@ export class UnifiedSpawner {
     const phaseResults: SpawnResult[] = [];
 
     // Resolve effective cost budget
-    const effectiveCostBudget = critterType.costBudget ?? this.config.costBudget;
+    const effectiveCostBudget = critterType.costBudget ?? this.config.limits.costBudget;
     // Set cost budget on active detail for dashboard display
     const detail2 = this.activeCritterMap.get(task.id);
     if (detail2) detail2.costBudget = effectiveCostBudget;
@@ -282,8 +282,8 @@ export class UnifiedSpawner {
 
     try {
       // Ensure work dir base exists
-      if (!existsSync(this.config.workDir)) {
-        mkdirSync(this.config.workDir, { recursive: true });
+      if (!existsSync(this.config.daemon.workDir)) {
+        mkdirSync(this.config.daemon.workDir, { recursive: true });
       }
 
       // Claim status: move issue out of trigger status immediately to prevent duplicate dispatch
@@ -310,7 +310,7 @@ export class UnifiedSpawner {
       if (critterType.repo.clone) {
         // Resolve localPath: per-repo config takes precedence, then critter type default
         const repoLocalPath = Object.values(this.config.repos).find((r) => r.url === task.repoUrl)?.localPath ?? critterType.repo.localPath;
-        await shallowClone(task.repoUrl, workDir, task.identifier, this.config.workDir, critterType.repo.depth ?? 1, repoLocalPath, this.config.minDiskSpaceMb, task.baseBranch);
+        await shallowClone(task.repoUrl, workDir, task.identifier, this.config.daemon.workDir, critterType.repo.depth ?? 1, repoLocalPath, this.config.limits.minDiskSpaceMb, task.baseBranch);
       }
 
       // 2. Create branch (if type requires it)
@@ -502,14 +502,14 @@ export class UnifiedSpawner {
         }
 
         // Cost threshold check
-        if (!costAlertSent && this.config.costAlertThreshold != null) {
+        if (!costAlertSent && this.config.limits.costAlertThreshold != null) {
           const accumulatedCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
-          if (accumulatedCost > this.config.costAlertThreshold) {
+          if (accumulatedCost > this.config.limits.costAlertThreshold) {
             costAlertSent = true;
-            logTask(task.identifier, `Cost alert: ${task.identifier} has spent $${accumulatedCost.toFixed(2)} (threshold: $${this.config.costAlertThreshold.toFixed(2)})`);
+            logTask(task.identifier, `Cost alert: ${task.identifier} has spent $${accumulatedCost.toFixed(2)} (threshold: $${this.config.limits.costAlertThreshold.toFixed(2)})`);
             await this.slackNotifier.notify(
               task.id,
-              formatCostAlert(task.identifier, task.title, accumulatedCost, this.config.costAlertThreshold, phase.name),
+              formatCostAlert(task.identifier, task.title, accumulatedCost, this.config.limits.costAlertThreshold, phase.name),
               task.identifier,
             );
           }

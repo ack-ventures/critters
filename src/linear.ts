@@ -8,7 +8,7 @@ const MAX_PAGINATED_ISSUES = 200;
 let client: LinearClient;
 
 export function initLinear(config: Config): void {
-  client = new LinearClient({ apiKey: config.linearApiKey });
+  client = new LinearClient({ apiKey: config.linear.apiKey });
 }
 
 export function getClient(): LinearClient {

@@ -91,7 +91,7 @@ export function getPlanningAllowedTools(): string[] {
 }
 
 export function getExecutionAllowedTools(config: Config, task: CritterTask, repoConfig?: PerRepoConfig | null): string[] {
-  const tools = [...config.defaultAllowedTools];
+  const tools = [...config.defaults.defaultAllowedTools];
 
   // Merge per-project extra tools from daemon config
   if (task.projectId && config.repos[task.projectId]?.extraAllowedTools) {

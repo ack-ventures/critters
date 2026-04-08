@@ -40,7 +40,75 @@ export interface TunnelConfig {
   domain?: string;     // static ngrok domain
 }
 
+export interface PollingConfig {
+  intervalSeconds: number;
+  circuitBreaker?: CircuitBreakerConfig;
+}
+
+export interface SlackConfig {
+  webhookUrl?: string;
+  botToken?: string;
+  channel?: string;
+}
+
+export interface JiraConfig {
+  host?: string;
+  email?: string;
+  apiToken?: string;
+  statusMap?: Record<string, string>;
+  webhookSecret?: string;
+}
+
+export interface LinearConfig {
+  apiKey?: string;
+  webhookSecret?: string;
+}
+
+export interface DaemonConfig {
+  workDir: string;
+  tmuxSession: string;
+  noTmux: boolean;
+  healthPort: number;
+  dashboardToken?: string;
+  jsonLogs?: boolean;
+  branchPrefix: string;
+}
+
+export interface LimitsConfig {
+  maxLogSizeMb: number;
+  minDiskSpaceMb: number;
+  metricsRetentionDays: number;
+  costAlertThreshold?: number;
+  costBudget?: number;
+  cleanupIntervalMinutes?: number;
+  cleanupStaleMinutes?: number;
+}
+
+export interface DefaultTypeConfig {
+  triggerLabel: string;
+  maxPlanningTurns: number;
+  maxExecutionTurns: number;
+  defaultAllowedTools: string[];
+  planningModel: string;
+  executionModel: string;
+  reviewTriggerLabel: string;
+  reviewModel: string;
+  reviewConcurrency: number;
+  reviewTimeoutMinutes: number;
+  maxReviewTurns: number;
+}
+
 export interface Config {
+  // Grouped access (preferred)
+  polling: PollingConfig;
+  slack: SlackConfig;
+  jira: JiraConfig;
+  linear: LinearConfig;
+  daemon: DaemonConfig;
+  limits: LimitsConfig;
+  defaults: DefaultTypeConfig;
+
+  // ---- Existing flat fields below (kept for backward compat) ----
   pollIntervalSeconds: number;
   concurrency: number;
   timeoutMinutes: number;

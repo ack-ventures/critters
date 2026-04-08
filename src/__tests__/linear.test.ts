@@ -63,7 +63,7 @@ function createMockConnection(pages: MockIssue[][]) {
 
 beforeEach(() => {
   mockClient.issues.mockReset();
-  initLinear({ linearApiKey: "test-key" } as Config);
+  initLinear({ linearApiKey: "test-key", linear: { apiKey: "test-key" } } as Config);
 });
 
 describe("findCritterIssues pagination", () => {

@@ -133,9 +133,10 @@ export async function startDaemon(): Promise<void> {
     : undefined;
   let config = loadConfig(configPath);
   config.noTmux = noTmux || dryRun;
+  config.daemon.noTmux = noTmux || dryRun;
 
   // Apply jsonLogs from config (CLI flag takes precedence, already set above)
-  if (!jsonLogs && config.jsonLogs) {
+  if (!jsonLogs && config.daemon.jsonLogs) {
     enableJsonLogs();
   }
 
@@ -202,35 +203,35 @@ export async function startDaemon(): Promise<void> {
 
   // Check disk space at startup (warning only)
   try {
-    checkDiskSpace(config.workDir, config.minDiskSpaceMb * 2);
+    checkDiskSpace(config.daemon.workDir, config.limits.minDiskSpaceMb * 2);
   } catch {
-    log(`Warning: Low disk space on ${config.workDir} — below ${config.minDiskSpaceMb * 2}MB (2x minDiskSpaceMb). Critters may fail to clone repos.`);
+    log(`Warning: Low disk space on ${config.daemon.workDir} — below ${config.limits.minDiskSpaceMb * 2}MB (2x minDiskSpaceMb). Critters may fail to clone repos.`);
   }
 
-  initFileLogging(config.maxLogSizeMb);
+  initFileLogging(config.limits.maxLogSizeMb);
 
 
   // Capture main pane ID so periodic title updates only affect this pane
   let mainPaneId: string | undefined;
 
   if (!noTmux) {
-    const mainPaneResult = await runCommand("tmux", ["display-message", "-t", config.tmuxSession, "-p", "#{pane_id}"]);
+    const mainPaneResult = await runCommand("tmux", ["display-message", "-t", config.daemon.tmuxSession, "-p", "#{pane_id}"]);
     mainPaneId = mainPaneResult.stdout.trim();
 
     // Set main pane title (using captured pane ID)
     await runCommand("tmux", ["select-pane", "-t", mainPaneId, "-T", `Critters ${getDisplayVersion()}`]).catch(() => {});
     // Configure pane border styling (session-level settings, not pane-level)
-    await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-status", "top"]).catch(() => {});
-    await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-format", " #{pane_title} "]).catch(() => {});
-    await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-border-style", "fg=colour240"]).catch(() => {});
-    await runCommand("tmux", ["set", "-t", config.tmuxSession, "pane-active-border-style", "fg=colour39"]).catch(() => {});
+    await runCommand("tmux", ["set", "-t", config.daemon.tmuxSession, "pane-border-status", "top"]).catch(() => {});
+    await runCommand("tmux", ["set", "-t", config.daemon.tmuxSession, "pane-border-format", " #{pane_title} "]).catch(() => {});
+    await runCommand("tmux", ["set", "-t", config.daemon.tmuxSession, "pane-border-style", "fg=colour240"]).catch(() => {});
+    await runCommand("tmux", ["set", "-t", config.daemon.tmuxSession, "pane-active-border-style", "fg=colour39"]).catch(() => {});
   }
 
   // Log critter types
   const typesSummary = config.critterTypes.map((ct) => `${ct.name}(${ct.concurrency})`).join(", ");
-  log(`Config loaded: types=[${typesSummary}], poll=${config.pollIntervalSeconds}s, noTmux=${noTmux}`);
+  log(`Config loaded: types=[${typesSummary}], poll=${config.polling.intervalSeconds}s, noTmux=${noTmux}`);
   initMetrics();
-  pruneMetrics(config.metricsRetentionDays);
+  pruneMetrics(config.limits.metricsRetentionDays);
 
   // Init all trackers
   for (const tracker of trackers.values()) {
@@ -248,9 +249,9 @@ export async function startDaemon(): Promise<void> {
   // Clean up stale tmux panes from previous daemon runs
   if (!noTmux) {
     const { cleanupStalePanes, killStalePanes } = await import("./claude.js");
-    const stalePanes = await cleanupStalePanes(config.tmuxSession, spawner.getActiveWorkDirs(), mainPaneId);
+    const stalePanes = await cleanupStalePanes(config.daemon.tmuxSession, spawner.getActiveWorkDirs(), mainPaneId);
     if (stalePanes.length > 0) {
-      const result = await killStalePanes(config.tmuxSession, stalePanes);
+      const result = await killStalePanes(config.daemon.tmuxSession, stalePanes);
       log(`Cleaned up ${result.killed} stale tmux pane(s)`);
       for (const pane of stalePanes) log(`  Killed pane ${pane.paneId}: ${pane.title} (${pane.reason})`);
     }
@@ -258,9 +259,9 @@ export async function startDaemon(): Promise<void> {
 
   // Create circuit breakers (one per provider)
   let slackNotifier = new SlackNotifier({
-    webhookUrl: config.slackWebhookUrl,
-    botToken: config.slackBotToken,
-    channel: config.slackChannel,
+    webhookUrl: config.slack.webhookUrl,
+    botToken: config.slack.botToken,
+    channel: config.slack.channel,
   });
   const circuitBreakers = createCircuitBreakers(trackers, config, slackNotifier);
 
@@ -272,8 +273,8 @@ export async function startDaemon(): Promise<void> {
 
   // Start health server
   const webhookConfig = {
-    linearWebhookSecret: config.linearWebhookSecret,
-    jiraWebhookSecret: config.jiraWebhookSecret,
+    linearWebhookSecret: config.linear.webhookSecret,
+    jiraWebhookSecret: config.jira.webhookSecret,
     critterTypes: config.critterTypes,
   };
   let healthServer: { stop: () => void } | null = null;
@@ -344,9 +345,9 @@ export async function startDaemon(): Promise<void> {
     }
   }
 
-  if (config.healthPort !== 0) {
+  if (config.daemon.healthPort !== 0) {
     const metricsPath = join(homedir(), ".critters", "metrics.jsonl");
-    healthServer = startHealthServer(config.healthPort, () => ({
+    healthServer = startHealthServer(config.daemon.healthPort, () => ({
       activeCritters: spawner.getActiveCount("create"),
       queuedCritters: spawner.getQueueSize("create"),
       activeReviews: spawner.getActiveCount("review"),
@@ -362,14 +363,14 @@ export async function startDaemon(): Promise<void> {
       triggerStop: () => process.kill(process.pid, "SIGTERM"),
       triggerPollForIssue: (identifier: string) => watcher.pollForIssue(identifier),
       triggerKill: (identifiers: string[]) => spawner.killByIdentifiers(identifiers),
-    }, config.workDir, config.dashboardToken, healthContext, webhookConfig);
+    }, config.daemon.workDir, config.daemon.dashboardToken, healthContext, webhookConfig);
   }
 
   // Start tunnel if configured
   let tunnelHandle: TunnelHandle | null = null;
-  if (config.tunnel?.enabled && config.healthPort !== 0) {
+  if (config.tunnel?.enabled && config.daemon.healthPort !== 0) {
     const { startTunnel } = await import("./tunnel.js");
-    tunnelHandle = await startTunnel(config.healthPort, config.tunnel);
+    tunnelHandle = await startTunnel(config.daemon.healthPort, config.tunnel);
     if (tunnelHandle) {
       log(`Tunnel active: ${tunnelHandle.url}`);
     }
@@ -473,16 +474,16 @@ function createTrackers(config: Config): Map<string, IssueTracker> {
       case "linear":
         trackers.set("linear", createTracker({
           type: "linear",
-          apiKey: config.linearApiKey,
+          apiKey: config.linear.apiKey,
         }));
         break;
       case "jira":
         trackers.set("jira", createTracker({
           type: "jira",
-          host: config.jiraHost,
-          email: config.jiraEmail,
-          apiToken: config.jiraApiToken,
-          statusMap: config.jiraStatusMap,
+          host: config.jira.host,
+          email: config.jira.email,
+          apiToken: config.jira.apiToken,
+          statusMap: config.jira.statusMap,
         }));
         break;
     }

@@ -52,7 +52,7 @@ export function synthesizeDefaultTypes(config: Config): CritterTypeConfig[] {
   const createType: CritterTypeConfig = {
     name: "create",
     trigger: {
-      label: config.triggerLabel,
+      label: config.defaults.triggerLabel,
       status: "Todo",
       statusType: "unstarted",
     },
@@ -61,15 +61,15 @@ export function synthesizeDefaultTypes(config: Config): CritterTypeConfig[] {
       {
         name: "planning",
         prompt: "builtin:planning",
-        model: config.planningModel,
-        maxTurns: config.maxPlanningTurns,
+        model: config.defaults.planningModel,
+        maxTurns: config.defaults.maxPlanningTurns,
         tools: "readonly",
       },
       {
         name: "execution",
         prompt: "builtin:execution",
-        model: config.executionModel,
-        maxTurns: config.maxExecutionTurns,
+        model: config.defaults.executionModel,
+        maxTurns: config.defaults.maxExecutionTurns,
         tools: "default",
       },
     ],
@@ -85,7 +85,7 @@ export function synthesizeDefaultTypes(config: Config): CritterTypeConfig[] {
   const reviewType: CritterTypeConfig = {
     name: "review",
     trigger: {
-      label: config.reviewTriggerLabel,
+      label: config.defaults.reviewTriggerLabel,
       status: "In Review",
     },
     repo: { clone: true },
@@ -93,8 +93,8 @@ export function synthesizeDefaultTypes(config: Config): CritterTypeConfig[] {
       {
         name: "review",
         prompt: "builtin:review",
-        model: config.reviewModel,
-        maxTurns: config.maxReviewTurns,
+        model: config.defaults.reviewModel,
+        maxTurns: config.defaults.maxReviewTurns,
         tools: "review",
       },
     ],
@@ -103,8 +103,8 @@ export function synthesizeDefaultTypes(config: Config): CritterTypeConfig[] {
       needsChanges: { status: "Human Review" },
       failure: { status: "Critter Failed" },
     },
-    concurrency: config.reviewConcurrency,
-    timeoutMinutes: config.reviewTimeoutMinutes,
+    concurrency: config.defaults.reviewConcurrency,
+    timeoutMinutes: config.defaults.reviewTimeoutMinutes,
     enrichment: "extractPrUrl",
   };
 

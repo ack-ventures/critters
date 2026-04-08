@@ -193,19 +193,37 @@ export function validateConfigFile(configPath?: string): { errors: string[]; war
   } else {
     // Synthesize defaults from flat config to validate they would work
     try {
+      const triggerLabel = (yaml.triggerLabel as string) ?? "Critter";
+      const planningModel = (yaml.planningModel as string) ?? "opus";
+      const executionModel = (yaml.executionModel as string) ?? "opus";
+      const reviewTriggerLabel = (yaml.reviewTriggerLabel as string) ?? "Critter Review";
+      const reviewModel = (yaml.reviewModel as string) ?? "opus";
       const partialConfig = {
-        triggerLabel: (yaml.triggerLabel as string) ?? "Critter",
-        planningModel: (yaml.planningModel as string) ?? "opus",
+        triggerLabel,
+        planningModel,
         maxPlanningTurns,
-        executionModel: (yaml.executionModel as string) ?? "opus",
+        executionModel,
         maxExecutionTurns,
         concurrency,
         timeoutMinutes,
-        reviewTriggerLabel: (yaml.reviewTriggerLabel as string) ?? "Critter Review",
-        reviewModel: (yaml.reviewModel as string) ?? "opus",
+        reviewTriggerLabel,
+        reviewModel,
         maxReviewTurns,
         reviewConcurrency,
         reviewTimeoutMinutes,
+        defaults: {
+          triggerLabel,
+          maxPlanningTurns,
+          maxExecutionTurns,
+          defaultAllowedTools: (defaultAllowedTools ?? []),
+          planningModel,
+          executionModel,
+          reviewTriggerLabel,
+          reviewModel,
+          reviewConcurrency,
+          reviewTimeoutMinutes,
+          maxReviewTurns,
+        },
       } as Config;
       critterTypes = synthesizeDefaultTypes(partialConfig);
     } catch (e) {
