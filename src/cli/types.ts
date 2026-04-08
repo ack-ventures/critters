@@ -52,6 +52,14 @@ export interface ReviewDecision {
   reason?: string;
 }
 
+export interface CliCapabilities {
+  toolRestrictions: boolean;
+  costTracking: boolean;
+  mcp: boolean;
+  maxTurns: boolean;
+  subagents: boolean;
+}
+
 export interface CliAdapter {
   readonly name: string;
   readonly binary: string;
@@ -76,11 +84,7 @@ export interface CliAdapter {
   resolveTools(tools: string[]): string[];
 
   // Capability declarations
-  supportsToolRestrictions(): boolean;
-  supportsCostTracking(): boolean;
-  supportsMcp(): boolean;
-  supportsMaxTurns(): boolean;
-  supportsSubagents(): boolean;
+  readonly capabilities: CliCapabilities;
 
   // Prompt integration
   toolNames(): ToolNameMap;

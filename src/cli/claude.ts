@@ -1,13 +1,14 @@
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type { CritterTypeConfig } from "../critter-type.js";
 import { STREAM_FILTER } from "../jq-filter.js";
 import { logTaskWarn } from "../logger.js";
 import type { Config } from "../types.js";
 import { runCommand, shellEscape } from "../utils.js";
+import { resolveMcpConfigShared } from "./mcp.js";
+import { parseReviewDecisionFromText } from "./parse-review.js";
 import type {
   CliAdapter,
+  CliCapabilities,
   CliCommand,
   ParsedOutput,
   ParsedOutputLine,
@@ -15,6 +16,8 @@ import type {
   SpawnOptions,
   ToolNameMap,
 } from "./types.js";
+
+export { parseReviewDecisionFromText } from "./parse-review.js";
 
 export class ClaudeCodeAdapter implements CliAdapter {
   readonly name = "Claude Code";
@@ -301,25 +304,13 @@ export class ClaudeCodeAdapter implements CliAdapter {
     return tools;
   }
 
-  supportsToolRestrictions(): boolean {
-    return true;
-  }
-
-  supportsCostTracking(): boolean {
-    return true;
-  }
-
-  supportsMcp(): boolean {
-    return true;
-  }
-
-  supportsMaxTurns(): boolean {
-    return true;
-  }
-
-  supportsSubagents(): boolean {
-    return true;
-  }
+  readonly capabilities: CliCapabilities = {
+    toolRestrictions: true,
+    costTracking: true,
+    mcp: true,
+    maxTurns: true,
+    subagents: true,
+  };
 
   toolNames(): ToolNameMap {
     return {
@@ -346,30 +337,8 @@ The Read tool supports \`offset\` and \`limit\` parameters \u2014 use these to r
     critterType: CritterTypeConfig,
     config: Config,
   ): { mcpConfig: string[]; strictMcpConfig: boolean } {
-    const raw = critterType.mcpConfig ?? config.mcpConfig;
-    const strict =
-      critterType.strictMcpConfig ?? config.strictMcpConfig ?? false;
-
-    if (!raw) return { mcpConfig: [], strictMcpConfig: strict };
-
-    const paths = Array.isArray(raw) ? raw : [raw];
-    const resolved = paths.map((p) =>
-      p.startsWith("~") ? join(homedir(), p.slice(1)) : p,
-    );
-
-    return { mcpConfig: resolved, strictMcpConfig: strict };
+    return resolveMcpConfigShared(critterType, config);
   }
-}
-
-export function parseReviewDecisionFromText(text: string): ReviewDecision {
-  const match = text.match(/REVIEW_RESULT:(MERGED|NEEDS_CHANGES)(?::(.+))?/);
-  if (!match) {
-    return { decision: "unknown" };
-  }
-  if (match[1] === "MERGED") {
-    return { decision: "merged" };
-  }
-  return { decision: "needs_changes", reason: match[2] || "No reason provided" };
 }
 
 function formatClaudeUserEvent(obj: Record<string, unknown>): string | null {

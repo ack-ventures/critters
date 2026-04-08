@@ -114,7 +114,7 @@ function buildToolRestrictionGuidance(
   adapter?: CliAdapter,
 ): string {
   const commandList = bashCommands.join(", ");
-  if (adapter?.supportsToolRestrictions() === false) {
+  if (adapter?.capabilities.toolRestrictions === false) {
     return `## Tool Restrictions
 Requested command policy: stay within these commands unless the task cannot proceed: ${commandList}.
 The active CLI cannot enforce the full Critters allowlist mechanically, so treat this as a hard workflow rule and rely on the sandbox for the actual execution boundary.
@@ -130,7 +130,7 @@ export function buildPlanningPrompt(task: CritterTask, adapter?: CliAdapter, rep
   const cleanedDescription = stripBranchLine(stripRepoLine(task.description));
 
   const tools = adapter?.toolNames() ?? { read: "Read", write: "Write", edit: "Edit", bash: "Bash", glob: "Glob", grep: "Grep", task: "Task" };
-  const hasSubagents = adapter?.supportsSubagents() ?? true;
+  const hasSubagents = adapter?.capabilities.subagents ?? true;
 
   let reviewerSteps: string;
   if (hasSubagents && tools.task) {
