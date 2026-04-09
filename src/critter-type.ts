@@ -56,7 +56,7 @@ export function synthesizeDefaultTypes(config: Config): CritterTypeConfig[] {
       status: "Todo",
       statusType: "unstarted",
     },
-    repo: { clone: true, branch: true },
+    repo: { clone: true, branch: true, commitPlans: false },
     phases: [
       {
         name: "planning",

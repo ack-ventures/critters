@@ -39,13 +39,15 @@ export class PlanningPhaseRunner implements PhaseRunner {
       throw new Error("Planning failed to produce a plan file");
     }
 
-    // Commit plan file to branch
-    await commitFile(
-      workDir,
-      `critters/plans/${task.identifier}.md`,
-      `[${task.identifier}] Add implementation plan`,
-      task.identifier,
-    );
+    // Commit plan file to branch (only if commitPlans is enabled)
+    if (ctx.critterType.repo.commitPlans) {
+      await commitFile(
+        workDir,
+        `critters/plans/${task.identifier}.md`,
+        `[${task.identifier}] Add implementation plan`,
+        task.identifier,
+      );
+    }
 
     return { spawn, data: { planFile } };
   }

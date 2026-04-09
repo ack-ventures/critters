@@ -70,7 +70,7 @@ describe("synthesizeDefaultTypes", () => {
     expect(create.trigger.statusType).toBe("unstarted");
     expect(create.concurrency).toBe(5);
     expect(create.timeoutMinutes).toBe(45);
-    expect(create.repo).toEqual({ clone: true, branch: true });
+    expect(create.repo).toEqual({ clone: true, branch: true, commitPlans: false });
     expect(create.phases).toHaveLength(2);
     expect(create.phases[0].model).toBe("sonnet");
     expect(create.phases[0].maxTurns).toBe(30);
