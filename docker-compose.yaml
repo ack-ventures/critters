@@ -1,6 +1,8 @@
 services:
   critters:
-    build: .
+    build:
+      context: .
+      # target: prod  # use released binary instead of building from source
     # or: image: ghcr.io/ack-ventures/critters:latest
     env_file: .env
     volumes:
