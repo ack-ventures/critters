@@ -542,7 +542,7 @@ describe("stop()", () => {
     expect(res.status).toBe(200);
 
     // Stop the server
-    server.stop();
+    server!.stop();
     server = null;
 
     // Verify server is no longer accepting connections
