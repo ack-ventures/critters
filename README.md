@@ -97,7 +97,7 @@ The Docker image includes all runtime dependencies (Claude Code CLI, `gh`, `git`
 **Auth requirements:**
 - `ANTHROPIC_API_KEY` in `.env` — for the Claude Code CLI
 - `~/.ssh` — SSH keys for git clone (mounted read-only)
-- `~/.config/gh` — GitHub CLI auth tokens (mounted read-only; run `gh auth login` on the host first)
+- `GITHUB_TOKEN` — GitHub CLI auth (set to the output of `gh auth token` on the host, or add to `.env`)
 
 For the pre-built image, replace `build: .` with `image: ghcr.io/ack-ventures/critters:latest` in `docker-compose.yaml`.
 

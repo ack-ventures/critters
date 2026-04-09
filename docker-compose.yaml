@@ -8,10 +8,11 @@ services:
     volumes:
       - ~/.critters:/root/.critters       # config, metrics, state
       - ~/.ssh:/root/.ssh:ro              # SSH keys for git clone
-      - ~/.config/gh:/root/.config/gh:ro  # GitHub CLI auth
       - ~/.claude:/root/.claude             # Claude CLI data
       - ~/.claude.json:/root/.claude.json    # Claude CLI auth config
     environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}                    # GitHub CLI auth (run `gh auth token` on host)
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}  # Claude Max subscription (run `claude setup-token`)
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN:-}
     ports:
       - "3847:3847"

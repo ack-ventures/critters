@@ -63,7 +63,7 @@ EXPOSE 3847
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:3847/healthz || exit 1
 
-CMD ["./critters", "--no-tmux", "--json-logs", "--skip-update"]
+CMD ["./critters", "--no-tmux", "--daemonized", "--json-logs", "--skip-update"]
 
 # ── Prod: download release binary ────────────────────────────────────
 # Usage: docker build --target prod .
