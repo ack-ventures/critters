@@ -277,7 +277,7 @@ export async function startDaemon(): Promise<void> {
     jiraWebhookSecret: config.jira.webhookSecret,
     critterTypes: config.critterTypes,
   };
-  let healthServer: { stop: () => void } | null = null;
+  let healthServer: { port: number; stop: () => void } | null = null;
   const healthContext: {
     trackers: Map<string, IssueTracker>;
     critterTypes: CritterTypeConfig[];

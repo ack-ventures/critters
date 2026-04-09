@@ -1,6 +1,6 @@
 {
   "name": "critters",
-  "version": "1.6.0",
+  "version": "1.6.2",
   "description": "TypeScript daemon that watches issue trackers and spawns AI coding CLI instances to produce draft PRs",
   "license": "MIT",
   "repository": {

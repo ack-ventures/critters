@@ -259,7 +259,7 @@ The file should be a checklist mirroring the plan's sections, e.g.:
 - [ ] Step 3: Migrate spawner.ts
 - [ ] Step 4: Add tests
 \`\`\`
-${(options?.commitPlans ?? true) ? "Commit the checkpoint file alongside your code changes (include it in the same commit, not separately)." : "Do NOT commit files under `critters/` — they are internal working files, not part of the target repo."}
+${(options?.commitPlans ?? false) ? "Commit the checkpoint file alongside your code changes (include it in the same commit, not separately)." : "Do NOT commit files under `critters/` — they are internal working files, not part of the target repo."}
 
 ${buildToolRestrictionGuidance(bashTools, adapter)}
 Commands like chmod, bunx, perl, python3, curl, and others are outside the requested policy.

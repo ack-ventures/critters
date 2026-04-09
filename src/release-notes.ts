@@ -1,5 +1,35 @@
 export const RELEASE_NOTES: Array<{ tag: string; date: string; name: string; body: string }> = [
   {
+    "tag": "v1.6.2",
+    "date": "2026-04-09",
+    "name": "v1.6.2",
+    "body": "## What's Changed\n* [ACK-279] Add unit tests for loadEnvFallback in env.ts by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/294\n* [ACK-280] Skip committing plan files to branch, keep them only in PR description by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/296\n* Fix Docker daemonization and auth for containerized deployments by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/295\n* Bump version to v1.6.2 by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/297\n\n\n**Full Changelog**: https://github.com/ack-ventures/critters/compare/v1.6.1...v1.6.2"
+  },
+  {
+    "tag": "v1.6.1",
+    "date": "2026-04-09",
+    "name": "v1.6.1",
+    "body": "## What's Changed\n* Add prod Docker target and linux-arm64 release binary by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/292\n* Bump version to v1.6.1 by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/293\n\n\n**Full Changelog**: https://github.com/ack-ventures/critters/compare/v1.6.0...v1.6.1"
+  },
+  {
+    "tag": "v1.6.0",
+    "date": "2026-04-06",
+    "name": "v1.6.0",
+    "body": "## What's Changed\n* [ACK-274] Document the review/fix-review-comments critter loop in README by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/288\n* [ACK-275] Tighten the README quickstart for first-time setup by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/290\n* Add mixed CLI phase support and review enforcement by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/289\n* Bump version to v1.6.0 by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/291\n\n\n**Full Changelog**: https://github.com/ack-ventures/critters/compare/v1.5.0...v1.6.0"
+  },
+  {
+    "tag": "v1.5.0",
+    "date": "2026-04-01",
+    "name": "v1.5.0",
+    "body": "## What's Changed\n* Default claimStatus to 'In Progress' for custom critter types by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/284\n* Fix claimStatus default to only apply for unstarted trigger types by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/285\n* Bump version to v1.5.0 by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/286\n\n\n**Full Changelog**: https://github.com/ack-ventures/critters/compare/v1.4.4...v1.5.0"
+  },
+  {
+    "tag": "v1.4.4",
+    "date": "2026-04-01",
+    "name": "v1.4.4",
+    "body": "## What's Changed\n* Fix duplicate dispatch when issue matches multiple critter types by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/282\n* Bump version to v1.4.4 by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/283\n\n\n**Full Changelog**: https://github.com/ack-ventures/critters/compare/v1.4.3...v1.4.4"
+  },
+  {
     "tag": "v1.4.3",
     "date": "2026-03-30",
     "name": "v1.4.3",
@@ -28,35 +58,5 @@ export const RELEASE_NOTES: Array<{ tag: string; date: string; name: string; bod
     "date": "2026-03-19",
     "name": "v1.3.1",
     "body": "## What's Changed\n* [ACK-258] Update release command to only review README.md, not CLAUDE.md by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/270\n* Add quietComments option to suppress status comments by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/271\n* Bump version to v1.3.1 by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/272\n\n\n**Full Changelog**: https://github.com/ack-ventures/critters/compare/v1.3.0...v1.3.1"
-  },
-  {
-    "tag": "v1.3.0",
-    "date": "2026-03-16",
-    "name": "v1.3.0",
-    "body": "## What's Changed\n* [ACK-256] Daemonize process when using --no-tmux flag by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/267\n* [ACK-257] Drastically reduce CLAUDE.md to essential dev guidance only by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/268\n* Bump version to v1.3.0 by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/269\n\n\n**Full Changelog**: https://github.com/ack-ventures/critters/compare/v1.2.0...v1.3.0"
-  },
-  {
-    "tag": "v1.2.0",
-    "date": "2026-03-16",
-    "name": "v1.2.0",
-    "body": "## What's Changed\n* [ACK-255] Add --type filter to critters history command by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/264\n* Add CLI adapter abstraction for multi-CLI support by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/265\n* Bump version to v1.2.0 by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/266\n\n\n**Full Changelog**: https://github.com/ack-ventures/critters/compare/v1.1.0...v1.2.0"
-  },
-  {
-    "tag": "v1.1.0",
-    "date": "2026-03-15",
-    "name": "v1.1.0",
-    "body": "## What's Changed\n* [ACK-247] Dashboard: add per-type stats cards by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/253\n* [ACK-249] Dashboard: add browser notifications for critter events by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/254\n* [ACK-248] Dashboard: show live cost on active critters by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/255\n* [ACK-245] Dashboard: add tracker ticket link on issue detail page by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/258\n* [ACK-246] Dashboard: add filterable recent activity table by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/259\n* [ACK-250] Dashboard: show estimated time remaining for active critters by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/252\n* [ACK-244] Dashboard: link active critter identifiers to tracker tickets by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/257\n* [ACK-251] Dashboard: show PR CI and review status in recent activity by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/256\n* [ACK-252] Dashboard: click-through from charts to filtered activity by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/260\n* [ACK-253] Add critters stop CLI command by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/261\n* [ACK-254] Add configurable auto-update timer by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/262\n* Bump version to v1.1.0 by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/263\n\n\n**Full Changelog**: https://github.com/ack-ventures/critters/compare/v1.0.2...v1.1.0"
-  },
-  {
-    "tag": "v1.0.2",
-    "date": "2026-03-14",
-    "name": "v1.0.2",
-    "body": "## What's Changed\n* [ACK-243] Dashboard: link recent activity Issue column to tracker ticket, add separate logs link by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/250\n* Bump version to v1.0.2 (#251) by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/251\n\n\n**Full Changelog**: https://github.com/ack-ventures/critters/compare/v1.0.1...v1.0.2"
-  },
-  {
-    "tag": "v1.0.1",
-    "date": "2026-03-14",
-    "name": "v1.0.1",
-    "body": "## What's Changed\n* Add base branch field to dashboard create form by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/248\n* Bump version to v1.0.1 by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/249\n\n\n**Full Changelog**: https://github.com/ack-ventures/critters/compare/v1.0.0...v1.0.1"
   }
 ];

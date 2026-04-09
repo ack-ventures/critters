@@ -12,8 +12,13 @@ jobs:
         include:
           - runner: macos-latest
             name: critters-darwin-arm64
+            compile_args: ""
           - runner: ubuntu-latest
             name: critters-linux-x64
+            compile_args: ""
+          - runner: ubuntu-latest
+            name: critters-linux-arm64
+            compile_args: "--target=bun-linux-arm64"
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +49,7 @@ jobs:
         run: node scripts/bundle-release-notes.cjs
 
       - name: Compile binary
-        run: bun build --compile src/index.ts --outfile ${{ matrix.name }}
+        run: bun build --compile ${{ matrix.compile_args }} src/index.ts --outfile ${{ matrix.name }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -67,7 +72,7 @@ jobs:
       - name: Generate checksums
         run: |
           cd artifacts
-          shasum -a 256 critters-darwin-arm64 critters-linux-x64 > checksums-sha256.txt
+          shasum -a 256 critters-darwin-arm64 critters-linux-x64 critters-linux-arm64 > checksums-sha256.txt
 
       - name: Create GitHub Release
         env:
@@ -76,6 +81,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             artifacts/critters-darwin-arm64 \
             artifacts/critters-linux-x64 \
+            artifacts/critters-linux-arm64 \
             artifacts/checksums-sha256.txt \
             --generate-notes
 

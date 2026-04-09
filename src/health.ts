@@ -75,7 +75,7 @@ export function startHealthServer(
     jiraWebhookSecret?: string;
     critterTypes: CritterTypeConfig[];
   },
-): { stop: () => void } {
+): { port: number; stop: () => void } {
   const startTime = Date.now();
 
   const server = Bun.serve({
@@ -197,7 +197,7 @@ export function startHealthServer(
 
         // Use setTimeout to let the HTTP response flush before process replacement
         setTimeout(() => {
-          triggers.triggerRestart?.();
+          triggers.triggerRestart!();
         }, 250);
 
         return Response.json({ ok: true, message: "Restarting..." });
@@ -214,7 +214,7 @@ export function startHealthServer(
         }
 
         setTimeout(() => {
-          triggers.triggerStop?.();
+          triggers.triggerStop!();
         }, 250);
 
         return Response.json({ ok: true, message: "Stopping..." });
@@ -590,6 +590,7 @@ export function startHealthServer(
   log(`Health server listening on port ${server.port}`);
 
   return {
+    port: server.port!,
     stop: () => server.stop(true),
   };
 }

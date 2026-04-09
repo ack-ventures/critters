@@ -4,11 +4,18 @@ import type { CritterTypeConfig } from "../critter-type.js";
 import { type HealthStatus, resetMetadataCache, resetMetricsSummaryCache, startHealthServer } from "../health.js";
 import { initMetrics, recordMetric } from "../metrics.js";
 import type { IssueTracker } from "../tracker/types.js";
-import { createTempDir, makeTestCritterType } from "./helpers.js";
+import { createTempDir } from "./helpers.js";
 
 let tempDir: string;
 let cleanup: () => void;
-let server: { stop: () => void } | null = null;
+let server: { port: number; stop: () => void } | null = null;
+
+/** Start health server on an OS-assigned port and return the port number. */
+function startServer(...args: Parameters<typeof startHealthServer>): number {
+  args[0] = 0;
+  server = startHealthServer(...args);
+  return server.port;
+}
 
 function defaultStatus(): HealthStatus {
   return {
@@ -39,21 +46,7 @@ afterEach(() => {
 describe("GET /healthz", () => {
   test("returns 200 with correct shape", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    server = startHealthServer(0, defaultStatus);
-    // Extract port from the server - Bun.serve with port 0 assigns a random port
-    // We need to get the actual URL from the server internals
-    // Since startHealthServer doesn't expose the port, we'll use a known port
-    // Actually, we need to rethink - let's use a random high port
-    // Port 0 with Bun.serve picks a random port, but our wrapper doesn't expose it.
-    // Let's test by starting on a specific high port range.
-    server.stop();
-
-    // Restart with port 0 - need to capture the actual server port
-    // The startHealthServer function logs the port but doesn't return it.
-    // Let's create a helper that tests by trying the port.
-    // For now, we'll use a random port in the ephemeral range.
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus);
+    const port = startServer(0, defaultStatus);
 
     const res = await fetch(`http://localhost:${port}/healthz`);
     expect(res.status).toBe(200);
@@ -74,8 +67,7 @@ describe("GET /healthz", () => {
 
   test("reflects getStatus callback values", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, () => ({
+    const port = startServer(0, () => ({
       activeCritters: 2,
       queuedCritters: 3,
       activeReviews: 1,
@@ -101,8 +93,7 @@ describe("GET /healthz", () => {
     initMetrics(metricsFile);
     recordMetric({ timestamp: "", event: "task_completed", issueId: "C-1" });
 
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus);
+    const port = startServer(0, defaultStatus);
 
     // First request computes fresh
     const res1 = await fetch(`http://localhost:${port}/healthz`);
@@ -129,8 +120,7 @@ describe("GET /healthz", () => {
     recordMetric({ timestamp: "", event: "task_failed", issueId: "A-3" });
     recordMetric({ timestamp: "", event: "task_started", issueId: "A-4" });
 
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus);
+    const port = startServer(0, defaultStatus);
 
     const res = await fetch(`http://localhost:${port}/healthz`);
     const body = await res.json();
@@ -148,8 +138,7 @@ describe("GET /metrics", () => {
     recordMetric({ timestamp: "", event: "task_started", issueId: "X-1" });
     recordMetric({ timestamp: "", event: "task_completed", issueId: "X-2" });
 
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus);
+    const port = startServer(0, defaultStatus);
 
     const res = await fetch(`http://localhost:${port}/metrics`);
     expect(res.status).toBe(200);
@@ -164,8 +153,7 @@ describe("GET /metrics", () => {
   test("returns empty array when no metrics file exists", async () => {
     initMetrics(join(tempDir, "nonexistent", "metrics.jsonl"));
 
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus);
+    const port = startServer(0, defaultStatus);
 
     const res = await fetch(`http://localhost:${port}/metrics`);
     const body = await res.json();
@@ -177,8 +165,7 @@ describe("GET /metrics", () => {
 describe("GET / (dashboard)", () => {
   test("returns 200 with HTML content type", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus);
+    const port = startServer(0, defaultStatus);
 
     const res = await fetch(`http://localhost:${port}/`);
     expect(res.status).toBe(200);
@@ -191,8 +178,7 @@ describe("GET / (dashboard)", () => {
 
   test("/dashboard returns same content as /", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus);
+    const port = startServer(0, defaultStatus);
 
     const res = await fetch(`http://localhost:${port}/dashboard`);
     expect(res.status).toBe(200);
@@ -203,8 +189,7 @@ describe("GET / (dashboard)", () => {
 describe("unknown routes", () => {
   test("returns 404", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus);
+    const port = startServer(0, defaultStatus);
 
     const res = await fetch(`http://localhost:${port}/unknown`);
     expect(res.status).toBe(404);
@@ -214,8 +199,7 @@ describe("unknown routes", () => {
 describe("POST /poll", () => {
   test("triggers poll and returns issue count", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus, undefined, {
+    const port = startServer(0, defaultStatus, undefined, {
       triggerPoll: async () => 5,
       triggerReviewPoll: async () => 0,
     });
@@ -228,8 +212,7 @@ describe("POST /poll", () => {
 
   test("returns 405 for GET", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus, undefined, {
+    const port = startServer(0, defaultStatus, undefined, {
       triggerPoll: async () => 0,
       triggerReviewPoll: async () => 0,
     });
@@ -240,8 +223,7 @@ describe("POST /poll", () => {
 
   test("returns 503 when triggers not configured", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus);
+    const port = startServer(0, defaultStatus);
 
     const res = await fetch(`http://localhost:${port}/poll`, { method: "POST" });
     expect(res.status).toBe(503);
@@ -251,8 +233,7 @@ describe("POST /poll", () => {
 describe("POST /review-poll", () => {
   test("triggers review poll and returns issue count", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus, undefined, {
+    const port = startServer(0, defaultStatus, undefined, {
       triggerPoll: async () => 0,
       triggerReviewPoll: async () => 3,
     });
@@ -265,8 +246,7 @@ describe("POST /review-poll", () => {
 
   test("returns 405 for GET", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus, undefined, {
+    const port = startServer(0, defaultStatus, undefined, {
       triggerPoll: async () => 0,
       triggerReviewPoll: async () => 0,
     });
@@ -279,8 +259,7 @@ describe("POST /review-poll", () => {
 describe("auth", () => {
   test("POST /poll returns 401 without token when dashboardToken is configured", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus, undefined, {
+    const port = startServer(0, defaultStatus, undefined, {
       triggerPoll: async () => 0,
       triggerReviewPoll: async () => 0,
     }, undefined, "secret-token");
@@ -291,8 +270,7 @@ describe("auth", () => {
 
   test("POST /poll returns 200 with correct bearer token", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus, undefined, {
+    const port = startServer(0, defaultStatus, undefined, {
       triggerPoll: async () => 2,
       triggerReviewPoll: async () => 0,
     }, undefined, "secret-token");
@@ -308,8 +286,7 @@ describe("auth", () => {
 
   test("POST /poll returns 401 with wrong bearer token", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus, undefined, {
+    const port = startServer(0, defaultStatus, undefined, {
       triggerPoll: async () => 0,
       triggerReviewPoll: async () => 0,
     }, undefined, "secret-token");
@@ -323,8 +300,7 @@ describe("auth", () => {
 
   test("POST /poll works without auth when dashboardToken is not set", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus, undefined, {
+    const port = startServer(0, defaultStatus, undefined, {
       triggerPoll: async () => 1,
       triggerReviewPoll: async () => 0,
     });
@@ -335,8 +311,7 @@ describe("auth", () => {
 
   test("GET /api/v1/auth-check returns required: true when token set", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, "secret-token");
+    const port = startServer(0, defaultStatus, undefined, undefined, undefined, "secret-token");
 
     const res = await fetch(`http://localhost:${port}/api/v1/auth-check`);
     expect(res.status).toBe(200);
@@ -346,8 +321,7 @@ describe("auth", () => {
 
   test("GET /api/v1/auth-check returns required: false when token not set", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus);
+    const port = startServer(0, defaultStatus);
 
     const res = await fetch(`http://localhost:${port}/api/v1/auth-check`);
     expect(res.status).toBe(200);
@@ -383,14 +357,25 @@ function createMockTracker(overrides?: Partial<IssueTracker>): IssueTracker {
   };
 }
 
+function createMockCritterType(overrides?: Partial<CritterTypeConfig>): CritterTypeConfig {
+  return {
+    name: "create",
+    trigger: { label: "Critter", status: "Todo" },
+    repo: { clone: true, branch: true },
+    phases: [{ name: "execution", prompt: "builtin:execution", model: "opus", maxTurns: 75, tools: "default" }],
+    outcomes: { success: { status: "In Review" } },
+    concurrency: 2,
+    timeoutMinutes: 30,
+    ...overrides,
+  };
+}
 
 describe("GET /api/v1/metadata", () => {
   test("returns providers and critter types with mock trackers", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
     const trackers = new Map([["linear", createMockTracker()]]);
-    const critterTypes = [makeTestCritterType()];
-    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, undefined, {
+    const critterTypes = [createMockCritterType()];
+    const port = startServer(0, defaultStatus, undefined, undefined, undefined, undefined, {
       trackers,
       critterTypes,
     });
@@ -406,8 +391,7 @@ describe("GET /api/v1/metadata", () => {
 
   test("returns empty providers when no context provided", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus);
+    const port = startServer(0, defaultStatus);
 
     const res = await fetch(`http://localhost:${port}/api/v1/metadata`);
     expect(res.status).toBe(200);
@@ -418,10 +402,9 @@ describe("GET /api/v1/metadata", () => {
 
   test("uses defaultProvider for critter types without explicit provider", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
     const trackers = new Map([["jira", createMockTracker({ provider: "jira" })]]);
-    const critterTypes = [makeTestCritterType({ provider: undefined })];
-    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, undefined, {
+    const critterTypes = [createMockCritterType({ provider: undefined })];
+    const port = startServer(0, defaultStatus, undefined, undefined, undefined, undefined, {
       trackers,
       critterTypes,
       defaultProvider: "jira",
@@ -434,11 +417,10 @@ describe("GET /api/v1/metadata", () => {
 
   test("returns empty teams when tracker.listTeams throws", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
     const trackers = new Map([["linear", createMockTracker({
       listTeams: async () => { throw new Error("API error"); },
     })]]);
-    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, undefined, {
+    const port = startServer(0, defaultStatus, undefined, undefined, undefined, undefined, {
       trackers,
       critterTypes: [],
     });
@@ -453,10 +435,9 @@ describe("GET /api/v1/metadata", () => {
 describe("POST /api/v1/issues", () => {
   test("creates issue via tracker and returns identifier", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
     const trackers = new Map([["linear", createMockTracker()]]);
-    const critterTypes = [makeTestCritterType()];
-    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, undefined, {
+    const critterTypes = [createMockCritterType()];
+    const port = startServer(0, defaultStatus, undefined, undefined, undefined, undefined, {
       trackers,
       critterTypes,
     });
@@ -473,9 +454,8 @@ describe("POST /api/v1/issues", () => {
 
   test("returns 400 when title is missing", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
     const trackers = new Map([["linear", createMockTracker()]]);
-    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, undefined, { trackers, critterTypes: [] });
+    const port = startServer(0, defaultStatus, undefined, undefined, undefined, undefined, { trackers, critterTypes: [] });
 
     const res = await fetch(`http://localhost:${port}/api/v1/issues`, {
       method: "POST",
@@ -489,9 +469,8 @@ describe("POST /api/v1/issues", () => {
 
   test("returns 400 when teamId is missing", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
     const trackers = new Map([["linear", createMockTracker()]]);
-    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, undefined, { trackers, critterTypes: [] });
+    const port = startServer(0, defaultStatus, undefined, undefined, undefined, undefined, { trackers, critterTypes: [] });
 
     const res = await fetch(`http://localhost:${port}/api/v1/issues`, {
       method: "POST",
@@ -505,9 +484,8 @@ describe("POST /api/v1/issues", () => {
 
   test("returns 400 for unknown provider", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
     const trackers = new Map([["linear", createMockTracker()]]);
-    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, undefined, { trackers, critterTypes: [] });
+    const port = startServer(0, defaultStatus, undefined, undefined, undefined, undefined, { trackers, critterTypes: [] });
 
     const res = await fetch(`http://localhost:${port}/api/v1/issues`, {
       method: "POST",
@@ -521,9 +499,8 @@ describe("POST /api/v1/issues", () => {
 
   test("returns 401 when auth is required and missing", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
     const trackers = new Map([["linear", createMockTracker()]]);
-    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, "secret-token", { trackers, critterTypes: [] });
+    const port = startServer(0, defaultStatus, undefined, undefined, undefined, "secret-token", { trackers, critterTypes: [] });
 
     const res = await fetch(`http://localhost:${port}/api/v1/issues`, {
       method: "POST",
@@ -535,9 +512,8 @@ describe("POST /api/v1/issues", () => {
 
   test("returns 405 for GET request", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
     const trackers = new Map([["linear", createMockTracker()]]);
-    server = startHealthServer(port, defaultStatus, undefined, undefined, undefined, undefined, { trackers, critterTypes: [] });
+    const port = startServer(0, defaultStatus, undefined, undefined, undefined, undefined, { trackers, critterTypes: [] });
 
     const res = await fetch(`http://localhost:${port}/api/v1/issues`);
     expect(res.status).toBe(405);
@@ -545,8 +521,7 @@ describe("POST /api/v1/issues", () => {
 
   test("returns 503 when trackers not available", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus);
+    const port = startServer(0, defaultStatus);
 
     const res = await fetch(`http://localhost:${port}/api/v1/issues`, {
       method: "POST",
@@ -560,15 +535,14 @@ describe("POST /api/v1/issues", () => {
 describe("stop()", () => {
   test("shuts down the server", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus);
+    const port = startServer(0, defaultStatus);
 
     // Verify server is running
     const res = await fetch(`http://localhost:${port}/healthz`);
     expect(res.status).toBe(200);
 
     // Stop the server
-    server.stop();
+    server!.stop();
     server = null;
 
     // Verify server is no longer accepting connections
