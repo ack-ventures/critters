@@ -230,6 +230,21 @@ describe("buildExecutionPrompt checkpointing", () => {
     expect(prompt).toContain("critters/plans/XYZ-99.checkpoint.md");
     expect(prompt).not.toContain("ACK-42");
   });
+
+  test("defaults to not committing critters files when commitPlans is not set", () => {
+    const prompt = buildExecutionPrompt(task, allowedTools);
+    expect(prompt).toContain("Do NOT commit files under `critters/`");
+  });
+
+  test("instructs not to commit critters files when commitPlans is false", () => {
+    const prompt = buildExecutionPrompt(task, allowedTools, { commitPlans: false });
+    expect(prompt).toContain("Do NOT commit files under `critters/`");
+  });
+
+  test("instructs to commit checkpoint when commitPlans is true", () => {
+    const prompt = buildExecutionPrompt(task, allowedTools, { commitPlans: true });
+    expect(prompt).toContain("Commit the checkpoint file alongside your code changes");
+  });
 });
 
 describe("buildPromptVars", () => {
