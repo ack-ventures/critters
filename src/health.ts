@@ -590,6 +590,7 @@ export function startHealthServer(
   log(`Health server listening on port ${server.port}`);
 
   return {
+    port: server.port,
     stop: () => server.stop(true),
   };
 }

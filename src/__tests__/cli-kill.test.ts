@@ -8,7 +8,13 @@ import { createTempDir } from "./helpers.js";
 
 let tempDir: string;
 let cleanup: () => void;
-let server: { stop: () => void } | null = null;
+let server: { port: number; stop: () => void } | null = null;
+
+function startServer(...args: Parameters<typeof startHealthServer>): number {
+  args[0] = 0;
+  server = startHealthServer(...args);
+  return server.port;
+}
 
 function defaultStatus(): HealthStatus {
   return {
@@ -70,12 +76,11 @@ afterEach(() => {
 describe("POST /kill endpoint", () => {
   test("kills critters and returns results", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
     const mockKill = mock<(identifiers: string[]) => KillResult[]>(() => [
       { identifier: "ACK-100", critterType: "create", startedAt: Date.now() - 60_000 },
     ]);
 
-    server = startHealthServer(port, statusWithCritters, undefined, {
+    const port = startServer(0, statusWithCritters, undefined, {
       triggerKill: mockKill,
     });
 
@@ -95,8 +100,7 @@ describe("POST /kill endpoint", () => {
 
   test("returns 405 for GET", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus, undefined, {
+    const port = startServer(0, defaultStatus, undefined, {
       triggerKill: () => [],
     });
 
@@ -106,8 +110,7 @@ describe("POST /kill endpoint", () => {
 
   test("returns 400 for empty identifiers", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus, undefined, {
+    const port = startServer(0, defaultStatus, undefined, {
       triggerKill: () => [],
     });
 
@@ -124,8 +127,7 @@ describe("POST /kill endpoint", () => {
 
   test("returns 400 for missing identifiers", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus, undefined, {
+    const port = startServer(0, defaultStatus, undefined, {
       triggerKill: () => [],
     });
 
@@ -140,8 +142,7 @@ describe("POST /kill endpoint", () => {
 
   test("returns 401 without token when dashboardToken is configured", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus, undefined, {
+    const port = startServer(0, defaultStatus, undefined, {
       triggerKill: () => [],
     }, undefined, "secret-token");
 
@@ -156,9 +157,8 @@ describe("POST /kill endpoint", () => {
 
   test("returns 200 with correct bearer token", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
     const mockKill = mock<(identifiers: string[]) => KillResult[]>(() => []);
-    server = startHealthServer(port, defaultStatus, undefined, {
+    const port = startServer(0, defaultStatus, undefined, {
       triggerKill: mockKill,
     }, undefined, "secret-token");
 
@@ -176,8 +176,7 @@ describe("POST /kill endpoint", () => {
 
   test("returns 503 when triggerKill not configured", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
-    server = startHealthServer(port, defaultStatus);
+    const port = startServer(0, defaultStatus);
 
     const res = await fetch(`http://localhost:${port}/kill`, {
       method: "POST",
@@ -190,13 +189,12 @@ describe("POST /kill endpoint", () => {
 
   test("kills multiple critters at once", async () => {
     initMetrics(join(tempDir, "metrics.jsonl"));
-    const port = 10000 + Math.floor(Math.random() * 50000);
     const mockKill = mock<(identifiers: string[]) => KillResult[]>(() => [
       { identifier: "ACK-100", critterType: "create", startedAt: Date.now() - 60_000 },
       { identifier: "ACK-200", critterType: "review", startedAt: Date.now() - 120_000 },
     ]);
 
-    server = startHealthServer(port, statusWithCritters, undefined, {
+    const port = startServer(0, statusWithCritters, undefined, {
       triggerKill: mockKill,
     });
 
