@@ -75,7 +75,7 @@ export function startHealthServer(
     jiraWebhookSecret?: string;
     critterTypes: CritterTypeConfig[];
   },
-): { stop: () => void } {
+): { port: number; stop: () => void } {
   const startTime = Date.now();
 
   const server = Bun.serve({
@@ -590,6 +590,7 @@ export function startHealthServer(
   log(`Health server listening on port ${server.port}`);
 
   return {
+    port: server.port!,
     stop: () => server.stop(true),
   };
 }

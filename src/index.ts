@@ -513,7 +513,7 @@ async function main() {
     jiraWebhookSecret: config.jiraWebhookSecret,
     critterTypes: config.critterTypes,
   };
-  let healthServer: { stop: () => void } | null = null;
+  let healthServer: { port: number; stop: () => void } | null = null;
   const healthContext: {
     trackers: Map<string, IssueTracker>;
     critterTypes: CritterTypeConfig[];
