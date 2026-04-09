@@ -372,7 +372,7 @@ critterTypes:
   create:
     provider: [linear, jira]   # polls both trackers with the same config
     trigger: { label: "Critter", status: "Todo", statusType: "unstarted" }
-    repo: { clone: true, branch: true }
+    repo: { clone: true, branch: true, commitPlans: false }
     phases:
       - name: planning
         prompt: builtin:planning
