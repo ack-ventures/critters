@@ -21,7 +21,10 @@ This downloads the latest binary, installs it to your PATH, and walks you throug
 - `critters init` — (re-)configure `~/.critters/`
 - `critters status` — show daemon status (active/queued critters, today's stats)
 - `critters retry <ID>` — retry a failed critter (reset to Todo)
-- `critters logs <ID>` — show logs for a critter run
+- `critters logs <ID>` — show logs for a critter run (`--phase`, `--follow`)
+- `critters tail` — live-stream output from all active critters (`--type`)
+- `critters history` — show past critter runs (`--last N`, `--failed`, `--type`, `--json`)
+- `critters kill <ID>` — kill a running critter (`--all`, `--type`)
 - `critters kickoff` — trigger an immediate poll (instead of waiting for the next interval)
 - `critters list-types` — show configured critter types
 - `critters init-repo` — scaffold `.critters.yaml` in the current repo
