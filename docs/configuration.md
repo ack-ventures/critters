@@ -146,6 +146,7 @@ critterTypes:
 | `trigger.assignee` | No | — | Only pick up issues assigned to this user. Email address, or `"me"` for the authenticated user |
 | `repo.clone` | No | `true` | Whether to shallow-clone the repo |
 | `repo.branch` | No | — | Whether to create a feature branch (needed for PR-creating types) |
+| `repo.commitPlans` | No | `false` | Whether to commit plan files under `critters/plans/` to the target repo's branch. When false, plans are included in the PR description only |
 | `phases` | Yes | — | Array of phases to run sequentially (at least one) |
 | `outcomes` | Yes | — | Map of outcome names to status/comment config |
 | `concurrency` | No | 2 | Max parallel instances of this type |

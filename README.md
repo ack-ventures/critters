@@ -95,13 +95,24 @@ docker compose logs -f
 The Docker image includes all runtime dependencies (Claude Code CLI, `gh`, `git`, `jq`).
 
 **Auth requirements:**
-- `ANTHROPIC_API_KEY` in `.env` — for the Claude Code CLI
+- `CLAUDE_CODE_OAUTH_TOKEN` — Claude Max/Team subscription token (run `claude setup-token` on the host, then add to `.env` or export in your shell). Alternatively, set `ANTHROPIC_API_KEY` for direct API access.
 - `~/.ssh` — SSH keys for git clone (mounted read-only)
-- `~/.config/gh` — GitHub CLI auth tokens (mounted read-only; run `gh auth login` on the host first)
+- `GITHUB_TOKEN` — GitHub CLI auth (run `gh auth token` on the host, then add to `.env` or export in your shell)
 
 For the pre-built image, replace `build: .` with `image: ghcr.io/ack-ventures/critters:latest` in `docker-compose.yaml`.
 
-> **Note:** The pre-built image is `linux/amd64` only. On ARM64 hosts (Apple Silicon, AWS Graviton), build locally with `docker compose build` instead.
+To use the latest released binary instead of building from source, set the build target to `prod`:
+
+```yaml
+# docker-compose.yaml
+services:
+  critters:
+    build:
+      context: .
+      target: prod  # downloads released binary instead of building from source
+```
+
+Or build directly: `docker build --target prod .` (append `--build-arg CRITTERS_VERSION=1.6.1` to pin a version).
 
 ## How it works
 
@@ -361,7 +372,7 @@ critterTypes:
   create:
     provider: [linear, jira]   # polls both trackers with the same config
     trigger: { label: "Critter", status: "Todo", statusType: "unstarted" }
-    repo: { clone: true, branch: true }
+    repo: { clone: true, branch: true, commitPlans: false }
     phases:
       - name: planning
         prompt: builtin:planning
