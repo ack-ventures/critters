@@ -101,7 +101,18 @@ The Docker image includes all runtime dependencies (Claude Code CLI, `gh`, `git`
 
 For the pre-built image, replace `build: .` with `image: ghcr.io/ack-ventures/critters:latest` in `docker-compose.yaml`.
 
-> **Note:** The pre-built image is `linux/amd64` only. On ARM64 hosts (Apple Silicon, AWS Graviton), build locally with `docker compose build` instead.
+To use the latest released binary instead of building from source, set the build target to `prod`:
+
+```yaml
+# docker-compose.yaml
+services:
+  critters:
+    build:
+      context: .
+      target: prod  # downloads released binary instead of building from source
+```
+
+Or build directly: `docker build --target prod .` (append `--build-arg CRITTERS_VERSION=1.6.1` to pin a version).
 
 ## How it works
 
