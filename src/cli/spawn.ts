@@ -340,7 +340,7 @@ export async function spawnForPhase(
   const metaFile = `${workDir}/.critter-meta-${phaseTag}.json`;
   writeFileSync(metaFile, JSON.stringify({ cli: cliAdapter.binary }));
 
-  if (config.noTmux) {
+  if (config.daemon.noTmux) {
     return spawnSubprocess(
       cliAdapter, prompt, allowedTools, workDir, ctx.phase.maxTurns, ctx.phase.sandbox,
       task.identifier, task.title, phaseTag, ctx.phase.model,
@@ -349,7 +349,7 @@ export async function spawnForPhase(
   }
   return spawnInTmux(
     cliAdapter, prompt, allowedTools, workDir, ctx.phase.maxTurns, ctx.phase.sandbox,
-    task.identifier, task.title, phaseTag, config.tmuxSession,
+    task.identifier, task.title, phaseTag, config.daemon.tmuxSession,
     ctx.phase.model, task.repoUrl, signal, ctx.mcpConfig, ctx.strictMcpConfig,
   );
 }

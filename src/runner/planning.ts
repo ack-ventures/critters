@@ -5,6 +5,7 @@ import { logTask } from "../logger.js";
 import { buildPlanningPrompt, getPlanningAllowedTools } from "../prompt.js";
 import { buildPromptVars, resolveSkills } from "../prompt-template.js";
 import type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
+import { validatePhaseResult } from "./validate.js";
 
 export class PlanningPhaseRunner implements PhaseRunner {
   async run(ctx: PhaseContext): Promise<PhaseResult> {
@@ -53,17 +54,3 @@ export class PlanningPhaseRunner implements PhaseRunner {
   }
 }
 
-function validatePhaseResult(
-  result: { exitCode: number; timedOut: boolean; stderr: string; stdout: string },
-  phaseName: string,
-): void {
-  if (result.timedOut) {
-    throw new Error(`Timed out during ${phaseName} phase`);
-  }
-  if (result.exitCode !== 0) {
-    const lines = (result.stderr || result.stdout).split("\n");
-    const errTail = lines.slice(-20).join("\n");
-    const label = phaseName.charAt(0).toUpperCase() + phaseName.slice(1);
-    throw new Error(`${label} failed (exit ${result.exitCode}):\n${errTail}`);
-  }
-}

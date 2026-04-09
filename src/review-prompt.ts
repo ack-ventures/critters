@@ -24,7 +24,7 @@ export function buildReviewPrompt(task: ReviewTask, adapter?: CliAdapter | PerRe
 
   const cleanedDescription = stripBranchLine(stripRepoLine(task.description));
   const readingGuidance = actualAdapter?.promptGuidance() ?? "## Reading Large Files\nThe Read tool supports `offset` and `limit` parameters \u2014 use these to read large files in chunks rather than attempting to read the entire file at once.";
-  const strictToolRestrictions = actualAdapter?.supportsToolRestrictions() !== false;
+  const strictToolRestrictions = actualAdapter?.capabilities.toolRestrictions !== false;
   const toolRestrictionGuidance = strictToolRestrictions
     ? "Only the requested read-only review tools and Bash commands are available."
     : "Stay within the requested read-only review workflow and commands even if the CLI sandbox technically allows more.";

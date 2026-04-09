@@ -54,7 +54,7 @@ export class UnifiedWatcher {
 
     while (!this.stopped) {
       if (this.polling) {
-        await sleep(this.config.pollIntervalSeconds * 1000);
+        await sleep(this.config.polling.intervalSeconds * 1000);
         continue;
       }
       this.polling = true;
@@ -68,7 +68,7 @@ export class UnifiedWatcher {
         this.polling = false;
       }
 
-      await sleep(this.config.pollIntervalSeconds * 1000);
+      await sleep(this.config.polling.intervalSeconds * 1000);
     }
   }
 

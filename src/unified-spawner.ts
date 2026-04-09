@@ -3,13 +3,9 @@ import { resolvePhaseMcpConfig } from "./cli/mcp.js";
 import { getCliAdapter } from "./cli/registry.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import {
-  autoCommit,
   cleanupStaleWorkDirs,
   cleanupWorkDir,
   createBranch,
-  getDefaultBranch,
-  hasCommitsOnBranch,
-  hasUncommittedChanges,
   shallowClone,
 } from "./git.js";
 import { triggerHook } from "./hooks.js";
@@ -34,40 +30,17 @@ import {
   formatTimeoutWarning,
   SlackNotifier,
 } from "./slack.js";
+import { applyOutcome, type TaskResult } from "./task-outcome.js";
+import { addPrTimeoutComment, buildLogFileList, salvagePartialProgress } from "./task-salvage.js";
 import type { IssueTracker, TrackerTask } from "./tracker/types.js";
 import type { ActiveCritterDetail, Config, SpawnResult } from "./types.js";
-import { aggregatePhaseResults, branchName, extractOwnerRepo, formatDuration, formatPhaseStats, getTracker, runCommand, shortRepoName, tailLines, truncateComment } from "./utils.js";
+import { aggregatePhaseResults, branchName, formatDuration, formatPhaseStats, getTracker, runCommand, shortRepoName, tailLines, truncateComment } from "./utils.js";
 import { VERSION } from "./version.js";
 
 interface QueuedTask {
   task: TrackerTask;
   critterType: CritterTypeConfig;
   resolve: (result: TaskResult) => void;
-}
-
-export interface TaskResult {
-  success: boolean;
-  prUrl?: string;
-  merged?: boolean;
-  error?: string;
-}
-
-async function applyOutcome(
-  outcome: { status?: string; removeLabel?: boolean } | undefined,
-  task: TrackerTask,
-  critterType: CritterTypeConfig,
-  tracker: IssueTracker,
-): Promise<void> {
-  if (outcome?.status) {
-    await tracker.updateStatus(task.id, outcome.status, task.groupId, task.identifier);
-  }
-  if (outcome?.removeLabel) {
-    try {
-      await tracker.removeLabel(task.id, critterType.trigger.label);
-    } catch (err) {
-      logTaskError(task.identifier, `Failed to remove label "${critterType.trigger.label}": ${err}`);
-    }
-  }
 }
 
 export class UnifiedSpawner {
@@ -92,9 +65,9 @@ export class UnifiedSpawner {
     this.config = config;
     this.trackers = trackers;
     this.slackNotifier = new SlackNotifier({
-      webhookUrl: config.slackWebhookUrl,
-      botToken: config.slackBotToken,
-      channel: config.slackChannel,
+      webhookUrl: config.slack.webhookUrl,
+      botToken: config.slack.botToken,
+      channel: config.slack.channel,
     });
   }
 
@@ -136,13 +109,13 @@ export class UnifiedSpawner {
   }
 
   cleanupStale(): void {
-    const maxAgeMinutes = this.config.cleanupStaleMinutes
+    const maxAgeMinutes = this.config.limits.cleanupStaleMinutes
       ?? Math.max(...this.config.critterTypes.map(ct => ct.timeoutMinutes)) + 30;
-    cleanupStaleWorkDirs(this.config.workDir, this.activeWorkDirs, maxAgeMinutes);
+    cleanupStaleWorkDirs(this.config.daemon.workDir, this.activeWorkDirs, maxAgeMinutes);
   }
 
   startPeriodicCleanup(): void {
-    const intervalMs = (this.config.cleanupIntervalMinutes ?? 60) * 60 * 1000;
+    const intervalMs = (this.config.limits.cleanupIntervalMinutes ?? 60) * 60 * 1000;
     this.cleanupInterval = setInterval(() => {
       log("Running periodic work directory cleanup...");
       this.cleanupStale();
@@ -219,13 +192,13 @@ export class UnifiedSpawner {
       if (!item) break;
       this.running.set(typeName, runningNow + 1);
       logTask(item.task.identifier, `Task started [${typeName}] (queue: ${queue.length}, running: ${(this.running.get(typeName) ?? 0)})`);
-      logTask(item.task.identifier, `Repo: ${shortRepoName(item.task.repoUrl)} | Branch: ${branchName(item.task.identifier, item.task.title, this.config.branchPrefix)}`);
+      logTask(item.task.identifier, `Repo: ${shortRepoName(item.task.repoUrl)} | Branch: ${branchName(item.task.identifier, item.task.title, this.config.daemon.branchPrefix)}`);
       this.activeCritterMap.set(item.task.id, {
         identifier: item.task.identifier,
         title: item.task.title,
         phase: item.critterType.phases[0]?.name ?? typeName,
         repo: shortRepoName(item.task.repoUrl),
-        branch: item.task.prBranch ?? branchName(item.task.identifier, item.task.title, this.config.branchPrefix),
+        branch: item.task.prBranch ?? branchName(item.task.identifier, item.task.title, this.config.daemon.branchPrefix),
         startedAt: Date.now(),
         prUrl: item.task.prUrl,
         issueUrl: item.task.issueUrl,
@@ -264,9 +237,9 @@ export class UnifiedSpawner {
     const isReviewType = critterType.name === "review";
     const workDirPrefix = isReviewType ? "review-" : "";
     const branch = critterType.repo.branch
-      ? branchName(task.identifier, task.title, this.config.branchPrefix)
+      ? branchName(task.identifier, task.title, this.config.daemon.branchPrefix)
       : "";
-    const workDir = `${this.config.workDir}/${workDirPrefix}${task.identifier}-${Date.now()}`;
+    const workDir = `${this.config.daemon.workDir}/${workDirPrefix}${task.identifier}-${Date.now()}`;
     this.activeWorkDirs.add(workDir);
     const detail = this.activeCritterMap.get(task.id);
     if (detail) detail.workDir = workDir;
@@ -298,7 +271,7 @@ export class UnifiedSpawner {
     const phaseResults: SpawnResult[] = [];
 
     // Resolve effective cost budget
-    const effectiveCostBudget = critterType.costBudget ?? this.config.costBudget;
+    const effectiveCostBudget = critterType.costBudget ?? this.config.limits.costBudget;
     // Set cost budget on active detail for dashboard display
     const detail2 = this.activeCritterMap.get(task.id);
     if (detail2) detail2.costBudget = effectiveCostBudget;
@@ -309,8 +282,8 @@ export class UnifiedSpawner {
 
     try {
       // Ensure work dir base exists
-      if (!existsSync(this.config.workDir)) {
-        mkdirSync(this.config.workDir, { recursive: true });
+      if (!existsSync(this.config.daemon.workDir)) {
+        mkdirSync(this.config.daemon.workDir, { recursive: true });
       }
 
       // Claim status: move issue out of trigger status immediately to prevent duplicate dispatch
@@ -337,7 +310,7 @@ export class UnifiedSpawner {
       if (critterType.repo.clone) {
         // Resolve localPath: per-repo config takes precedence, then critter type default
         const repoLocalPath = Object.values(this.config.repos).find((r) => r.url === task.repoUrl)?.localPath ?? critterType.repo.localPath;
-        await shallowClone(task.repoUrl, workDir, task.identifier, this.config.workDir, critterType.repo.depth ?? 1, repoLocalPath, this.config.minDiskSpaceMb, task.baseBranch);
+        await shallowClone(task.repoUrl, workDir, task.identifier, this.config.daemon.workDir, critterType.repo.depth ?? 1, repoLocalPath, this.config.limits.minDiskSpaceMb, task.baseBranch);
       }
 
       // 2. Create branch (if type requires it)
@@ -529,14 +502,14 @@ export class UnifiedSpawner {
         }
 
         // Cost threshold check
-        if (!costAlertSent && this.config.costAlertThreshold != null) {
+        if (!costAlertSent && this.config.limits.costAlertThreshold != null) {
           const accumulatedCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
-          if (accumulatedCost > this.config.costAlertThreshold) {
+          if (accumulatedCost > this.config.limits.costAlertThreshold) {
             costAlertSent = true;
-            logTask(task.identifier, `Cost alert: ${task.identifier} has spent $${accumulatedCost.toFixed(2)} (threshold: $${this.config.costAlertThreshold.toFixed(2)})`);
+            logTask(task.identifier, `Cost alert: ${task.identifier} has spent $${accumulatedCost.toFixed(2)} (threshold: $${this.config.limits.costAlertThreshold.toFixed(2)})`);
             await this.slackNotifier.notify(
               task.id,
-              formatCostAlert(task.identifier, task.title, accumulatedCost, this.config.costAlertThreshold, phase.name),
+              formatCostAlert(task.identifier, task.title, accumulatedCost, this.config.limits.costAlertThreshold, phase.name),
               task.identifier,
             );
           }
@@ -1084,115 +1057,3 @@ export interface KillResult {
   startedAt: number;
 }
 
-export async function salvagePartialProgress(
-  workDir: string,
-  branch: string,
-  identifier: string,
-  title: string,
-  repoUrl?: string,
-  baseBranch?: string,
-): Promise<{ prUrl?: string; branchPushed?: boolean }> {
-  try {
-    const ownerRepo = repoUrl ? extractOwnerRepo(repoUrl) : null;
-    const repoArgs = ownerRepo ? ["--repo", ownerRepo] : [];
-    const defaultBranch = await getDefaultBranch(workDir, identifier, baseBranch);
-    try {
-      if (await hasUncommittedChanges(workDir)) {
-        await autoCommit(workDir, identifier, `[${identifier}] Auto-commit in-progress work`);
-      }
-    } catch {
-      logTaskError(identifier, "Salvage: auto-commit failed, continuing anyway");
-    }
-
-    if (!(await hasCommitsOnBranch(workDir, branch, identifier, baseBranch))) {
-      return {};
-    }
-
-    // Check if a PR already exists
-    const listResult = await runCommand(
-      "gh",
-      ["pr", "list", "--head", branch, "--json", "url", "--limit", "1", ...repoArgs],
-      { cwd: workDir },
-    );
-    if (listResult.code === 0) {
-      try {
-        const prs = JSON.parse(listResult.stdout);
-        if (prs.length > 0) {
-          return { prUrl: prs[0].url, branchPushed: true };
-        }
-      } catch {
-        // JSON parse failed
-      }
-    }
-
-    // Push the branch
-    const pushResult = await runCommand("git", ["push", "origin", branch], { cwd: workDir });
-    if (pushResult.code !== 0) {
-      logTaskError(identifier, `Salvage: push failed: ${pushResult.stderr}`);
-      return {};
-    }
-
-    // Create a draft PR targeting the default branch
-    const prResult = await runCommand(
-      "gh",
-      [
-        "pr", "create", "--draft",
-        "--head", branch,
-        "--base", defaultBranch,
-        "--title", `[${identifier}] ${title} (partial)`,
-        "--body", "Critter failed mid-execution. See the linked issue for details.",
-        ...repoArgs,
-      ],
-      { cwd: workDir },
-    );
-    if (prResult.code === 0) {
-      return { prUrl: prResult.stdout.trim(), branchPushed: true };
-    }
-
-    logTaskError(identifier, `Salvage: draft PR creation failed: ${prResult.stderr}`);
-    return { branchPushed: true };
-  } catch (err) {
-    logTaskError(identifier, `Salvage failed entirely: ${err}`);
-    return {};
-  }
-}
-
-export async function addPrTimeoutComment(
-  workDir: string,
-  prUrl: string,
-  identifier: string,
-  timeoutMinutes: number,
-  repoUrl?: string,
-): Promise<void> {
-  try {
-    const ownerRepo = repoUrl ? extractOwnerRepo(repoUrl) : null;
-    const repoArgs = ownerRepo ? ["--repo", ownerRepo] : [];
-    const prNumber = prUrl.match(/\/pull\/(\d+)/)?.[1];
-    if (!prNumber) return;
-
-    const body = `**Timeout**: Critter \`${identifier}\` timed out after ${timeoutMinutes} minutes. Partial work may have been committed to this branch. See the linked issue for details.`;
-    await runCommand("gh", ["pr", "comment", prNumber, "--body", body, ...repoArgs], { cwd: workDir });
-  } catch (err) {
-    logTaskError(identifier, `Failed to comment on PR: ${err}`);
-  }
-}
-
-export function buildLogFileList(
-  workDir: string,
-  identifier: string,
-  phases: Array<{ name: string }>,
-): Array<{ path: string; name: string }> {
-  const logFiles: Array<{ path: string; name: string }> = [];
-  for (const phase of phases) {
-    const phaseTag = phase.name === "planning" ? "plan" : phase.name === "execution" ? "exec" : phase.name;
-    logFiles.push(
-      { path: `${workDir}/.critter-output-${phaseTag}.json`, name: `${identifier}-${phaseTag}-output.txt` },
-      { path: `${workDir}/.critter-err-${phaseTag}.log`, name: `${identifier}-${phaseTag}-stderr.txt` },
-    );
-  }
-  logFiles.push(
-    { path: `${workDir}/critters/plans/${identifier}.md`, name: `${identifier}-plan.md` },
-    { path: `${workDir}/critters/plans/${identifier}.checkpoint.md`, name: `${identifier}-checkpoint.md` },
-  );
-  return logFiles;
-}

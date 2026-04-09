@@ -5,9 +5,10 @@ import { logTask, logTaskError, logTaskWarn } from "../logger.js";
 import { buildExecutionPrompt, getExecutionAllowedTools } from "../prompt.js";
 import { buildPromptVars, resolveSkills, resolveTools } from "../prompt-template.js";
 import { withRetry } from "../retry.js";
-import { formatDuration, runCommand, tailLines } from "../utils.js";
+import { formatDuration, runCommand } from "../utils.js";
 import { VERSION } from "../version.js";
 import type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
+import { validatePhaseResult } from "./validate.js";
 
 export class ExecutionPhaseRunner implements PhaseRunner {
   async run(ctx: PhaseContext): Promise<PhaseResult> {
@@ -99,20 +100,6 @@ async function verifyPrBaseBranch(
     }
   } catch (err) {
     logTaskError(identifier, `PR base branch verification failed: ${err}`);
-  }
-}
-
-function validatePhaseResult(
-  result: { exitCode: number; timedOut: boolean; stderr: string; stdout: string },
-  phaseName: string,
-): void {
-  if (result.timedOut) {
-    throw new Error(`Timed out during ${phaseName} phase`);
-  }
-  if (result.exitCode !== 0) {
-    const errTail = tailLines(result.stderr || result.stdout, 20);
-    const label = phaseName.charAt(0).toUpperCase() + phaseName.slice(1);
-    throw new Error(`${label} failed (exit ${result.exitCode}):\n${errTail}`);
   }
 }
 

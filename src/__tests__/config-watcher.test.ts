@@ -3,150 +3,104 @@ import { writeFileSync } from "node:fs";
 import { ConfigWatcher, diffConfigs } from "../config-watcher.js";
 import type { CritterTypeConfig } from "../critter-type.js";
 import type { Config } from "../types.js";
-import { createTempDir } from "./helpers.js";
-
-function makeConfig(overrides: Partial<Config> = {}): Config {
-	return {
-		pollIntervalSeconds: 120,
-		concurrency: 2,
-		timeoutMinutes: 30,
-		workDir: "/tmp/critters-work",
-		triggerLabel: "Critter",
-		maxPlanningTurns: 50,
-		maxExecutionTurns: 75,
-		defaultAllowedTools: ["Read", "Write", "Edit"],
-		repos: {},
-		teamRepos: {},
-		tmuxSession: "critters",
-		branchPrefix: "critter",
-		noTmux: false,
-		planningModel: "opus",
-		executionModel: "opus",
-		reviewTriggerLabel: "Critter Review",
-		reviewModel: "opus",
-		reviewConcurrency: 2,
-		reviewTimeoutMinutes: 15,
-		maxReviewTurns: 30,
-		maxLogSizeMb: 10,
-		minDiskSpaceMb: 1024,
-		healthPort: 3847,
-		metricsRetentionDays: 90,
-		provider: "linear",
-		critterTypes: [],
-		cli: "claude",
-		...overrides,
-	};
-}
-
-function makeType(overrides: Partial<CritterTypeConfig> = {}): CritterTypeConfig {
-	return {
-		name: "create",
-		trigger: { label: "Critter", status: "Todo" },
-		repo: { clone: true, branch: true },
-		phases: [{ name: "planning", prompt: "builtin:planning", model: "opus", maxTurns: 50, tools: "readonly" }],
-		outcomes: { success: { status: "In Review" }, failure: { status: "Critter Failed" } },
-		concurrency: 2,
-		timeoutMinutes: 30,
-		...overrides,
-	};
-}
+import { createTempDir, makeTestConfig, makeTestCritterType } from "./helpers.js";
 
 describe("diffConfigs", () => {
 	test("reports no changes for identical configs", () => {
-		const config = makeConfig({ critterTypes: [makeType()] });
+		const config = makeTestConfig({ critterTypes: [makeTestCritterType()] });
 		const result = diffConfigs(config, config);
 		expect(result).toBe("Config reloaded (no effective changes)");
 	});
 
 	test("reports poll interval change", () => {
-		const oldConfig = makeConfig({ pollIntervalSeconds: 120 });
-		const newConfig = makeConfig({ pollIntervalSeconds: 60 });
+		const oldConfig = makeTestConfig({ pollIntervalSeconds: 120 });
+		const newConfig = makeTestConfig({ pollIntervalSeconds: 60 });
 		const result = diffConfigs(oldConfig, newConfig);
 		expect(result).toContain("poll interval 120s → 60s");
 	});
 
 	test("reports added critter type", () => {
-		const oldConfig = makeConfig({ critterTypes: [makeType()] });
-		const newConfig = makeConfig({
-			critterTypes: [makeType(), makeType({ name: "audit" })],
+		const oldConfig = makeTestConfig({ critterTypes: [makeTestCritterType()] });
+		const newConfig = makeTestConfig({
+			critterTypes: [makeTestCritterType(), makeTestCritterType({ name: "audit" })],
 		});
 		const result = diffConfigs(oldConfig, newConfig);
 		expect(result).toContain("added type 'audit'");
 	});
 
 	test("reports removed critter type", () => {
-		const oldConfig = makeConfig({
-			critterTypes: [makeType(), makeType({ name: "audit" })],
+		const oldConfig = makeTestConfig({
+			critterTypes: [makeTestCritterType(), makeTestCritterType({ name: "audit" })],
 		});
-		const newConfig = makeConfig({ critterTypes: [makeType()] });
+		const newConfig = makeTestConfig({ critterTypes: [makeTestCritterType()] });
 		const result = diffConfigs(oldConfig, newConfig);
 		expect(result).toContain("removed type 'audit'");
 	});
 
 	test("reports concurrency change for a type", () => {
-		const oldConfig = makeConfig({ critterTypes: [makeType({ concurrency: 2 })] });
-		const newConfig = makeConfig({ critterTypes: [makeType({ concurrency: 5 })] });
+		const oldConfig = makeTestConfig({ critterTypes: [makeTestCritterType({ concurrency: 2 })] });
+		const newConfig = makeTestConfig({ critterTypes: [makeTestCritterType({ concurrency: 5 })] });
 		const result = diffConfigs(oldConfig, newConfig);
 		expect(result).toContain("updated concurrency for 'create' (2 → 5)");
 	});
 
 	test("reports timeout change for a type", () => {
-		const oldConfig = makeConfig({ critterTypes: [makeType({ timeoutMinutes: 30 })] });
-		const newConfig = makeConfig({ critterTypes: [makeType({ timeoutMinutes: 60 })] });
+		const oldConfig = makeTestConfig({ critterTypes: [makeTestCritterType({ timeoutMinutes: 30 })] });
+		const newConfig = makeTestConfig({ critterTypes: [makeTestCritterType({ timeoutMinutes: 60 })] });
 		const result = diffConfigs(oldConfig, newConfig);
 		expect(result).toContain("updated timeout for 'create' (30min → 60min)");
 	});
 
 	test("reports model change for a phase", () => {
-		const oldType = makeType({ phases: [{ name: "planning", prompt: "builtin:planning", model: "opus", maxTurns: 50, tools: "readonly" }] });
-		const newType = makeType({ phases: [{ name: "planning", prompt: "builtin:planning", model: "sonnet", maxTurns: 50, tools: "readonly" }] });
-		const result = diffConfigs(makeConfig({ critterTypes: [oldType] }), makeConfig({ critterTypes: [newType] }));
+		const oldType = makeTestCritterType({ phases: [{ name: "planning", prompt: "builtin:planning", model: "opus", maxTurns: 50, tools: "readonly" }] });
+		const newType = makeTestCritterType({ phases: [{ name: "planning", prompt: "builtin:planning", model: "sonnet", maxTurns: 50, tools: "readonly" }] });
+		const result = diffConfigs(makeTestConfig({ critterTypes: [oldType] }), makeTestConfig({ critterTypes: [newType] }));
 		expect(result).toContain("updated model for 'create.planning' (opus → sonnet)");
 	});
 
 	test("reports provider change", () => {
-		const oldConfig = makeConfig({ provider: "linear" });
-		const newConfig = makeConfig({ provider: "jira" });
+		const oldConfig = makeTestConfig({ provider: "linear" });
+		const newConfig = makeTestConfig({ provider: "jira" });
 		const result = diffConfigs(oldConfig, newConfig);
 		expect(result).toContain("default provider linear → jira");
 	});
 
 	test("reports defaultAllowedTools change", () => {
-		const oldConfig = makeConfig({ defaultAllowedTools: ["Read"] });
-		const newConfig = makeConfig({ defaultAllowedTools: ["Read", "Write"] });
+		const oldConfig = makeTestConfig({ defaultAllowedTools: ["Read"] });
+		const newConfig = makeTestConfig({ defaultAllowedTools: ["Read", "Write"] });
 		const result = diffConfigs(oldConfig, newConfig);
 		expect(result).toContain("updated defaultAllowedTools");
 	});
 
 	test("reports repos change", () => {
-		const oldConfig = makeConfig({ repos: {} });
-		const newConfig = makeConfig({ repos: { proj1: { url: "git@github.com:org/repo.git" } } });
+		const oldConfig = makeTestConfig({ repos: {} });
+		const newConfig = makeTestConfig({ repos: { proj1: { url: "git@github.com:org/repo.git" } } });
 		const result = diffConfigs(oldConfig, newConfig);
 		expect(result).toContain("updated repos");
 	});
 
 	test("reports jsonLogs change", () => {
-		const oldConfig = makeConfig({ jsonLogs: undefined });
-		const newConfig = makeConfig({ jsonLogs: true });
+		const oldConfig = makeTestConfig({ jsonLogs: undefined });
+		const newConfig = makeTestConfig({ jsonLogs: true });
 		const result = diffConfigs(oldConfig, newConfig);
 		expect(result).toContain("jsonLogs");
 	});
 
 	test("reports hooks change", () => {
-		const oldConfig = makeConfig({ hooks: undefined });
-		const newConfig = makeConfig({ hooks: { onTaskStarted: "echo hello" } });
+		const oldConfig = makeTestConfig({ hooks: undefined });
+		const newConfig = makeTestConfig({ hooks: { onTaskStarted: "echo hello" } });
 		const result = diffConfigs(oldConfig, newConfig);
 		expect(result).toContain("updated hooks");
 	});
 
 	test("reports multiple changes together", () => {
-		const oldConfig = makeConfig({
+		const oldConfig = makeTestConfig({
 			pollIntervalSeconds: 120,
-			critterTypes: [makeType({ concurrency: 2 })],
+			critterTypes: [makeTestCritterType({ concurrency: 2 })],
 		});
-		const newConfig = makeConfig({
+		const newConfig = makeTestConfig({
 			pollIntervalSeconds: 60,
-			critterTypes: [makeType({ concurrency: 5 })],
+			critterTypes: [makeTestCritterType({ concurrency: 5 })],
 		});
 		const result = diffConfigs(oldConfig, newConfig);
 		expect(result).toContain("poll interval 120s → 60s");

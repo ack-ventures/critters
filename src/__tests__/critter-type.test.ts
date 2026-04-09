@@ -7,44 +7,11 @@ import {
   validateCritterType,
 } from "../critter-type.js";
 import type { Config } from "../types.js";
-
-function baseConfig(overrides?: Partial<Config>): Config {
-  return {
-    pollIntervalSeconds: 120,
-    concurrency: 2,
-    timeoutMinutes: 30,
-    workDir: "/tmp/critters-work",
-    triggerLabel: "Critter",
-    maxPlanningTurns: 50,
-    maxExecutionTurns: 75,
-    defaultAllowedTools: ["Read"],
-    repos: {},
-    teamRepos: {},
-    tmuxSession: "critters",
-    branchPrefix: "critter",
-    noTmux: false,
-    planningModel: "opus",
-    executionModel: "opus",
-    reviewTriggerLabel: "Critter Review",
-    reviewModel: "opus",
-    reviewConcurrency: 2,
-    reviewTimeoutMinutes: 15,
-    maxReviewTurns: 30,
-    maxLogSizeMb: 10,
-    minDiskSpaceMb: 1024,
-    healthPort: 3847,
-    metricsRetentionDays: 90,
-    linearApiKey: "test-key",
-    provider: "linear",
-    critterTypes: [],
-    cli: "claude",
-    ...overrides,
-  };
-}
+import { makeTestConfig } from "./helpers.js";
 
 describe("synthesizeDefaultTypes", () => {
   test("produces create and review types", () => {
-    const config = baseConfig();
+    const config = makeTestConfig();
     const types = synthesizeDefaultTypes(config);
 
     expect(types).toHaveLength(2);
@@ -53,7 +20,7 @@ describe("synthesizeDefaultTypes", () => {
   });
 
   test("create type uses flat config values", () => {
-    const config = baseConfig({
+    const config = makeTestConfig({
       triggerLabel: "MyLabel",
       concurrency: 5,
       timeoutMinutes: 45,
@@ -81,7 +48,7 @@ describe("synthesizeDefaultTypes", () => {
   });
 
   test("review type uses flat config values", () => {
-    const config = baseConfig({
+    const config = makeTestConfig({
       reviewTriggerLabel: "Review Me",
       reviewConcurrency: 4,
       reviewTimeoutMinutes: 20,
@@ -105,7 +72,7 @@ describe("synthesizeDefaultTypes", () => {
   });
 
   test("create type phases use builtin prompts", () => {
-    const types = synthesizeDefaultTypes(baseConfig());
+    const types = synthesizeDefaultTypes(makeTestConfig());
     expect(types[0].phases[0].prompt).toBe("builtin:planning");
     expect(types[0].phases[0].tools).toBe("readonly");
     expect(types[0].phases[1].prompt).toBe("builtin:execution");
@@ -113,18 +80,18 @@ describe("synthesizeDefaultTypes", () => {
   });
 
   test("review type phase uses builtin prompt", () => {
-    const types = synthesizeDefaultTypes(baseConfig());
+    const types = synthesizeDefaultTypes(makeTestConfig());
     expect(types[1].phases[0].prompt).toBe("builtin:review");
     expect(types[1].phases[0].tools).toBe("review");
   });
 
   test("create type has claimStatus 'In Progress'", () => {
-    const types = synthesizeDefaultTypes(baseConfig());
+    const types = synthesizeDefaultTypes(makeTestConfig());
     expect(types[0].claimStatus).toBe("In Progress");
   });
 
   test("review type does not have claimStatus", () => {
-    const types = synthesizeDefaultTypes(baseConfig());
+    const types = synthesizeDefaultTypes(makeTestConfig());
     expect(types[1].claimStatus).toBeUndefined();
   });
 });

@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { loadConfig } from "../config.js";
 import { UnifiedSpawner } from "../unified-spawner.js";
 import { validateConfigFile } from "../validate.js";
-import { createTempDir } from "./helpers.js";
+import { createTempDir, makeTestConfig } from "./helpers.js";
 
 // --- Config parsing tests ---
 
@@ -114,12 +114,12 @@ describe("autoRetry validate.ts", () => {
 describe("isTransientError", () => {
   // Access via a minimal spawner instance
   function makeSpawner(): UnifiedSpawner {
-    const config = {
+    const config = makeTestConfig({
       workDir: "/tmp/critters-test",
       critterTypes: [],
-      provider: "linear" as const,
-    };
-    return new UnifiedSpawner(config as any, new Map());
+      provider: "linear",
+    });
+    return new UnifiedSpawner(config, new Map());
   }
 
   const transientErrors = [

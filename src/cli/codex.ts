@@ -1,13 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type { CritterTypeConfig } from "../critter-type.js";
 import { logTaskWarn } from "../logger.js";
 import type { Config } from "../types.js";
 import { runCommand, shellEscape } from "../utils.js";
-import { parseReviewDecisionFromText } from "./claude.js";
+import { resolveMcpConfigShared } from "./mcp.js";
+import { parseReviewDecisionFromText } from "./parse-review.js";
 import type {
   CliAdapter,
+  CliCapabilities,
   CliCommand,
   ParsedOutput,
   ParsedOutputLine,
@@ -253,25 +253,13 @@ export class CodexAdapter implements CliAdapter {
     return tools;
   }
 
-  supportsToolRestrictions(): boolean {
-    return false;
-  }
-
-  supportsCostTracking(): boolean {
-    return true;
-  }
-
-  supportsMcp(): boolean {
-    return false;
-  }
-
-  supportsMaxTurns(): boolean {
-    return false;
-  }
-
-  supportsSubagents(): boolean {
-    return false;
-  }
+  readonly capabilities: CliCapabilities = {
+    toolRestrictions: false,
+    costTracking: true,
+    mcp: false,
+    maxTurns: false,
+    subagents: false,
+  };
 
   toolNames(): ToolNameMap {
     return {
@@ -299,16 +287,7 @@ Use targeted file reads and searches instead of dumping large files all at once.
     critterType: CritterTypeConfig,
     config: Config,
   ): { mcpConfig: string[]; strictMcpConfig: boolean } {
-    const raw = critterType.mcpConfig ?? config.mcpConfig;
-    const strict = critterType.strictMcpConfig ?? config.strictMcpConfig ?? false;
-
-    if (!raw) {
-      return { mcpConfig: [], strictMcpConfig: strict };
-    }
-
-    const paths = Array.isArray(raw) ? raw : [raw];
-    const resolved = paths.map((p) => p.startsWith("~") ? join(homedir(), p.slice(1)) : p);
-    return { mcpConfig: resolved, strictMcpConfig: strict };
+    return resolveMcpConfigShared(critterType, config);
   }
 }
 

@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createBranch, hasCommitsOnBranch, shallowClone } from "../git.js";
-import { addPrTimeoutComment, salvagePartialProgress } from "../unified-spawner.js";
+import { addPrTimeoutComment, salvagePartialProgress } from "../task-salvage.js";
 
 let bareRepo: string;
 let tempDirs: string[];

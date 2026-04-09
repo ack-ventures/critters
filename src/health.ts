@@ -1,7 +1,7 @@
 import { statSync } from "node:fs";
 import { checkAuth } from "./auth.js";
 import type { CritterTypeConfig } from "./critter-type.js";
-import { renderDashboard, renderIssuePage } from "./dashboard.js";
+import { renderDashboard, renderIssuePage } from "./dashboard/index.js";
 import { readLogTail, renderReadableLines, resolveCliAdapterForLog, resolveLogFile, resolveWorkDirForIdentifier } from "./log-resolver.js";
 import { log, logError } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";

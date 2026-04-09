@@ -1,4 +1,5 @@
 import type { PhaseConfig } from "../critter-type.js";
+import { BuiltinPhase } from "../enums.js";
 import { getBuiltinPhaseName } from "../prompt-template.js";
 import { ExecutionPhaseRunner } from "./execution.js";
 import { GenericPhaseRunner } from "./generic.js";
@@ -20,11 +21,11 @@ export function getPhaseRunner(phase: PhaseConfig): PhaseRunner {
   const builtinName = getBuiltinPhaseName(phase);
 
   switch (builtinName) {
-    case "planning":
+    case BuiltinPhase.Planning:
       return planningRunner;
-    case "execution":
+    case BuiltinPhase.Execution:
       return executionRunner;
-    case "review":
+    case BuiltinPhase.Review:
       return reviewRunner;
     default:
       return genericRunner;
@@ -36,3 +37,4 @@ export { GenericPhaseRunner } from "./generic.js";
 export { PlanningPhaseRunner } from "./planning.js";
 export { parseReviewOutcome, ReviewPhaseRunner } from "./review.js";
 export type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
+export { validatePhaseResult } from "./validate.js";

@@ -34,11 +34,11 @@ export async function runRetry(identifier: string, force: boolean): Promise<void
   // provider first since we don't know which critter type this issue belongs to.
   const tracker = createTracker({
     type: config.provider,
-    apiKey: config.linearApiKey,
-    host: config.jiraHost,
-    email: config.jiraEmail,
-    apiToken: config.jiraApiToken,
-    statusMap: config.jiraStatusMap,
+    apiKey: config.linear.apiKey,
+    host: config.jira.host,
+    email: config.jira.email,
+    apiToken: config.jira.apiToken,
+    statusMap: config.jira.statusMap,
   });
 
   const issue = await tracker.findIssueByIdentifier(identifier);
@@ -156,11 +156,11 @@ export async function runRetryAllFailed(options: {
     if (!trackerMap.has(provider)) {
       trackerMap.set(provider, createTracker({
         type: provider,
-        apiKey: config.linearApiKey,
-        host: config.jiraHost,
-        email: config.jiraEmail,
-        apiToken: config.jiraApiToken,
-        statusMap: config.jiraStatusMap,
+        apiKey: config.linear.apiKey,
+        host: config.jira.host,
+        email: config.jira.email,
+        apiToken: config.jira.apiToken,
+        statusMap: config.jira.statusMap,
       }));
     }
   }
