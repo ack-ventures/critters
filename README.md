@@ -95,9 +95,9 @@ docker compose logs -f
 The Docker image includes all runtime dependencies (Claude Code CLI, `gh`, `git`, `jq`).
 
 **Auth requirements:**
-- `ANTHROPIC_API_KEY` in `.env` — for the Claude Code CLI
+- `CLAUDE_CODE_OAUTH_TOKEN` — Claude Max/Team subscription token (run `claude setup-token` on the host, then add to `.env` or export in your shell). Alternatively, set `ANTHROPIC_API_KEY` for direct API access.
 - `~/.ssh` — SSH keys for git clone (mounted read-only)
-- `GITHUB_TOKEN` — GitHub CLI auth (set to the output of `gh auth token` on the host, or add to `.env`)
+- `GITHUB_TOKEN` — GitHub CLI auth (run `gh auth token` on the host, then add to `.env` or export in your shell)
 
 For the pre-built image, replace `build: .` with `image: ghcr.io/ack-ventures/critters:latest` in `docker-compose.yaml`.
 
