@@ -339,7 +339,11 @@ export class UnifiedSpawner {
 
       // Exclude critter temp files from git
       if (existsSync(`${workDir}/.git`)) {
-        appendFileSync(`${workDir}/.git/info/exclude`, "\n.critter-*\n");
+        let excludes = "\n.critter-*\n";
+        if (!critterType.repo.commitPlans) {
+          excludes += "critters/\n";
+        }
+        appendFileSync(`${workDir}/.git/info/exclude`, excludes);
       }
 
       // Notify and trigger hooks
