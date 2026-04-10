@@ -214,6 +214,24 @@ export class LinearTracker implements IssueTracker {
     return uploadFile.assetUrl;
   }
 
+  async getAttachments(issueId: string): Promise<Array<{ name: string; url: string }>> {
+    const issue = await this.client.issue(issueId);
+    const attachments = await issue.attachments();
+    return attachments.nodes
+      .filter((a) => a.title && a.url)
+      .map((a) => ({ name: a.title, url: a.url }));
+  }
+
+  async fetchAttachmentContent(url: string): Promise<string | null> {
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) return null;
+      return await resp.text();
+    } catch {
+      return null;
+    }
+  }
+
   async ensureStatus(groupId: string, name: string, type = "started", color = "#EF4444"): Promise<void> {
     if (this.teamStatusCache[groupId]?.[name]) return;
 

@@ -342,6 +342,8 @@ function createMockTracker(overrides?: Partial<IssueTracker>): IssueTracker {
     comment: async () => {},
     getComments: async () => [],
     uploadAttachment: async () => null,
+    getAttachments: async () => [],
+    fetchAttachmentContent: async () => null,
     ensureStatus: async () => {},
     ensureLabel: async () => {},
     removeLabel: async () => {},

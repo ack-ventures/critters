@@ -23,6 +23,8 @@ export interface IssueTracker {
     contentType: string,
     identifier?: string,
   ): Promise<string | null>;
+  getAttachments(issueId: string): Promise<Array<{ name: string; url: string }>>;
+  fetchAttachmentContent(url: string): Promise<string | null>;
   ensureStatus(groupId: string, name: string, type?: string, color?: string): Promise<void>;
   ensureLabel(name: string): Promise<void>;
   removeLabel(taskId: string, label: string): Promise<void>;

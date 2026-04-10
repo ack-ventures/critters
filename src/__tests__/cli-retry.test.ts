@@ -16,6 +16,8 @@ const mockTracker: IssueTracker = {
   comment: mockComment,
   getComments: mock(() => Promise.resolve([])),
   uploadAttachment: mock(() => Promise.resolve(null)),
+  getAttachments: mock(() => Promise.resolve([])),
+  fetchAttachmentContent: mock(() => Promise.resolve(null)),
   ensureStatus: mock(() => Promise.resolve()),
   ensureLabel: mock(() => Promise.resolve()),
   removeLabel: mock(() => Promise.resolve()),

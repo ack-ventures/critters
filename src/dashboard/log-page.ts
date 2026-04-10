@@ -27,8 +27,6 @@ export function renderLogPage(identifier: string, status: HealthStatus, workDir:
 
   const elapsedStr = activeDetail ? fmtDuration(Date.now() - activeDetail.startedAt) : "";
 
-  const noLogs = !targetDir || phases.length === 0;
-
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -158,14 +156,12 @@ export function renderLogPage(identifier: string, status: HealthStatus, workDir:
     </div>
   </div>
 
-${noLogs && !isActive ? `  <div class="empty-msg">Logs are no longer available for this critter.<br>The work directory may have been cleaned up.</div>` : `
   ${phases.length > 1 ? `<div class="phase-tabs">
 ${phases.map((p) => `    <button class="phase-tab${p.phase === (phases[phases.length - 1]?.phase) ? " active" : ""}" data-phase="${escapeHtml(p.phase)}">${escapeHtml(p.phase.charAt(0).toUpperCase() + p.phase.slice(1))}</button>`).join("\n")}
   </div>` : ""}
 
   <pre id="log-content">Loading...</pre>
   <div id="new-logs-indicator" class="new-logs-indicator">\u2193 New logs</div>
-`}
 
 <script>
 (function() {
@@ -308,6 +304,10 @@ ${phases.map((p) => `    <button class="phase-tab${p.phase === (phases[phases.le
   // Initial load
   if (currentPhase) {
     loadPhase(currentPhase);
+  } else if (!isActive) {
+    // No local phases available (work dir cleaned up) — try loading without phase
+    // The API will fall back to fetching from the tracker
+    loadPhase(null);
   }
 })();
 </script>

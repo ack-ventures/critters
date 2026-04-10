@@ -117,7 +117,7 @@ export function renderIssuePage(identifier: string, status: HealthStatus, workDi
   const typeBadge = critterType !== "\u2014" ? `<span class="badge badge-phase">${escapeHtml(critterType)}</span>` : "";
 
   const noData = phases.length === 0 && !taskEnded && !isActive;
-  const logsUnavailable = !targetDir || phases.length === 0;
+
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -382,17 +382,14 @@ ${phaseResults.map((pr) => {
     </table>
   </div>` : ""}
 
-  ${logsUnavailable && !isActive ? `<div class="card">
-    <h3>Logs</h3>
-    <div class="empty-msg">Logs are no longer available. The work directory may have been cleaned up.</div>
-  </div>` : `<div class="card">
+  <div class="card">
     <h3>Logs</h3>
     ${phases.length > 1 ? `<div class="phase-tabs">
 ${phases.map((p) => `      <button class="phase-tab${p.phase === (phases[phases.length - 1]?.phase) ? " active" : ""}" data-phase="${escapeHtml(p.phase)}">${escapeHtml(p.phase.charAt(0).toUpperCase() + p.phase.slice(1))}</button>`).join("\n")}
     </div>` : ""}
     <pre id="log-content">Loading...</pre>
     <div id="new-logs-indicator" class="new-logs-indicator">&darr; New logs</div>
-  </div>`}
+  </div>
 `}
 
 <script>
@@ -528,6 +525,10 @@ ${phases.map((p) => `      <button class="phase-tab${p.phase === (phases[phases.
 
   if (currentPhase) {
     loadPhase(currentPhase);
+  } else if (!isActive) {
+    // No local phases available (work dir cleaned up) — try loading without phase
+    // The API will fall back to fetching from the tracker
+    loadPhase(null);
   }
 })();
 </script>
