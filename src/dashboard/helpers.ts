@@ -49,14 +49,6 @@ export function getDateKey(ts: string): string {
 
 export const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-export function formatShortDate(dateStr: string): string {
-  const parts = dateStr.split("-");
-  if (parts.length < 3) return dateStr;
-  const monthIdx = parseInt(parts[1], 10) - 1;
-  const day = parseInt(parts[2], 10);
-  return `${MONTHS[monthIdx] ?? parts[1]} ${day}`;
-}
-
 export function chartDateLabel(dateStr: string, prevDateStr: string | null): string {
   const parts = dateStr.split("-");
   if (parts.length < 3) return dateStr;
@@ -76,17 +68,6 @@ export function chartDateLabel(dateStr: string, prevDateStr: string | null): str
 
   // Same month: just show the day number
   return `${day}`;
-}
-
-export function formatDurationMinutes(ms: number): string {
-  if (ms <= 0) return "0m";
-  const mins = Math.round(ms / 60000);
-  return `${mins}m`;
-}
-
-export function formatCostLabel(v: number): string {
-  if (Number.isInteger(v)) return `$${v}`;
-  return `$${parseFloat(v.toFixed(2))}`;
 }
 
 export type DayStat = { date: string; completed: number; failed: number; cost: number; avgDuration: number; perType: Record<string, { completed: number; failed: number }> };
