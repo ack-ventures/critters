@@ -2,7 +2,7 @@ import { statSync } from "node:fs";
 import { checkAuth } from "./auth.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import { renderDashboard, renderIssuePage } from "./dashboard/index.js";
-import { readLogTail, renderReadableLines, resolveCliAdapterForLog, resolveLogFile, resolveWorkDirForIdentifier } from "./log-resolver.js";
+import { phaseFileTag, readLogTail, renderReadableLines, resolveCliAdapterForLog, resolveLogFile, resolveWorkDirForIdentifier } from "./log-resolver.js";
 import { log, logError } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
 import { getPrStatuses } from "./pr-status.js";
@@ -267,16 +267,9 @@ export function startHealthServer(
           targetDir = resolveWorkDirForIdentifier(workDir, identifier);
         }
 
-        if (!targetDir) {
-          return Response.json({ error: "No work directory found for identifier" }, { status: 404 });
-        }
+        const logFile = targetDir ? resolveLogFile(targetDir, phase) : null;
 
-        const logFile = resolveLogFile(targetDir, phase);
-        if (!logFile) {
-          return Response.json({ error: "No log file found" }, { status: 404 });
-        }
-
-        if (isStream) {
+        if (logFile && isStream) {
           // SSE endpoint
           let closed = false;
           let fileOffset = 0;
@@ -365,8 +358,117 @@ export function startHealthServer(
         }
 
         // Non-stream: return log tail as plain text
-        const content = readLogTail(logFile, tailCount);
-        return new Response(content, {
+        if (logFile) {
+          const content = readLogTail(logFile, tailCount);
+          return new Response(content, {
+            headers: { "Content-Type": "text/plain; charset=utf-8" },
+          });
+        }
+
+        // Fallback: fetch from tracker when local logs unavailable
+        if (!context?.trackers || context.trackers.size === 0) {
+          return Response.json({ error: "No log file found" }, { status: 404 });
+        }
+
+        // Search all trackers for the issue
+        let foundTracker: IssueTracker | null = null;
+        let issueId: string | null = null;
+        try {
+          for (const [, tracker] of context.trackers) {
+            const found = await tracker.findIssueByIdentifier(identifier);
+            if (found) {
+              foundTracker = tracker;
+              issueId = found.id;
+              break;
+            }
+          }
+        } catch {
+          return Response.json({ error: "Failed to search trackers" }, { status: 502 });
+        }
+
+        if (!foundTracker || !issueId) {
+          return Response.json({ error: "No log file found" }, { status: 404 });
+        }
+
+        let attachments: Array<{ name: string; url: string }>;
+        try {
+          attachments = await foundTracker.getAttachments(issueId);
+        } catch {
+          return Response.json({ error: "Failed to fetch attachments from tracker" }, { status: 502 });
+        }
+
+        // Determine which attachment to serve using the same naming convention as buildLogFileList()
+        let attachmentUrl: string | null = null;
+        if (phase) {
+          const tag = phaseFileTag(phase);
+          const expectedName = `${identifier}-${tag}-output.txt`;
+          const match = attachments.find((a) => a.name === expectedName);
+          attachmentUrl = match?.url ?? null;
+        } else {
+          // Auto-detect: review > execution > planning (same order as resolveLogFile)
+          for (const p of ["review", "execution", "planning"]) {
+            const tag = phaseFileTag(p);
+            const expectedName = `${identifier}-${tag}-output.txt`;
+            const match = attachments.find((a) => a.name === expectedName);
+            if (match?.url) {
+              attachmentUrl = match.url;
+              break;
+            }
+          }
+          // Also try any custom phase attachments
+          if (!attachmentUrl) {
+            const outputAttachment = attachments.find(
+              (a) => a.name.startsWith(`${identifier}-`) && a.name.endsWith("-output.txt"),
+            );
+            attachmentUrl = outputAttachment?.url ?? null;
+          }
+        }
+
+        if (!attachmentUrl) {
+          return Response.json({ error: "No log attachments found in tracker" }, { status: 404 });
+        }
+
+        // Fetch attachment content via tracker (handles auth)
+        let remoteContent: string | null;
+        try {
+          remoteContent = await foundTracker.fetchAttachmentContent(attachmentUrl);
+        } catch {
+          return Response.json({ error: "Failed to fetch log content from tracker" }, { status: 502 });
+        }
+
+        if (!remoteContent) {
+          return Response.json({ error: "Failed to fetch log from tracker" }, { status: 502 });
+        }
+
+        if (isStream) {
+          // For stream requests on remote logs, send all content as SSE then close
+          // (no live tailing possible for remote logs)
+          const encoder = new TextEncoder();
+          const lines = remoteContent.split("\n").filter((l) => l.trim());
+          const tail = lines.slice(-tailCount);
+          const remoteStream = new ReadableStream({
+            start(controller) {
+              for (const line of tail) {
+                controller.enqueue(encoder.encode(`data: ${line}\n\n`));
+              }
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ event: "done" })}\n\n`));
+              controller.close();
+            },
+          });
+
+          return new Response(remoteStream, {
+            headers: {
+              "Content-Type": "text/event-stream",
+              "Cache-Control": "no-cache",
+              "Connection": "keep-alive",
+            },
+          });
+        }
+
+        // Non-stream: return tail of content as plain text
+        const remoteLines = remoteContent.split("\n").filter((l) => l.trim());
+        const remoteTail = remoteLines.slice(-tailCount).join("\n");
+        return new Response(remoteTail, {
           headers: { "Content-Type": "text/plain; charset=utf-8" },
         });
       }

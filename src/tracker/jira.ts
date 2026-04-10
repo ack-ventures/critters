@@ -199,6 +199,28 @@ export class JiraTracker implements IssueTracker {
     }
   }
 
+  async getAttachments(issueId: string): Promise<Array<{ name: string; url: string }>> {
+    try {
+      const resp = await this.request(`/issue/${encodeURIComponent(issueId)}?fields=attachment`);
+      const data = (await resp.json()) as { fields: { attachment?: Array<{ filename: string; content: string }> } };
+      return (data.fields.attachment ?? []).map((a) => ({ name: a.filename, url: a.content }));
+    } catch {
+      return [];
+    }
+  }
+
+  async fetchAttachmentContent(url: string): Promise<string | null> {
+    try {
+      const resp = await fetch(url, {
+        headers: { Authorization: this.authHeader },
+      });
+      if (!resp.ok) return null;
+      return await resp.text();
+    } catch {
+      return null;
+    }
+  }
+
   async ensureStatus(_groupId: string, name: string): Promise<void> {
     // Jira statuses are workflow-managed and can't be created via API
     log(`Jira: Status "${name}" is managed by Jira workflow — skipping creation`);
