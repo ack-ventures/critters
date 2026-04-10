@@ -27,13 +27,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg \
   && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js (LTS) — required by Claude Code CLI
-RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
-  && apt-get install -y --no-install-recommends nodejs \
-  && rm -rf /var/lib/apt/lists/*
-
-# Install Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code
+# Install Claude Code CLI (native binary)
+RUN curl -fsSL https://claude.ai/install.sh | bash
+ENV PATH="/root/.local/bin:${PATH}"
 
 # Install GitHub CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
