@@ -8,10 +8,7 @@ import {
   escapeHtml,
   fmtDuration,
   formatCost,
-  formatCostLabel,
   formatDate,
-  formatDurationMinutes,
-  formatShortDate,
   getDateKey,
   inferType,
   niceMax,
@@ -116,6 +113,20 @@ export function renderDashboard(_metricsPath: string, status: HealthStatus, upti
   const maxCostPerDay = niceMax(rawMaxCost, true);
   const rawMaxDuration = Math.max(0, ...dailyStats.map((d) => d.avgDuration));
   const maxDurationPerDay = niceMax(rawMaxDuration / 60000, false) * 60000;
+
+  const typeColors: Record<string, string> = { create: "var(--success)", review: "#5dade2" };
+  const extraColors = ["#8B5CF6", "#e2b93d", "#e9607a", "#3dd8e2", "#a3e23d"];
+  let colorIdx = 0;
+  const chartTypes = [...new Set(dailyStats.flatMap(d => Object.keys(d.perType)))].sort();
+  for (const t of chartTypes) {
+    if (!typeColors[t]) { typeColors[t] = extraColors[colorIdx % extraColors.length]; colorIdx++; }
+  }
+
+  // Resolve CSS vars to hex for Chart.js JSON serialization
+  const chartTypeColorsResolved: Record<string, string> = {};
+  for (const [k, v] of Object.entries(typeColors)) {
+    chartTypeColorsResolved[k] = v === "var(--success)" ? "#4ecca3" : v === "var(--failure)" ? "#e94560" : v;
+  }
 
   const todayStat = dailyStats[dailyStats.length - 1];
   const todayCompleted = todayStat?.completed ?? 0;
@@ -229,70 +240,9 @@ export function renderDashboard(_metricsPath: string, status: HealthStatus, upti
     .chart-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
     .chart-card:hover { z-index: 10; position: relative; }
     .chart-card h3 { font-size: 0.9rem; margin-bottom: 12px; color: var(--text-dim); }
-    .bar-chart { display: flex; align-items: flex-end; gap: 4px; height: 120px; }
-    .bar-group { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; position: relative; }
-    .bar-stack { display: flex; flex-direction: column-reverse; width: 100%; align-items: center; height: 100%; }
-    .bar {
-      width: 80%;
-      min-width: 6px;
-      border-radius: 2px 2px 0 0;
-      transition: height 0.3s;
-      position: relative;
-    }
-    .bar.success { background: var(--success); }
-    .bar.failure { background: var(--failure); border-radius: 0; }
-    .bar.cost { background: #e2b93d; }
-    .bar.duration { background: #8B5CF6; }
-    .donut-chart { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 120px; }
-    .donut-svg { width: 100px; height: 100px; }
-    .donut-text { font-family: inherit; font-size: 0.45rem; fill: var(--text); font-weight: 700; text-anchor: middle; dominant-baseline: central; }
-    .donut-legend { font-size: 0.75rem; color: var(--text-dim); margin-top: 8px; text-align: center; }
+    .chart-container { position: relative; height: 140px; width: 100%; }
+    .chart-card canvas { cursor: pointer; }
     .pr-status { font-size: 0.75rem; margin-left: 4px; }
-    .bar-label { font-size: 0.6rem; color: var(--text-dim); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .bar[data-tooltip]:hover::after {
-      content: attr(data-tooltip);
-      position: absolute;
-      bottom: 100%;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.85);
-      color: #fff;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 0.7rem;
-      white-space: nowrap;
-      pointer-events: none;
-      z-index: 10;
-    }
-    .bar:hover { filter: brightness(1.2); }
-    .bar-group[data-tooltip]:hover::after {
-      content: attr(data-tooltip);
-      position: absolute;
-      bottom: 100%;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.85);
-      color: #fff;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 0.7rem;
-      white-space: nowrap;
-      pointer-events: none;
-      z-index: 20;
-    }
-    .chart-with-axis { display: flex; align-items: stretch; }
-    .y-axis {
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      align-items: flex-end;
-      padding-right: 6px;
-      min-width: 40px;
-      width: auto;
-      flex-shrink: 0;
-    }
-    .y-axis .y-label { font-size: 0.65rem; color: var(--text-dim); line-height: 1; }
-    .chart-with-axis .bar-chart { flex: 1; }
 
     .active-section { margin-bottom: 24px; }
     .active-section h2 { font-size: 1.1rem; margin-bottom: 12px; }
@@ -392,8 +342,6 @@ export function renderDashboard(_metricsPath: string, status: HealthStatus, upti
       color: #fff;
     }
     .bar-group[data-date] { cursor: pointer; transition: opacity 0.2s; }
-    [data-chart-type] { cursor: pointer; transition: opacity 0.2s; }
-    [data-chart-status] { cursor: pointer; transition: opacity 0.2s; }
     td .badge { cursor: pointer; }
     td .badge:hover { filter: brightness(1.2); }
     .badge-type {
@@ -429,13 +377,10 @@ export function renderDashboard(_metricsPath: string, status: HealthStatus, upti
       .summary { grid-template-columns: repeat(2, 1fr); gap: 10px; }
       .card .value { font-size: 1.4rem; }
       .charts { grid-template-columns: 1fr; }
-      .bar-chart { gap: 2px; }
-      .bar-group:nth-child(even) .bar-label { visibility: hidden; }
-      .bar-label { transform: rotate(-45deg); transform-origin: top center; font-size: 0.55rem; }
-      .y-axis { min-width: 35px; width: auto; }
       .type-stats-grid { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 </head>
 <body>
   <div class="header">
@@ -676,144 +621,26 @@ ${status.activeCritterDetails.map((d) => {
   <div class="charts">
     <div class="chart-card">
       <h3>Tasks per Day (Last 14 Days)</h3>
-      <div class="chart-with-axis">
-        <div class="y-axis">
-          <span class="y-label">${maxTasksPerDay}</span>
-          <span class="y-label">${Math.round(maxTasksPerDay / 2)}</span>
-          <span class="y-label">0</span>
-        </div>
-        <div class="bar-chart">
-${(() => {
-  const typeColors: Record<string, string> = { create: "var(--success)", review: "#5dade2" };
-  const extraColors = ["#8B5CF6", "#e2b93d", "#e9607a", "#3dd8e2", "#a3e23d"];
-  let colorIdx = 0;
-  const chartTypes = [...new Set(dailyStats.flatMap(d => Object.keys(d.perType)))].sort();
-  for (const t of chartTypes) {
-    if (!typeColors[t]) { typeColors[t] = extraColors[colorIdx % extraColors.length]; colorIdx++; }
-  }
-  return dailyStats
-    .map((d, i) => {
-      const shortDate = formatShortDate(d.date);
-      const label = chartDateLabel(d.date, i > 0 ? dailyStats[i - 1].date : null);
-      if (!typeFilter && chartTypes.length >= 2) {
-        // Stacked bars per type
-        const total = d.completed + d.failed;
-        const bars = chartTypes.map(t => {
-          const tc = d.perType[t];
-          if (!tc) return "";
-          const count = tc.completed + tc.failed;
-          const h = Math.round((count / maxTasksPerDay) * 100);
-          if (h === 0) return "";
-          return `              <div class="bar" style="height:${h}%;background:${typeColors[t]};border-radius:0" data-tooltip="${t}: ${count}" data-chart-type="${t}"></div>`;
-        }).filter(Boolean).join("\n");
-        return `          <div class="bar-group" data-date="${d.date}" data-tooltip="${shortDate}: ${total} tasks (${chartTypes.map(t => `${t}: ${(d.perType[t]?.completed ?? 0) + (d.perType[t]?.failed ?? 0)}`).join(", ")})">
-            <div class="bar-stack">
-${bars}
-            </div>
-            <div class="bar-label">${escapeHtml(label)}</div>
-          </div>`;
-      }
-      // Single type or filtered: success/failure bars
-      const successH = Math.round(((d.completed) / maxTasksPerDay) * 100);
-      const failH = Math.round(((d.failed) / maxTasksPerDay) * 100);
-      return `          <div class="bar-group" data-date="${d.date}" data-tooltip="${shortDate}: ${d.completed} completed, ${d.failed} failed">
-            <div class="bar-stack">
-              <div class="bar failure" style="height:${failH}%"${failH > 0 ? ` data-tooltip="${d.failed} failed"` : ""}></div>
-              <div class="bar success" style="height:${successH}%"${successH > 0 ? ` data-tooltip="${d.completed} completed"` : ""}></div>
-            </div>
-            <div class="bar-label">${escapeHtml(label)}</div>
-          </div>`;
-    })
-    .join("\n");
-})()}
-        </div>
-      </div>
-${(() => {
-  if (typeFilter) return "";
-  const typeColors: Record<string, string> = { create: "var(--success)", review: "#5dade2" };
-  const extraColors = ["#8B5CF6", "#e2b93d", "#e9607a", "#3dd8e2", "#a3e23d"];
-  let colorIdx = 0;
-  const chartTypes = [...new Set(dailyStats.flatMap(d => Object.keys(d.perType)))].sort();
-  if (chartTypes.length < 2) return "";
-  for (const t of chartTypes) {
-    if (!typeColors[t]) { typeColors[t] = extraColors[colorIdx % extraColors.length]; colorIdx++; }
-  }
-  return `      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:0.75rem;color:var(--text-dim)">
-${chartTypes.map(t => `        <span data-chart-type="${escapeHtml(t)}"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${typeColors[t]};margin-right:4px;vertical-align:middle"></span>${escapeHtml(t)}</span>`).join("\n")}
-      </div>`;
-})()}
+      <div class="chart-container"><canvas id="chart-tasks"></canvas></div>
+${!typeFilter && chartTypes.length >= 2 ? `      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:0.75rem;color:var(--text-dim)">
+${chartTypes.map(t =>
+  `        <span style="cursor:pointer" onclick="document.dispatchEvent(new CustomEvent('chart-click',{detail:{type:'type',value:'${escapeHtml(t)}'}}))">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${typeColors[t]};margin-right:4px;vertical-align:middle"></span>${escapeHtml(t)}
+        </span>`
+).join("\n")}
+      </div>` : ""}
     </div>
     <div class="chart-card">
       <h3>Cost per Day (Last 14 Days)</h3>
-      <div class="chart-with-axis">
-        <div class="y-axis">
-          <span class="y-label">${formatCostLabel(maxCostPerDay)}</span>
-          <span class="y-label">${formatCostLabel(maxCostPerDay / 2)}</span>
-          <span class="y-label">$0</span>
-        </div>
-        <div class="bar-chart">
-${dailyStats
-  .map((d, i) => {
-    const h = Math.round((d.cost / maxCostPerDay) * 100);
-    const shortDate = formatShortDate(d.date);
-    const label = chartDateLabel(d.date, i > 0 ? dailyStats[i - 1].date : null);
-    return `          <div class="bar-group" data-date="${d.date}" data-tooltip="${shortDate}: $${d.cost.toFixed(2)}">
-            <div class="bar-stack">
-              <div class="bar cost" style="height:${h}%"${h > 0 ? ` data-tooltip="$${d.cost.toFixed(2)}"` : ""}></div>
-            </div>
-            <div class="bar-label">${escapeHtml(label)}</div>
-          </div>`;
-  })
-  .join("\n")}
-        </div>
-      </div>
+      <div class="chart-container"><canvas id="chart-cost"></canvas></div>
     </div>
     <div class="chart-card">
       <h3>Avg Duration per Day (Last 14 Days)</h3>
-      <div class="chart-with-axis">
-        <div class="y-axis">
-          <span class="y-label">${formatDurationMinutes(maxDurationPerDay)}</span>
-          <span class="y-label">${formatDurationMinutes(maxDurationPerDay / 2)}</span>
-          <span class="y-label">0m</span>
-        </div>
-        <div class="bar-chart">
-${dailyStats
-  .map((d, i) => {
-    const h = maxDurationPerDay > 0 ? Math.round((d.avgDuration / maxDurationPerDay) * 100) : 0;
-    const shortDate = formatShortDate(d.date);
-    const label = chartDateLabel(d.date, i > 0 ? dailyStats[i - 1].date : null);
-    return `          <div class="bar-group" data-date="${d.date}" data-tooltip="${shortDate}: ${fmtDuration(d.avgDuration)}">
-            <div class="bar-stack">
-              <div class="bar duration" style="height:${h}%"${h > 0 ? ` data-tooltip="${fmtDuration(d.avgDuration)}"` : ""}></div>
-            </div>
-            <div class="bar-label">${escapeHtml(label)}</div>
-          </div>`;
-  })
-  .join("\n")}
-        </div>
-      </div>
+      <div class="chart-container"><canvas id="chart-duration"></canvas></div>
     </div>
     <div class="chart-card">
       <h3>Success vs Failure</h3>
-      <div class="donut-chart">
-${totalTasks > 0 ? (() => {
-  const successPct = Math.round((succeeded / totalTasks) * 100);
-  const failPct = 100 - successPct;
-  return `        <svg viewBox="0 0 36 36" class="donut-svg">
-          <circle cx="18" cy="18" r="15.9155" fill="none" stroke="var(--border)" stroke-width="2.5"/>
-          <circle cx="18" cy="18" r="15.9155" fill="none" stroke="var(--success)" stroke-width="2.5"
-            stroke-dasharray="${successPct}, 100" stroke-dashoffset="25" stroke-linecap="round" data-chart-status="success"/>
-          <circle cx="18" cy="18" r="15.9155" fill="none" stroke="var(--failure)" stroke-width="2.5"
-            stroke-dasharray="${failPct}, 100" stroke-dashoffset="${25 - successPct}" stroke-linecap="round" data-chart-status="failure"/>
-          <text x="18" y="18" class="donut-text">${successPct}%</text>
-        </svg>
-        <div class="donut-legend"><span data-chart-status="success">${succeeded} passed</span> &middot; <span data-chart-status="failure">${failed} failed</span></div>`;
-})() : `        <svg viewBox="0 0 36 36" class="donut-svg">
-          <circle cx="18" cy="18" r="15.9155" fill="none" stroke="var(--border)" stroke-width="2.5"/>
-          <text x="18" y="18" class="donut-text">N/A</text>
-        </svg>
-        <div class="donut-legend">No data</div>`}
-      </div>
+      <div class="chart-container"><canvas id="chart-donut"></canvas></div>
     </div>
   </div>
 
@@ -938,6 +765,26 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="8" class="empty-stat
 
 <script>
 var __dashboardToken = ${dashboardToken ? JSON.stringify(dashboardToken) : "null"};
+var __chartData = {
+  dailyStats: ${JSON.stringify(dailyStats.map((d, i) => ({
+    date: d.date,
+    label: chartDateLabel(d.date, i > 0 ? dailyStats[i - 1].date : null),
+    completed: d.completed,
+    failed: d.failed,
+    cost: d.cost,
+    avgDuration: d.avgDuration,
+    perType: d.perType
+  })))},
+  typeColors: ${JSON.stringify(chartTypeColorsResolved)},
+  chartTypes: ${JSON.stringify(chartTypes)},
+  typeFilter: ${JSON.stringify(typeFilter)},
+  maxTasksPerDay: ${maxTasksPerDay},
+  maxCostPerDay: ${maxCostPerDay},
+  maxDurationPerDay: ${maxDurationPerDay},
+  succeeded: ${succeeded},
+  failed: ${failed},
+  totalTasks: ${totalTasks}
+};
 var paused = false;
 
 function getAuthHeaders() {
@@ -949,6 +796,214 @@ function showAuthPrompt() {
   var prompt = document.getElementById('auth-prompt');
   if (prompt) prompt.style.display = 'block';
 }
+
+(function() {
+  var cd = __chartData;
+  if (!cd) return;
+
+  // Global dark-theme defaults
+  Chart.defaults.color = '#8892a4';
+  Chart.defaults.borderColor = '#2a2a4a';
+
+  var defaultTooltip = {
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    titleColor: '#fff',
+    bodyColor: '#fff',
+    cornerRadius: 4,
+    padding: 8
+  };
+
+  var labels = cd.dailyStats.map(function(d) { return d.label; });
+  var dates = cd.dailyStats.map(function(d) { return d.date; });
+
+  // --- Tasks per Day (stacked bar) ---
+  var tasksCtx = document.getElementById('chart-tasks');
+  var tasksDatasets;
+  if (!cd.typeFilter && cd.chartTypes.length >= 2) {
+    // Stacked per type
+    tasksDatasets = cd.chartTypes.map(function(t) {
+      return {
+        label: t,
+        data: cd.dailyStats.map(function(d) {
+          var pt = d.perType[t];
+          return pt ? pt.completed + pt.failed : 0;
+        }),
+        backgroundColor: cd.typeColors[t],
+        borderWidth: 0
+      };
+    });
+  } else {
+    // success/failure split
+    tasksDatasets = [
+      {
+        label: 'Completed',
+        data: cd.dailyStats.map(function(d) { return d.completed; }),
+        backgroundColor: '#4ecca3',
+        borderWidth: 0
+      },
+      {
+        label: 'Failed',
+        data: cd.dailyStats.map(function(d) { return d.failed; }),
+        backgroundColor: '#e94560',
+        borderWidth: 0
+      }
+    ];
+  }
+
+  var tasksChart = new Chart(tasksCtx, {
+    type: 'bar',
+    data: { labels: labels, datasets: tasksDatasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: defaultTooltip
+      },
+      scales: {
+        x: { stacked: true, grid: { display: false }, ticks: { maxRotation: 0 } },
+        y: { stacked: true, beginAtZero: true, suggestedMax: cd.maxTasksPerDay,
+             ticks: { stepSize: Math.ceil(cd.maxTasksPerDay / 4) } }
+      },
+      onClick: function(evt, elements) {
+        if (elements.length === 0) return;
+        var idx = elements[0].index;
+        if (!cd.typeFilter && cd.chartTypes.length >= 2) {
+          var typeName = cd.chartTypes[elements[0].datasetIndex];
+          document.dispatchEvent(new CustomEvent('chart-click',
+            { detail: { type: 'type', value: typeName } }));
+        } else {
+          document.dispatchEvent(new CustomEvent('chart-click',
+            { detail: { type: 'date', value: dates[idx] } }));
+        }
+      }
+    }
+  });
+
+  // --- Cost per Day ---
+  var costCtx = document.getElementById('chart-cost');
+  var costChart = new Chart(costCtx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Cost',
+        data: cd.dailyStats.map(function(d) { return d.cost; }),
+        backgroundColor: '#e2b93d',
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: Object.assign({}, defaultTooltip, {
+          callbacks: {
+            label: function(ctx) { return '$' + ctx.parsed.y.toFixed(2); }
+          }
+        })
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { maxRotation: 0 } },
+        y: { beginAtZero: true, suggestedMax: cd.maxCostPerDay,
+             ticks: { callback: function(v) { return '$' + v; } } }
+      },
+      onClick: function(evt, elements) {
+        if (elements.length > 0) {
+          document.dispatchEvent(new CustomEvent('chart-click',
+            { detail: { type: 'date', value: dates[elements[0].index] } }));
+        }
+      }
+    }
+  });
+
+  // --- Avg Duration per Day ---
+  var durCtx = document.getElementById('chart-duration');
+  var durChart = new Chart(durCtx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Duration',
+        data: cd.dailyStats.map(function(d) { return Math.round(d.avgDuration / 60000); }),
+        backgroundColor: '#8B5CF6',
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: Object.assign({}, defaultTooltip, {
+          callbacks: {
+            label: function(ctx) { return ctx.parsed.y + 'm'; }
+          }
+        })
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { maxRotation: 0 } },
+        y: { beginAtZero: true, suggestedMax: Math.round(cd.maxDurationPerDay / 60000),
+             ticks: { callback: function(v) { return v + 'm'; } } }
+      },
+      onClick: function(evt, elements) {
+        if (elements.length > 0) {
+          document.dispatchEvent(new CustomEvent('chart-click',
+            { detail: { type: 'date', value: dates[elements[0].index] } }));
+        }
+      }
+    }
+  });
+
+  // --- Success vs Failure Donut ---
+  var donutCtx = document.getElementById('chart-donut');
+  var successPct = cd.totalTasks > 0 ? Math.round((cd.succeeded / cd.totalTasks) * 100) : 0;
+  var donutChart = new Chart(donutCtx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Passed', 'Failed'],
+      datasets: [{
+        data: cd.totalTasks > 0 ? [cd.succeeded, cd.failed] : [1],
+        backgroundColor: cd.totalTasks > 0 ? ['#4ecca3', '#e94560'] : ['#2a2a4a'],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '70%',
+      plugins: {
+        legend: { display: true, position: 'bottom', labels: { padding: 12, usePointStyle: true } },
+        tooltip: cd.totalTasks > 0 ? defaultTooltip : { enabled: false }
+      },
+      onClick: function(evt, elements) {
+        if (elements.length > 0 && cd.totalTasks > 0) {
+          var statusVal = elements[0].index === 0 ? 'success' : 'failure';
+          document.dispatchEvent(new CustomEvent('chart-click',
+            { detail: { type: 'status', value: statusVal } }));
+        }
+      }
+    },
+    plugins: [{
+      id: 'centerText',
+      afterDraw: function(chart) {
+        var ctx = chart.ctx;
+        var area = chart.chartArea;
+        var centerX = (area.left + area.right) / 2;
+        var centerY = (area.top + area.bottom) / 2;
+        ctx.save();
+        ctx.font = 'bold 1.2rem -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
+        ctx.fillStyle = '#eee';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        var text = cd.totalTasks > 0 ? successPct + '%' : 'N/A';
+        ctx.fillText(text, centerX, centerY);
+        ctx.restore();
+      }
+    }]
+  });
+})();
 
 (function() {
   var saveBtn = document.getElementById('auth-save-btn');
@@ -1110,7 +1165,6 @@ function showAuthPrompt() {
           b.classList.toggle('active', b.getAttribute('data-filter-value') === '');
         });
         updateDateDisplay();
-        highlightChartElements();
         applyFilters();
       }
       return;
@@ -1189,107 +1243,36 @@ function showAuthPrompt() {
     document.getElementById('date-filter-clear').addEventListener('click', function() {
       activeFilters.date = '';
       updateDateDisplay();
-      highlightChartElements();
       applyFilters();
     });
   }
 
-  function highlightChartElements() {
-    document.querySelectorAll('.charts .bar-group[data-date]').forEach(function(g) {
-      var isSelected = activeFilters.date && g.getAttribute('data-date') === activeFilters.date;
-      var isDeselected = activeFilters.date && g.getAttribute('data-date') !== activeFilters.date;
-      g.style.opacity = isDeselected ? '0.3' : '1';
-      if (isSelected) {
-        g.style.outline = '2px solid var(--text)';
-        g.style.outlineOffset = '-1px';
-        g.style.borderRadius = '3px';
-      } else {
-        g.style.outline = '';
-        g.style.outlineOffset = '';
-        g.style.borderRadius = '';
-      }
-    });
-
-    document.querySelectorAll('[data-chart-type]').forEach(function(el) {
-      var isSelected = activeFilters.type && el.getAttribute('data-chart-type') === activeFilters.type;
-      var isDeselected = activeFilters.type && el.getAttribute('data-chart-type') !== activeFilters.type;
-      el.style.opacity = isDeselected ? '0.3' : '1';
-      if (isSelected && el.classList.contains('bar')) {
-        el.style.outline = '2px solid var(--text)';
-        el.style.outlineOffset = '-1px';
-      } else {
-        el.style.outline = '';
-        el.style.outlineOffset = '';
-      }
-    });
-
-    document.querySelectorAll('[data-chart-status]').forEach(function(el) {
-      var isDeselected = activeFilters.status && el.getAttribute('data-chart-status') !== activeFilters.status;
-      el.style.opacity = isDeselected ? '0.3' : '1';
-    });
-  }
-
-  // Chart click handlers
-  document.querySelectorAll('.charts .bar-group[data-date]').forEach(function(group) {
-    group.addEventListener('click', function() {
-      var date = group.getAttribute('data-date');
-      activeFilters.date = (activeFilters.date === date) ? '' : date;
+  document.addEventListener('chart-click', function(e) {
+    var detail = e.detail;
+    if (detail.type === 'date') {
+      activeFilters.date = (activeFilters.date === detail.value) ? '' : detail.value;
       updateDateDisplay();
-      highlightChartElements();
-      applyFilters();
-      scrollToActivity();
-    });
-  });
-
-  document.querySelectorAll('.charts .bar[data-chart-type]').forEach(function(bar) {
-    bar.addEventListener('click', function(e) {
-      e.stopPropagation();
-      var typeName = bar.getAttribute('data-chart-type');
-      activeFilters.type = (activeFilters.type === typeName) ? '' : typeName;
+    } else if (detail.type === 'type') {
+      activeFilters.type = (activeFilters.type === detail.value) ? '' : detail.value;
       filterBar.querySelectorAll('[data-filter-group="type"]').forEach(function(b) {
         b.classList.toggle('active', b.getAttribute('data-filter-value') === activeFilters.type);
       });
-      highlightChartElements();
-      applyFilters();
-      scrollToActivity();
-    });
-  });
-
-  document.querySelectorAll('[data-chart-type]').forEach(function(el) {
-    if (el.closest('.bar-stack')) return;
-    el.addEventListener('click', function() {
-      var typeName = el.getAttribute('data-chart-type');
-      activeFilters.type = (activeFilters.type === typeName) ? '' : typeName;
-      filterBar.querySelectorAll('[data-filter-group="type"]').forEach(function(b) {
-        b.classList.toggle('active', b.getAttribute('data-filter-value') === activeFilters.type);
-      });
-      highlightChartElements();
-      applyFilters();
-      scrollToActivity();
-    });
-  });
-
-  document.querySelectorAll('[data-chart-status]').forEach(function(el) {
-    el.addEventListener('click', function() {
-      var statusVal = el.getAttribute('data-chart-status');
-      activeFilters.status = (activeFilters.status === statusVal) ? '' : statusVal;
+    } else if (detail.type === 'status') {
+      activeFilters.status = (activeFilters.status === detail.value) ? '' : detail.value;
       filterBar.querySelectorAll('[data-filter-group="status"]').forEach(function(b) {
-        var bVal = b.getAttribute('data-filter-value');
         if (activeFilters.status === 'success' || activeFilters.status === 'failure') {
           b.classList.remove('active');
         } else {
-          b.classList.toggle('active', bVal === activeFilters.status);
+          b.classList.toggle('active', b.getAttribute('data-filter-value') === '');
         }
       });
-      highlightChartElements();
-      applyFilters();
-      scrollToActivity();
-    });
+    }
+    applyFilters();
+    scrollToActivity();
   });
 
   // Apply initial filters
   applyFilters();
-  highlightChartElements();
   updateDateDisplay();
 })();
 

@@ -151,7 +151,8 @@ describe("renderDashboard", () => {
     expect(html).toContain("Tasks per Day");
     expect(html).toContain("Cost per Day");
     expect(html).toContain("Success vs Failure");
-    expect(html).toContain("bar-chart");
+    expect(html).toContain("<canvas");
+    expect(html).toContain("__chartData");
   });
 
   test("renders PR links in activity table", () => {
@@ -203,15 +204,18 @@ describe("renderDashboard", () => {
     recordMetric({ timestamp: now, event: "review_completed", identifier: "R-3", costUsd: 0.5 });
 
     const html = renderDashboard("", defaultStatus(), 0);
-    // The chart should have a non-zero success bar (100% since it's the only event)
-    expect(html).toContain('class="bar success" style="height:100%"');
+    // Chart data should include the review event as a completed task
+    expect(html).toContain("__chartData");
+    expect(html).toContain('"completed":1');
   });
 
-  test("bar stack has height 100%", () => {
+  test("chart containers have canvas elements", () => {
     const html = renderDashboard("", defaultStatus(), 0);
-    expect(html).toContain("height: 100%;");
-    // Specifically check .bar-stack has height: 100%
-    expect(html).toContain(".bar-stack { display: flex; flex-direction: column-reverse; width: 100%; align-items: center; height: 100%; }");
+    expect(html).toContain('id="chart-tasks"');
+    expect(html).toContain('id="chart-cost"');
+    expect(html).toContain('id="chart-duration"');
+    expect(html).toContain('id="chart-donut"');
+    expect(html).toContain("chart-container");
   });
 
   test("contains New Critter button", () => {
