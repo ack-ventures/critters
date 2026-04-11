@@ -56,6 +56,9 @@ RUN git config --global user.name "Critters" \
 WORKDIR /app
 EXPOSE 3847
 
+COPY docker-entrypoint.sh /usr/local/bin/
+ENTRYPOINT ["docker-entrypoint.sh"]
+
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:3847/healthz || exit 1
 
