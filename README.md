@@ -97,6 +97,29 @@ docker compose logs -f
 
 The Docker image includes all runtime dependencies (Claude Code CLI, `gh`, `git`, `jq`).
 
+**Installing additional tools (Node.js, Bun, Python, etc.):**
+
+The container doesn't include language runtimes by default. To install tools at startup without rebuilding the image, create a setup script at `~/.critters/setup.sh` (automatically mounted into the container):
+
+```bash
+#!/bin/bash
+# ~/.critters/setup.sh — runs before the daemon starts
+
+# Node.js (via nvm)
+curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
+nvm install 22
+
+# Bun
+curl -fsSL https://bun.sh/install | bash
+
+# Python
+apt-get update && apt-get install -y --no-install-recommends python3 python3-pip
+```
+
+The script is `source`'d so any `PATH` or env changes persist into the daemon and spawned Claude Code sessions. Override the path with `CRITTERS_SETUP_SCRIPT` env var.
+
 **Auth requirements:**
 - `CLAUDE_CODE_OAUTH_TOKEN` — Claude Max/Team subscription token (run `claude setup-token` on the host, then add to `.env` or export in your shell). Alternatively, set `ANTHROPIC_API_KEY` for direct API access.
 - `~/.ssh` — SSH keys for git clone (mounted read-only)
