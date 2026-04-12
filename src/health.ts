@@ -139,7 +139,7 @@ export function startHealthServer(
           ?? issueMetrics.find(m => m.prUrl)?.prUrl;
         const prStatuses = prUrl ? await getPrStatuses([prUrl]) : new Map();
 
-        const html = renderIssuePage(identifier, status, workDir ?? "/tmp/critters-work", prStatuses);
+        const html = await renderIssuePage(identifier, status, workDir ?? "/tmp/critters-work", prStatuses, context?.trackers);
         return new Response(html, {
           headers: { "Content-Type": "text/html; charset=utf-8" },
         });
