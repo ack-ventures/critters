@@ -109,6 +109,10 @@ export class UnifiedSpawner {
   }
 
   cleanupStale(): void {
+    if (this.getActiveCount() > 0 || this.getQueueSize() > 0) {
+      log("Skipping stale cleanup — critters are active or queued");
+      return;
+    }
     const maxAgeMinutes = this.config.limits.cleanupStaleMinutes
       ?? Math.max(...this.config.critterTypes.map(ct => ct.timeoutMinutes)) + 30;
     cleanupStaleWorkDirs(this.config.daemon.workDir, this.activeWorkDirs, maxAgeMinutes);
@@ -749,7 +753,6 @@ export class UnifiedSpawner {
       if (warningTimeout) clearTimeout(warningTimeout);
       this.activeProcesses.delete(abortController);
       this.abortControllers.delete(task.id);
-      this.activeWorkDirs.delete(workDir);
       this.activeCritterMap.delete(task.id);
       this.slackNotifier.clearThread(task.id);
       try {
@@ -758,6 +761,7 @@ export class UnifiedSpawner {
       } catch (cleanupErr) {
         logTaskError(task.identifier, `Work directory cleanup failed: ${cleanupErr}`);
       }
+      this.activeWorkDirs.delete(workDir);
     }
   }
 
