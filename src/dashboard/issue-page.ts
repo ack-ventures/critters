@@ -1,7 +1,8 @@
 import type { HealthStatus } from "../health.js";
-import { extractPhaseResult, resolveAllPhases, resolveWorkDirForIdentifier } from "../log-resolver.js";
+import { extractPhaseResult, resolveAllPhases, resolvePhasesFromAttachments, resolveWorkDirForIdentifier } from "../log-resolver.js";
 import { getRecentMetrics } from "../metrics.js";
 import type { PrStatus } from "../pr-status.js";
+import type { IssueTracker } from "../tracker/types.js";
 import { escapeHtml, fmtDuration, formatCost, formatDate, renderPrStatusIcons } from "./helpers.js";
 
 function formatTokenCount(n: number | undefined): string {
@@ -11,7 +12,7 @@ function formatTokenCount(n: number | undefined): string {
   return String(n);
 }
 
-export function renderIssuePage(identifier: string, status: HealthStatus, workDir: string, prStatuses?: Map<string, PrStatus>): string {
+export async function renderIssuePage(identifier: string, status: HealthStatus, workDir: string, prStatuses?: Map<string, PrStatus>, trackers?: Map<string, IssueTracker>): Promise<string> {
   const safeId = escapeHtml(identifier);
   const activeDetail = status.activeCritterDetails.find((d) => d.identifier === identifier);
   const isActive = !!activeDetail;
@@ -25,7 +26,27 @@ export function renderIssuePage(identifier: string, status: HealthStatus, workDi
   }
 
   // Get available phases and their results
-  const phases = targetDir ? resolveAllPhases(targetDir) : [];
+  let phases: Array<{ phase: string; logFile: string }> = targetDir ? resolveAllPhases(targetDir) : [];
+
+  // Fallback: discover phases from tracker attachments when local logs are gone
+  if (phases.length === 0 && trackers && trackers.size > 0) {
+    try {
+      for (const [, tracker] of trackers) {
+        const issue = await tracker.findIssueByIdentifier(identifier);
+        if (issue) {
+          const attachments = await tracker.getAttachments(issue.id);
+          const remotePhs = resolvePhasesFromAttachments(identifier, attachments);
+          if (remotePhs.length > 0) {
+            phases = remotePhs.map((p) => ({ phase: p.phase, logFile: "" }));
+            break;
+          }
+        }
+      }
+    } catch {
+      // Tracker unavailable — render without phase tabs (existing behavior)
+    }
+  }
+
   const phaseResults = phases.map((p) => ({
     phase: p.phase,
     logFile: p.logFile,

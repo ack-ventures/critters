@@ -268,3 +268,33 @@ export function renderReadableLines(jsonLines: string[], adapter: CliAdapter): s
 function extractReadableContent(jsonLines: string[], adapter: CliAdapter): string {
   return renderReadableLines(jsonLines, adapter).join("\n");
 }
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function resolvePhasesFromAttachments(
+  identifier: string,
+  attachments: Array<{ name: string; url: string }>,
+): Array<{ phase: string }> {
+  const TAG_TO_PHASE: Record<string, string> = {
+    plan: "planning",
+    exec: "execution",
+    review: "review",
+  };
+  const ORDER: Record<string, number> = { planning: 0, execution: 1, review: 2 };
+
+  const pattern = new RegExp(`^${escapeRegExp(identifier)}-(.+)-output\\.txt$`);
+  const phases: Array<{ phase: string }> = [];
+
+  for (const a of attachments) {
+    const m = a.name.match(pattern);
+    if (!m) continue;
+    const tag = m[1];
+    const phaseName = TAG_TO_PHASE[tag] ?? tag;
+    phases.push({ phase: phaseName });
+  }
+
+  phases.sort((a, b) => (ORDER[a.phase] ?? 99) - (ORDER[b.phase] ?? 99));
+  return phases;
+}
