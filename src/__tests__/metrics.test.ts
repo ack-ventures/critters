@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { aggregateCostFromEvents, getRecentMetrics, initMetrics, pruneMetrics, recordMetric } from "../metrics.js";
-import type { MetricEvent } from "../metrics.js";
+import { aggregateCostFromEvents, getRecentMetrics, initMetrics, type MetricEvent, pruneMetrics, recordMetric } from "../metrics.js";
 import { createTempDir } from "./helpers.js";
 
 let tempDir: string;
