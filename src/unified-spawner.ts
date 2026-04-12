@@ -537,7 +537,7 @@ export class UnifiedSpawner {
 
         // Handle review phase outcomes inline
         if (phase.prompt === "builtin:review") {
-          return this.handleReviewOutcome(task, critterType, phaseResult.data, phaseResult.spawn, workDir, taskStart, tracker);
+          return await this.handleReviewOutcome(task, critterType, phaseResult.data, phaseResult.spawn, workDir, taskStart, tracker);
         }
 
         // Handle execution phase outcomes inline
@@ -546,7 +546,7 @@ export class UnifiedSpawner {
           if (prUrl) {
             const detail = this.activeCritterMap.get(task.id);
             if (detail) detail.prUrl = prUrl;
-            return this.handleCreateSuccess(task, critterType, prUrl, branch, phaseResults, allPhaseStats, workDir, taskStart, tracker);
+            return await this.handleCreateSuccess(task, critterType, prUrl, branch, phaseResults, allPhaseStats, workDir, taskStart, tracker);
           }
           // No PR — fall through to generic success path
         }

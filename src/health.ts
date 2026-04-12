@@ -2,6 +2,7 @@ import { statSync } from "node:fs";
 import { checkAuth } from "./auth.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import { renderDashboard, renderIssuePage, renderReleaseNotesPage } from "./dashboard/index.js";
+import { getCliAdapter } from "./cli/registry.js";
 import { phaseFileTag, readLogTail, renderReadableLines, resolveCliAdapterForLog, resolveLogFile, resolveWorkDirForIdentifier } from "./log-resolver.js";
 import { log, logError } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
@@ -448,15 +449,20 @@ export function startHealthServer(
           return Response.json({ error: "Failed to fetch log from tracker" }, { status: 502 });
         }
 
+        // Render JSON stream lines into human-readable output via the CLI adapter.
+        // Tracker attachments don't carry meta sidecars, so fall back to the claude adapter.
+        const remoteAdapter = getCliAdapter("claude");
+        const remoteJsonLines = remoteContent.split("\n").filter((l) => l.trim());
+        const remoteReadable = renderReadableLines(remoteJsonLines, remoteAdapter);
+        const remoteTailLines = remoteReadable.slice(-tailCount);
+
         if (isStream) {
           // For stream requests on remote logs, send all content as SSE then close
           // (no live tailing possible for remote logs)
           const encoder = new TextEncoder();
-          const lines = remoteContent.split("\n").filter((l) => l.trim());
-          const tail = lines.slice(-tailCount);
           const remoteStream = new ReadableStream({
             start(controller) {
-              for (const line of tail) {
+              for (const line of remoteTailLines) {
                 controller.enqueue(encoder.encode(`data: ${line}\n\n`));
               }
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ event: "done" })}\n\n`));
@@ -474,9 +480,7 @@ export function startHealthServer(
         }
 
         // Non-stream: return tail of content as plain text
-        const remoteLines = remoteContent.split("\n").filter((l) => l.trim());
-        const remoteTail = remoteLines.slice(-tailCount).join("\n");
-        return new Response(remoteTail, {
+        return new Response(remoteTailLines.join("\n"), {
           headers: { "Content-Type": "text/plain; charset=utf-8" },
         });
       }
