@@ -87,6 +87,38 @@ export function readAllMetrics(filePath?: string): MetricEvent[] {
   }
 }
 
+export function aggregateCostFromEvents(
+  events: MetricEvent[],
+): { costUsd: number; inputTokens: number; outputTokens: number; cacheReadTokens: number } {
+  // Scope to latest run: only consider events after the last task_started
+  let lastStartIdx = -1;
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].event === "task_started") {
+      lastStartIdx = i;
+      break;
+    }
+  }
+  const scoped = lastStartIdx >= 0 ? events.slice(lastStartIdx) : events;
+
+  let costUsd = 0;
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cacheReadTokens = 0;
+  for (const e of scoped) {
+    if (
+      e.event === "task_completed" || e.event === "task_failed" ||
+      e.event === "review_completed" || e.event === "review_failed"
+    ) {
+      costUsd += e.costUsd ?? 0;
+      inputTokens += e.inputTokens ?? 0;
+      outputTokens += e.outputTokens ?? 0;
+      cacheReadTokens += e.cacheReadTokens ?? 0;
+    }
+  }
+
+  return { costUsd, inputTokens, outputTokens, cacheReadTokens };
+}
+
 export function pruneMetrics(retentionDays: number): void {
   if (!metricsFile) return;
   if (!existsSync(metricsFile)) return;

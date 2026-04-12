@@ -1,6 +1,6 @@
 import type { HealthStatus } from "../health.js";
 import { extractPhaseResult, resolveAllPhases, resolvePhasesFromAttachments, resolveWorkDirForIdentifier } from "../log-resolver.js";
-import { getRecentMetrics } from "../metrics.js";
+import { aggregateCostFromEvents, getRecentMetrics } from "../metrics.js";
 import type { PrStatus } from "../pr-status.js";
 import type { IssueTracker } from "../tracker/types.js";
 import { escapeHtml, fmtDuration, formatCost, formatDate, renderPrStatusIcons } from "./helpers.js";
@@ -97,11 +97,12 @@ export async function renderIssuePage(identifier: string, status: HealthStatus, 
     }
   }
 
-  if (!hasPhaseData && taskEnded) {
-    totalCost = taskEnded.costUsd ?? 0;
-    totalInputTokens = taskEnded.inputTokens ?? 0;
-    totalOutputTokens = taskEnded.outputTokens ?? 0;
-    totalCacheReadTokens = taskEnded.cacheReadTokens ?? 0;
+  if (!hasPhaseData) {
+    const agg = aggregateCostFromEvents(issueMetrics);
+    totalCost = agg.costUsd;
+    totalInputTokens = agg.inputTokens;
+    totalOutputTokens = agg.outputTokens;
+    totalCacheReadTokens = agg.cacheReadTokens;
   }
 
   // Duration
@@ -378,27 +379,50 @@ ${noData ? `
         </tr>
       </thead>
       <tbody>
-${phaseResults.map((pr) => {
-  const phaseName = pr.phase.charAt(0).toUpperCase() + pr.phase.slice(1);
-  const isCurrentPhase = isActive && activeDetail &&
-    (activeDetail.phase === pr.phase ||
-     (activeDetail.phase === "plan" && pr.phase === "planning") ||
-     (activeDetail.phase === "exec" && pr.phase === "execution"));
-  const phaseStatus = isCurrentPhase && !pr.result
-    ? '<span class="badge badge-running">Running</span>'
-    : pr.result
-      ? '<span class="badge badge-success">Done</span>'
-      : '<span class="badge badge-done">\u2014</span>';
-  return `        <tr>
+${(() => {
+  // Build per-phase cost lookup from metrics (for when pr.result is missing)
+  const scopedMetrics = (() => {
+    let lastStartIdx = -1;
+    for (let i = issueMetrics.length - 1; i >= 0; i--) {
+      if (issueMetrics[i].event === "task_started") { lastStartIdx = i; break; }
+    }
+    return lastStartIdx >= 0 ? issueMetrics.slice(lastStartIdx) : issueMetrics;
+  })();
+  const reviewMetric = scopedMetrics.filter(
+    (m) => m.event === "review_completed" || m.event === "review_failed"
+  ).pop();
+  const taskMetric = scopedMetrics.filter(
+    (m) => m.event === "task_completed" || m.event === "task_failed"
+  ).pop();
+  const nonReviewPhases = phaseResults.filter((pr) => pr.phase !== "review");
+
+  return phaseResults.map((pr) => {
+    const phaseName = pr.phase.charAt(0).toUpperCase() + pr.phase.slice(1);
+    const isCurrentPhase = isActive && activeDetail &&
+      (activeDetail.phase === pr.phase ||
+       (activeDetail.phase === "plan" && pr.phase === "planning") ||
+       (activeDetail.phase === "exec" && pr.phase === "execution"));
+    const phaseStatus = isCurrentPhase && !pr.result
+      ? '<span class="badge badge-running">Running</span>'
+      : pr.result
+        ? '<span class="badge badge-success">Done</span>'
+        : '<span class="badge badge-done">\u2014</span>';
+    const fallbackMetric = !pr.result
+      ? (pr.phase === "review"
+        ? reviewMetric
+        : (nonReviewPhases.length === 1 ? taskMetric : undefined))
+      : undefined;
+    return `        <tr>
           <td>${escapeHtml(phaseName)}</td>
           <td>${phaseStatus}</td>
-          <td>${formatCost(pr.result?.costUsd)}</td>
-          <td>${formatTokenCount(pr.result?.inputTokens)}</td>
-          <td>${formatTokenCount(pr.result?.outputTokens)}</td>
-          <td>${formatTokenCount(pr.result?.cacheReadTokens)}</td>
-          <td>${pr.result?.numTurns ?? "\u2014"}</td>
+          <td>${formatCost(pr.result?.costUsd ?? fallbackMetric?.costUsd)}</td>
+          <td>${formatTokenCount(pr.result?.inputTokens ?? fallbackMetric?.inputTokens)}</td>
+          <td>${formatTokenCount(pr.result?.outputTokens ?? fallbackMetric?.outputTokens)}</td>
+          <td>${formatTokenCount(pr.result?.cacheReadTokens ?? fallbackMetric?.cacheReadTokens)}</td>
+          <td>${pr.result?.numTurns ?? fallbackMetric?.numTurns ?? "\u2014"}</td>
         </tr>`;
-}).join("\n")}
+  }).join("\n");
+})()}
       </tbody>
     </table>
   </div>` : ""}
