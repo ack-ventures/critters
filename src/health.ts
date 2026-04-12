@@ -1,8 +1,8 @@
 import { statSync } from "node:fs";
 import { checkAuth } from "./auth.js";
+import { getCliAdapter } from "./cli/registry.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import { renderDashboard, renderIssuePage, renderReleaseNotesPage } from "./dashboard/index.js";
-import { getCliAdapter } from "./cli/registry.js";
 import { phaseFileTag, readLogTail, renderReadableLines, resolveCliAdapterForLog, resolveLogFile, resolveWorkDirForIdentifier } from "./log-resolver.js";
 import { log, logError } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
