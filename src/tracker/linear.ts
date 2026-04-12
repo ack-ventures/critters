@@ -23,10 +23,12 @@ async function fetchAllNodes<T>(connection: {
 export class LinearTracker implements IssueTracker {
   readonly provider = "linear";
   private client: LinearClient;
+  private apiKey: string;
   private teamStatusCache: Record<string, Record<string, string>> = {};
 
   constructor(apiKey: string) {
     this.client = new LinearClient({ apiKey });
+    this.apiKey = apiKey;
   }
 
   getClient(): LinearClient {
@@ -224,7 +226,9 @@ export class LinearTracker implements IssueTracker {
 
   async fetchAttachmentContent(url: string): Promise<string | null> {
     try {
-      const resp = await fetch(url);
+      const resp = await fetch(url, {
+        headers: { Authorization: this.apiKey },
+      });
       if (!resp.ok) return null;
       return await resp.text();
     } catch {

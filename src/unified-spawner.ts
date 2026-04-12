@@ -9,7 +9,7 @@ import {
   shallowClone,
 } from "./git.js";
 import { triggerHook } from "./hooks.js";
-import { phaseFileTag } from "./log-resolver.js";
+import { extractPhaseResult, phaseFileTag } from "./log-resolver.js";
 import { log, logTask, logTaskError } from "./logger.js";
 import { recordMetric } from "./metrics.js";
 import { loadRepoConfig } from "./repo-config.js";
@@ -537,7 +537,7 @@ export class UnifiedSpawner {
 
         // Handle review phase outcomes inline
         if (phase.prompt === "builtin:review") {
-          return this.handleReviewOutcome(task, critterType, phaseResult.data, phaseResult.spawn, workDir, taskStart, tracker);
+          return await this.handleReviewOutcome(task, critterType, phaseResult.data, phaseResult.spawn, workDir, taskStart, tracker);
         }
 
         // Handle execution phase outcomes inline
@@ -546,7 +546,7 @@ export class UnifiedSpawner {
           if (prUrl) {
             const detail = this.activeCritterMap.get(task.id);
             if (detail) detail.prUrl = prUrl;
-            return this.handleCreateSuccess(task, critterType, prUrl, branch, phaseResults, allPhaseStats, workDir, taskStart, tracker);
+            return await this.handleCreateSuccess(task, critterType, prUrl, branch, phaseResults, allPhaseStats, workDir, taskStart, tracker);
           }
           // No PR — fall through to generic success path
         }
@@ -711,6 +711,30 @@ export class UnifiedSpawner {
           formatFailure(task.identifier, task.title, error, totalDuration),
           task.identifier,
         );
+      }
+
+      // Salvage cost/token stats for the phase that threw before its spawn result was pushed.
+      // The .critter-output-<tag>.json file still exists because cleanup runs in the outer finally.
+      const salvageIdx = phaseResults.length;
+      const salvagePhase = salvageIdx < critterType.phases.length ? critterType.phases[salvageIdx] : null;
+      if (salvagePhase) {
+        const salvageFile = `${workDir}/.critter-output-${phaseFileTag(salvagePhase.name)}.json`;
+        if (existsSync(salvageFile)) {
+          const extracted = extractPhaseResult(salvageFile);
+          if (extracted) {
+            phaseResults.push({
+              exitCode: 1,
+              stdout: "",
+              stderr: "",
+              timedOut,
+              numTurns: extracted.numTurns,
+              inputTokens: extracted.inputTokens,
+              outputTokens: extracted.outputTokens,
+              cacheReadTokens: extracted.cacheReadTokens,
+              costUsd: extracted.costUsd,
+            });
+          }
+        }
       }
 
       const { totalTurns, totalInput, totalOutput, totalCache, totalCost } = aggregatePhaseResults(phaseResults);
