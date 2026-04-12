@@ -301,6 +301,7 @@ The daemon runs an HTTP server on port 3847 (configurable via `healthPort`, set 
 | Route | Method | Description |
 |---|---|---|
 | `/` or `/dashboard` | GET | Live dashboard with task stats, charts, and recent activity. Includes a "New Critter" button for creating tickets |
+| `/dashboard/release-notes` | GET | Bundled release notes for recent versions, with the currently running version highlighted |
 | `/healthz` | GET | JSON health check (uptime, version, per-type active/queued counts, active critter details, metrics summary) |
 | `/metrics` | GET | JSON array of recent metric events |
 | `/poll` | POST | Trigger an immediate poll cycle |
