@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { getRecentMetrics, initMetrics, pruneMetrics, recordMetric } from "../metrics.js";
+import { aggregateCostFromEvents, getRecentMetrics, initMetrics, type MetricEvent, pruneMetrics, recordMetric } from "../metrics.js";
 import { createTempDir } from "./helpers.js";
 
 let tempDir: string;
@@ -221,5 +221,82 @@ describe("pruneMetrics", () => {
     expect(remaining).toHaveLength(2);
     expect(remaining[0]).toBe("this is not valid json");
     expect(JSON.parse(remaining[1]).issueId).toBe("NEW");
+  });
+});
+
+describe("aggregateCostFromEvents", () => {
+  function mkEvent(partial: Partial<MetricEvent> & Pick<MetricEvent, "event">): MetricEvent {
+    return { timestamp: new Date().toISOString(), ...partial };
+  }
+
+  test("sums across task_completed + review_completed", () => {
+    const events: MetricEvent[] = [
+      mkEvent({ event: "task_started" }),
+      mkEvent({ event: "task_completed", costUsd: 0.50, inputTokens: 1000, outputTokens: 500, cacheReadTokens: 200 }),
+      mkEvent({ event: "review_started" }),
+      mkEvent({ event: "review_completed", costUsd: 0.10, inputTokens: 300, outputTokens: 100, cacheReadTokens: 50 }),
+    ];
+    const agg = aggregateCostFromEvents(events);
+    expect(agg.costUsd).toBeCloseTo(0.60);
+    expect(agg.inputTokens).toBe(1300);
+    expect(agg.outputTokens).toBe(600);
+    expect(agg.cacheReadTokens).toBe(250);
+  });
+
+  test("scopes to latest run", () => {
+    const events: MetricEvent[] = [
+      // First run
+      mkEvent({ event: "task_started" }),
+      mkEvent({ event: "task_completed", costUsd: 1.00, inputTokens: 5000, outputTokens: 2000, cacheReadTokens: 1000 }),
+      // Second run (retry)
+      mkEvent({ event: "task_started" }),
+      mkEvent({ event: "task_completed", costUsd: 0.30, inputTokens: 800, outputTokens: 400, cacheReadTokens: 100 }),
+      mkEvent({ event: "review_completed", costUsd: 0.05, inputTokens: 100, outputTokens: 50, cacheReadTokens: 20 }),
+    ];
+    const agg = aggregateCostFromEvents(events);
+    expect(agg.costUsd).toBeCloseTo(0.35);
+    expect(agg.inputTokens).toBe(900);
+    expect(agg.outputTokens).toBe(450);
+    expect(agg.cacheReadTokens).toBe(120);
+  });
+
+  test("handles missing cost fields", () => {
+    const events: MetricEvent[] = [
+      mkEvent({ event: "task_started" }),
+      mkEvent({ event: "task_completed" }), // no cost fields at all
+      mkEvent({ event: "review_completed", costUsd: 0.10 }), // only costUsd
+    ];
+    const agg = aggregateCostFromEvents(events);
+    expect(agg.costUsd).toBeCloseTo(0.10);
+    expect(agg.inputTokens).toBe(0);
+    expect(agg.outputTokens).toBe(0);
+    expect(agg.cacheReadTokens).toBe(0);
+  });
+
+  test("returns zeros when no completion events", () => {
+    const empty = aggregateCostFromEvents([]);
+    expect(empty.costUsd).toBe(0);
+    expect(empty.inputTokens).toBe(0);
+    expect(empty.outputTokens).toBe(0);
+    expect(empty.cacheReadTokens).toBe(0);
+
+    const onlyStart = aggregateCostFromEvents([
+      mkEvent({ event: "task_started" }),
+      mkEvent({ event: "review_started" }),
+    ]);
+    expect(onlyStart.costUsd).toBe(0);
+    expect(onlyStart.inputTokens).toBe(0);
+  });
+
+  test("handles single completion event", () => {
+    const events: MetricEvent[] = [
+      mkEvent({ event: "task_started" }),
+      mkEvent({ event: "task_completed", costUsd: 0.75, inputTokens: 2000, outputTokens: 1000, cacheReadTokens: 500 }),
+    ];
+    const agg = aggregateCostFromEvents(events);
+    expect(agg.costUsd).toBeCloseTo(0.75);
+    expect(agg.inputTokens).toBe(2000);
+    expect(agg.outputTokens).toBe(1000);
+    expect(agg.cacheReadTokens).toBe(500);
   });
 });
