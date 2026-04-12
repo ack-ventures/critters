@@ -388,6 +388,8 @@ export function renderDashboard(_metricsPath: string, status: HealthStatus, upti
     <div class="header-meta">
       <span class="meta">${escapeHtml(getDisplayVersion())}</span>
       <span class="meta-sep">|</span>
+      <a href="/dashboard/release-notes" class="meta" style="color:var(--text-dim);text-decoration:none;">Release Notes</a>
+      <span class="meta-sep">|</span>
       <span class="meta">Uptime: ${fmtDuration(uptime)}</span>
       <span class="meta-sep">|</span>
       <span class="meta">Last poll: ${status.lastPollAt ? formatDate(status.lastPollAt) : "never"}</span>

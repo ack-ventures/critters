@@ -1,11 +1,12 @@
 import { statSync } from "node:fs";
 import { checkAuth } from "./auth.js";
 import type { CritterTypeConfig } from "./critter-type.js";
-import { renderDashboard, renderIssuePage } from "./dashboard/index.js";
+import { renderDashboard, renderIssuePage, renderReleaseNotesPage } from "./dashboard/index.js";
 import { phaseFileTag, readLogTail, renderReadableLines, resolveCliAdapterForLog, resolveLogFile, resolveWorkDirForIdentifier } from "./log-resolver.js";
 import { log, logError } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
 import { getPrStatuses } from "./pr-status.js";
+import { RELEASE_NOTES } from "./release-notes.js";
 import type { IssueTracker, TrackerTeam } from "./tracker/types.js";
 import type { ActiveCritterDetail } from "./types.js";
 import type { KillResult } from "./unified-spawner.js";
@@ -119,6 +120,13 @@ export function startHealthServer(
       if (url.pathname === "/metrics") {
         const entries = getRecentMetrics(100);
         return Response.json(entries);
+      }
+
+      if (url.pathname === "/dashboard/release-notes") {
+        const html = renderReleaseNotesPage(RELEASE_NOTES, VERSION);
+        return new Response(html, {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
       }
 
       if (url.pathname.startsWith("/dashboard/") && url.pathname.length > "/dashboard/".length) {
