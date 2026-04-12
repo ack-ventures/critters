@@ -692,7 +692,7 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="8" class="empty-stat
     const dur = fmtDuration(m.duration);
     const cost = formatCost(m.costUsd);
     const pr = m.prUrl
-      ? `<a href="${escapeHtml(m.prUrl)}" target="_blank" rel="noopener">PR</a>${renderPrStatusIcons(m.prUrl, prStatuses)}`
+      ? `<a href="${escapeHtml(m.prUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">PR</a>${renderPrStatusIcons(m.prUrl, prStatuses)}`
       : "\u2014";
     const when = formatDate(m.timestamp);
     const rawId = m.identifier ?? m.issueId ?? "";
@@ -700,11 +700,14 @@ ${recentActivity.length === 0 ? '          <tr><td colspan="8" class="empty-stat
       ? escapeHtml(m.issueUrl)
       : `/dashboard/${encodeURIComponent(rawId)}`;
     const issueTarget = m.issueUrl ? ' target="_blank" rel="noopener"' : '';
-    const idLink = rawId ? `<a href="${issueHref}"${issueTarget}>${id}</a>` : id;
+    const idLink = rawId ? `<a href="${issueHref}"${issueTarget} onclick="event.stopPropagation()">${id}</a>` : id;
     const logsLink = rawId
-      ? `<a href="/dashboard/${encodeURIComponent(rawId)}" title="View logs">logs</a>`
+      ? `<a href="/dashboard/${encodeURIComponent(rawId)}" title="View logs" onclick="event.stopPropagation()">logs</a>`
       : '\u2014';
-    return `          <tr data-type="${typeName}" data-status="${statusText}" data-date="${getDateKey(m.timestamp)}">
+    const rowClick = rawId
+      ? ` onclick="window.location.href='/dashboard/${encodeURIComponent(rawId)}'" style="cursor:pointer" title="View details"`
+      : '';
+    return `          <tr data-type="${typeName}" data-status="${statusText}" data-date="${getDateKey(m.timestamp)}"${rowClick}>
             <td>${idLink}</td>
             <td><span class="badge badge-type">${typeName}</span></td>
             <td><span class="${badgeClass}">${statusText}</span></td>
