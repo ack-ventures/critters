@@ -8,8 +8,6 @@ COPY src/ src/
 COPY scripts/ scripts/
 COPY CLAUDE.md ./
 
-RUN node scripts/bundle-release-notes.cjs
-
 ARG VERSION=dev
 RUN echo "export const VERSION = \"${VERSION}\";" > src/version.ts
 
