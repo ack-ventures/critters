@@ -21,8 +21,7 @@ export function runReleaseNotes(): void {
     return;
   }
 
-  const sorted = [...RELEASE_NOTES].reverse();
-  for (const release of sorted) {
+  for (const release of RELEASE_NOTES) {
     const current = release.tag === `v${VERSION}` ? " (current)" : "";
     console.log(`\x1b[1m${release.tag}${current}\x1b[0m — ${release.date}`);
     if (release.body) {

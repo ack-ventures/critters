@@ -4,7 +4,7 @@ const fs = require("fs");
 try {
   const listJson = execFileSync(
     "gh",
-    ["release", "list", "--limit", "10", "--json", "tagName,publishedAt,name"],
+    ["release", "list", "--limit", "1000", "--json", "tagName,publishedAt,name"],
     { encoding: "utf8" }
   );
   const releases = JSON.parse(listJson);

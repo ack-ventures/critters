@@ -63,7 +63,7 @@ export function renderReleaseNotesPage(
 ): string {
   const cards = releaseNotes.length === 0
     ? `<div class="card"><p>No release notes available (dev build).</p></div>`
-    : [...releaseNotes].reverse().map((release) => {
+    : releaseNotes.map((release) => {
         const isCurrent = release.tag === `v${currentVersion}`;
         const currentBadge = isCurrent
           ? ' <span class="badge badge-current">current</span>'
