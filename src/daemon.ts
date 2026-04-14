@@ -113,6 +113,10 @@ export async function startDaemon(): Promise<void> {
     const cmd = `env PATH=${shellEscape(process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin")} ${[process.execPath, ...args].map(shellEscape).join(" ")}`;
     const session = "critters";
 
+    // Kill stale session if it exists — `tmux new-session -A` would just
+    // attach to the old (dead) session and ignore the command.
+    spawnSync("tmux", ["kill-session", "-t", session], { stdio: "ignore" });
+
     const result = spawnSync("tmux", ["new-session", "-A", "-s", session, cmd], { stdio: "inherit" });
     process.exit(result.status ?? 0);
   }
