@@ -1,6 +1,6 @@
 # Critters
 
-Critters is a TypeScript daemon that polls issue trackers ([Linear](https://linear.app) and [Jira](https://www.atlassian.com/software/jira)) for issues labeled "Critter", spawns coding CLI instances ([Claude Code](https://docs.anthropic.com/en/docs/claude-code) and/or Codex) to plan and implement the work, and opens draft pull requests for human review. It runs on [Bun](https://bun.sh) and orchestrates everything through `tmux` panes.
+Critters is a TypeScript daemon that polls issue trackers ([Linear](https://linear.app) and [Jira](https://www.atlassian.com/software/jira)) for labeled issues and runs configurable agentic workflows on them using coding CLIs ([Claude Code](https://docs.anthropic.com/en/docs/claude-code) and/or Codex) — planning, execution, review, or fully custom phases. It runs on [Bun](https://bun.sh) and orchestrates everything through `tmux` panes.
 
 Inspired by [Stripe's Minions](https://stripe.dev/blog/minions-stripes-one-shot-end-to-end-coding-agents).
 
