@@ -41,6 +41,10 @@ export class ClaudeCodeAdapter implements CliAdapter {
       " ",
     );
 
+    const permissionModeArg = opts.permissionMode
+      ? ` --permission-mode ${shellEscape(opts.permissionMode)}`
+      : "";
+
     const script = [
       `export PATH="$HOME/.bun/bin:$HOME/.local/bin:${currentPath}"`,
       "unset CLAUDECODE",
@@ -52,7 +56,8 @@ export class ClaudeCodeAdapter implements CliAdapter {
         ` --verbose` +
         ` --output-format stream-json` +
         mcpArgs +
-        strictMcpArg,
+        strictMcpArg +
+        permissionModeArg,
     ].join("\n");
 
     return {

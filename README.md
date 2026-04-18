@@ -233,6 +233,7 @@ Settings live in `critters.config.yaml`:
 | `maxReviewTurns` | 30 | Max turns per review |
 | `cli` | "claude" | Default CLI adapter: `"claude"` or `"codex"` |
 | `phases[].sandbox` | — | Optional phase-level sandbox override for adapters that support it, e.g. Codex `read-only`, `workspace-write`, or `danger-full-access` |
+| `phases[].permissionMode` | — | Optional Claude CLI `--permission-mode` override (`default`, `auto`, `acceptEdits`, `bypassPermissions`, `plan`, `dontAsk`). Only honored by the Claude CLI adapter. |
 | `autoRetry` | — | Auto-retry config: `{ maxRetries, baseDelaySeconds, maxDelaySeconds }` |
 | `circuitBreaker` | — | Circuit breaker config: `{ failureThreshold, maxBackoffMinutes }` |
 | `mcpConfig` | — | Path(s) to MCP config JSON file(s), applied to all critters |
@@ -279,6 +280,22 @@ critterTypes:
 Critters preserves the existing `tools` config for both adapters. Claude enforces the allowlist directly; Codex uses sandboxing plus prompt-level restrictions, so enforcement is capability-based rather than identical.
 
 For Codex phases that need outbound GitHub access through `gh`, set a phase `sandbox` explicitly. In practice, PR review and review-fixing phases often need `danger-full-access`, because Codex `workspace-write` can block the GitHub API calls that `gh` relies on.
+
+Phases can also set a `permissionMode` to control Claude's tool approval behavior:
+
+```yaml
+critterTypes:
+  create:
+    phases:
+      - name: execution
+        prompt: builtin:execution
+        model: opus
+        maxTurns: 75
+        tools: default
+        permissionMode: auto
+```
+
+This forwards `--permission-mode auto` to the Claude CLI, letting Claude's auto-classifier approve reasonable tool calls outside the explicit allowlist. Only honored by the Claude CLI adapter; Codex phases ignore this field.
 
 ### Hooks
 

@@ -18,6 +18,7 @@ export interface PhaseConfig {
   comment?: boolean;
   cli?: string;
   sandbox?: string;
+  permissionMode?: string;
 }
 
 export interface OutcomeConfig {
@@ -182,6 +183,7 @@ export function parseCritterType(name: string, raw: Record<string, unknown>): Cr
     comment: p.comment as boolean | undefined,
     cli: p.cli as string | undefined,
     sandbox: p.sandbox as string | undefined,
+    permissionMode: p.permissionMode as string | undefined,
   }));
 
   const ct: CritterTypeConfig = {

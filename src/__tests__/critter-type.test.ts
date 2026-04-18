@@ -244,6 +244,28 @@ describe("parseCritterType", () => {
     expect(ct.phases[0].sandbox).toBe("danger-full-access");
   });
 
+  test("parses permissionMode field on phases", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [
+        { name: "exec", prompt: "file.md", model: "opus", maxTurns: 10, permissionMode: "auto" },
+      ],
+      outcomes: { success: { status: "Done" } },
+    };
+    const ct = parseCritterType("test", raw);
+    expect(ct.phases[0].permissionMode).toBe("auto");
+  });
+
+  test("permissionMode defaults to undefined when not specified", () => {
+    const raw = {
+      trigger: { label: "X", status: "Y" },
+      phases: [{ name: "p", prompt: "file.md", model: "haiku", maxTurns: 5 }],
+      outcomes: { success: { status: "Done" } },
+    };
+    const ct = parseCritterType("test", raw);
+    expect(ct.phases[0].permissionMode).toBeUndefined();
+  });
+
   test("rejects invalid type-level cli values", () => {
     const raw = {
       trigger: { label: "X", status: "Y" },
