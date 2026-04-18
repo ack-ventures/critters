@@ -184,6 +184,8 @@ export interface SpawnResult {
   stdout: string;
   stderr: string;
   timedOut: boolean;
+  /** Path to the CLI's stream-json output log (if one was written). */
+  outputLogPath?: string;
   numTurns?: number;
   inputTokens?: number;
   outputTokens?: number;
