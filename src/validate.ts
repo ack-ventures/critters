@@ -253,6 +253,12 @@ export function validateConfigFile(configPath?: string): { errors: string[]; war
       ) {
         errors.push(`Invalid sandbox "${phase.sandbox}" (type "${ct.name}", phase "${phase.name}")`);
       }
+      if (
+        phase.permissionMode !== undefined &&
+        !["default", "auto", "acceptEdits", "bypassPermissions", "plan", "dontAsk"].includes(phase.permissionMode)
+      ) {
+        errors.push(`Invalid permissionMode "${phase.permissionMode}" (type "${ct.name}", phase "${phase.name}")`);
+      }
       if (phase.skills) {
         for (const skillRef of phase.skills) {
           const filePath = skillRef.startsWith("~")

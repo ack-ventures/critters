@@ -296,6 +296,48 @@ critterTypes:
     expect(result.errors.some((e) => e.includes('Invalid sandbox "not-a-sandbox"'))).toBe(true);
   });
 
+  test("invalid phase permissionMode collects error", () => {
+    const path = writeYaml(`
+defaultAllowedTools:
+  - "Read"
+critterTypes:
+  create:
+    trigger: { label: "Critter", status: "Todo" }
+    phases:
+      - name: execution
+        prompt: builtin:execution
+        model: opus
+        maxTurns: 75
+        permissionMode: yolo
+    outcomes:
+      success: { status: "Done" }
+      failure: { status: "Critter Failed" }
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors.some((e) => e.includes('Invalid permissionMode "yolo"'))).toBe(true);
+  });
+
+  test("valid phase permissionMode does not produce error", () => {
+    const path = writeYaml(`
+defaultAllowedTools:
+  - "Read"
+critterTypes:
+  create:
+    trigger: { label: "Critter", status: "Todo" }
+    phases:
+      - name: execution
+        prompt: builtin:execution
+        model: opus
+        maxTurns: 75
+        permissionMode: auto
+    outcomes:
+      success: { status: "Done" }
+      failure: { status: "Critter Failed" }
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors.some((e) => e.includes("permissionMode"))).toBe(false);
+  });
+
   test("invalid top-level cli collects error", () => {
     const path = writeYaml(`
 defaultAllowedTools:

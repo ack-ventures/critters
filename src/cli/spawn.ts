@@ -38,6 +38,7 @@ async function spawnInTmux(
   workDir: string,
   maxTurns: number,
   sandbox: string | undefined,
+  permissionMode: string | undefined,
   identifier: string,
   title: string,
   phase: string,
@@ -84,6 +85,7 @@ async function spawnInTmux(
     maxTurns,
     model,
     sandbox,
+    permissionMode,
     mcpConfig,
     strictMcpConfig,
   });
@@ -244,6 +246,7 @@ async function spawnSubprocess(
   workDir: string,
   maxTurns: number,
   sandbox: string | undefined,
+  permissionMode: string | undefined,
   identifier: string,
   title: string,
   phase: string,
@@ -273,6 +276,7 @@ async function spawnSubprocess(
     maxTurns,
     model,
     sandbox,
+    permissionMode,
     mcpConfig,
     strictMcpConfig,
   });
@@ -343,12 +347,14 @@ export async function spawnForPhase(
   if (config.daemon.noTmux) {
     return spawnSubprocess(
       cliAdapter, prompt, allowedTools, workDir, ctx.phase.maxTurns, ctx.phase.sandbox,
+      ctx.phase.permissionMode,
       task.identifier, task.title, phaseTag, ctx.phase.model,
       task.repoUrl, signal, ctx.mcpConfig, ctx.strictMcpConfig,
     );
   }
   return spawnInTmux(
     cliAdapter, prompt, allowedTools, workDir, ctx.phase.maxTurns, ctx.phase.sandbox,
+    ctx.phase.permissionMode,
     task.identifier, task.title, phaseTag, config.daemon.tmuxSession,
     ctx.phase.model, task.repoUrl, signal, ctx.mcpConfig, ctx.strictMcpConfig,
   );

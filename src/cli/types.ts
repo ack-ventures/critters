@@ -20,6 +20,7 @@ export interface SpawnOptions {
   maxTurns: number;
   model: string;
   sandbox?: string;
+  permissionMode?: string;
   mcpConfig?: string[];
   strictMcpConfig?: boolean;
 }
