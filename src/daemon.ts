@@ -11,7 +11,7 @@ import type { CritterTypeConfig } from "./critter-type.js";
 import { loadEnvFallback } from "./env.js";
 import { checkDiskSpace } from "./git.js";
 import { startHealthServer } from "./health.js";
-import { enableJsonLogs, initFileLogging, log, logError } from "./logger.js";
+import { enableJsonLogs, formatError, initFileLogging, log, logError } from "./logger.js";
 import { initMetrics, pruneMetrics } from "./metrics.js";
 import { checkPrerequisites } from "./prerequisites.js";
 import { SlackNotifier } from "./slack.js";
@@ -27,7 +27,8 @@ import { VERSION } from "./version.js";
 
 export async function startDaemon(): Promise<void> {
   process.on("unhandledRejection", (reason) => {
-    logError(`Unhandled rejection: ${reason instanceof Error ? reason.stack ?? reason.message : String(reason)}`);
+    const detail = reason instanceof Error ? (reason.stack ?? reason.message) : formatError(reason);
+    logError(`Unhandled rejection: ${detail}`);
   });
 
   process.on("uncaughtException", (err) => {
@@ -343,7 +344,7 @@ export async function startDaemon(): Promise<void> {
         process.exit(0);
       }
     } catch (err) {
-      logError(`Restart failed: ${err instanceof Error ? err.message : String(err)}`);
+      logError(`Restart failed: ${formatError(err)}`);
       // Fatal — resources are already torn down, cannot recover
       process.exit(1);
     }

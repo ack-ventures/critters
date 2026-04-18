@@ -10,7 +10,7 @@ import {
 } from "./git.js";
 import { triggerHook } from "./hooks.js";
 import { extractPhaseResult, phaseFileTag } from "./log-resolver.js";
-import { log, logTask, logTaskError } from "./logger.js";
+import { formatError, log, logTask, logTaskError } from "./logger.js";
 import { recordMetric } from "./metrics.js";
 import { loadRepoConfig } from "./repo-config.js";
 import { updatePrWithPlan } from "./runner/execution.js";
@@ -612,7 +612,7 @@ export class UnifiedSpawner {
           ? `Timed out after ${critterType.timeoutMinutes} minutes`
           : killedViaCli
             ? "Killed via CLI"
-            : (err instanceof Error ? err.message : String(err));
+            : formatError(err);
       logTaskError(task.identifier, error);
 
       // Auto-retry: skip heavy failure handling if this will be retried
