@@ -54,8 +54,8 @@ export function initFileLogging(maxLogSizeMb: number = 10, logDir?: string): voi
   rotationTimer = setInterval(() => {
     try {
       if (logFile) rotateFileIfNeeded(logFile, storedMaxLogSizeMb, 3);
-    } catch (_) {
-      // never crash the daemon
+    } catch (err) {
+      logWarn(`Background log rotation failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }, 3600000);
   rotationTimer.unref();
