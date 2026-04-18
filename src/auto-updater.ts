@@ -1,4 +1,4 @@
-import { log } from "./logger.js";
+import { formatError, log } from "./logger.js";
 import type { SlackNotifier } from "./slack.js";
 import type { Config } from "./types.js";
 import type { UnifiedSpawner } from "./unified-spawner.js";
@@ -68,7 +68,7 @@ export function startAutoUpdater(
       await checkForUpdate(version);
       restartFn();
     } catch (err) {
-      log(`Auto-update: check failed — ${err instanceof Error ? err.message : String(err)}`);
+      log(`Auto-update: check failed — ${formatError(err)}`);
     }
   };
 

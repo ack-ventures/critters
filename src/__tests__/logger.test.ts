@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { disableJsonLogs, enableJsonLogs, formatJsonLogEntry, initFileLogging, isJsonMode, logWarn, resetFileLogging, rotateFileIfNeeded } from "../logger.js";
+import { disableJsonLogs, enableJsonLogs, formatError, formatJsonLogEntry, initFileLogging, isJsonMode, logWarn, resetFileLogging, rotateFileIfNeeded } from "../logger.js";
 import { createTempDir } from "./helpers.js";
 
 let tempDir: string;
@@ -198,6 +198,25 @@ describe("logWarn", () => {
     const parsed = JSON.parse(chunks[0]);
     expect(parsed.level).toBe("warn");
     expect(parsed.message).toBe("test warning");
+  });
+});
+
+describe("formatError", () => {
+  test("returns message for Error instance", () => {
+    expect(formatError(new Error("boom"))).toBe("boom");
+  });
+
+  test("stringifies non-Error values", () => {
+    expect(formatError("oops")).toBe("oops");
+    expect(formatError(42)).toBe("42");
+    expect(formatError(null)).toBe("null");
+    expect(formatError(undefined)).toBe("undefined");
+    expect(formatError({ foo: "bar" })).toBe("[object Object]");
+  });
+
+  test("returns message for Error subclasses", () => {
+    class CustomError extends Error {}
+    expect(formatError(new CustomError("custom"))).toBe("custom");
   });
 });
 

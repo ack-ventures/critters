@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { parse as parseYaml } from "yaml";
+import { formatError } from "./logger.js";
 import { formatDuration } from "./utils.js";
 
 function getKillConfig(): { healthPort: number; dashboardToken?: string } {
@@ -141,7 +142,7 @@ export async function runKill(args: string[]): Promise<void> {
       }
     }
   } catch (err) {
-    console.error(`Failed to send kill request: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(`Failed to send kill request: ${formatError(err)}`);
     process.exit(1);
   }
 }

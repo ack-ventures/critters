@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, rmSync, statfsSync, statSync } from "node:fs";
 import { dirname } from "node:path";
-import { log, logTask, logTaskError, logTaskWarn } from "./logger.js";
+import { formatError, log, logTask, logTaskError, logTaskWarn } from "./logger.js";
 import { withRetry } from "./retry.js";
 import { runCommand } from "./utils.js";
 
@@ -111,7 +111,7 @@ export async function shallowClone(
       baseDelayMs: 2000,
       maxDelayMs: 8000,
       shouldRetry: (error) => {
-        const msg = error instanceof Error ? error.message : String(error);
+        const msg = formatError(error);
         return msg.includes("ENOENT");
       },
       onRetry: (_error, _attempt, delayMs) => {

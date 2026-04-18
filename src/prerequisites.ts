@@ -1,5 +1,5 @@
 import { getCliAdapter } from "./cli/registry.js";
-import { log, logError } from "./logger.js";
+import { formatError, log, logError } from "./logger.js";
 import type { Config } from "./types.js";
 import { runCommand } from "./utils.js";
 
@@ -26,7 +26,7 @@ export async function checkPrerequisites(config?: Config): Promise<void> {
       const { version } = await adapter.checkPrerequisite();
       versions.push(version);
     } catch (err) {
-      logError(`${adapter.name} prerequisite check failed: ${err instanceof Error ? err.message : err}`);
+      logError(`${adapter.name} prerequisite check failed: ${formatError(err)}`);
       process.exit(1);
     }
   }

@@ -4,6 +4,7 @@ import { cleanupStalePanes, killStalePanes } from "./claude.js";
 import { loadCleanConfig, resolveConfigPath } from "./config.js";
 import { loadEnvFallback } from "./env.js";
 import { deleteRemoteBranch } from "./git.js";
+import { formatError } from "./logger.js";
 import { createTracker } from "./tracker/index.js";
 import type { IssueTracker } from "./tracker/types.js";
 import { extractOwnerRepo, formatDuration, runCommand } from "./utils.js";
@@ -166,7 +167,7 @@ export async function runClean(args: string[]): Promise<void> {
       console.log(`  Removing ${dir.name}...`);
       rmSync(`${workDir}/${dir.name}`, { recursive: true, force: true });
     } catch (err) {
-      console.warn(`  Warning: failed to remove ${dir.name}: ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(`  Warning: failed to remove ${dir.name}: ${formatError(err)}`);
       cleanedCount--;
       totalFreed -= dir.size;
     }
@@ -256,7 +257,7 @@ async function initTracker(config: BranchCleanConfig): Promise<IssueTracker | nu
     await tracker.init();
     return tracker;
   } catch (err) {
-    console.warn(`Warning: Could not initialize tracker — will use age-based detection only (${err instanceof Error ? err.message : String(err)})`);
+    console.warn(`Warning: Could not initialize tracker — will use age-based detection only (${formatError(err)})`);
     return null;
   }
 }
@@ -430,7 +431,7 @@ async function cleanStaleBranches(configPath: string | undefined, dryRun: boolea
         console.log(`Deleted stale branch: ${branch.name} from ${ownerRepo}`);
         totalDeleted++;
       } catch (err) {
-        console.warn(`Warning: Failed to delete ${branch.name} from ${ownerRepo}: ${err instanceof Error ? err.message : String(err)}`);
+        console.warn(`Warning: Failed to delete ${branch.name} from ${ownerRepo}: ${formatError(err)}`);
       }
     }
     console.log("");

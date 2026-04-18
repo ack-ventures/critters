@@ -4,7 +4,7 @@ import { getCliAdapter } from "./cli/registry.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import { renderDashboard, renderIssuePage, renderReleaseNotesPage } from "./dashboard/index.js";
 import { phaseFileTag, readLogTail, renderReadableLines, resolveCliAdapterForLog, resolveLogFile, resolveWorkDirForIdentifier } from "./log-resolver.js";
-import { log, logError } from "./logger.js";
+import { formatError, log, logError } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
 import { getPrStatuses } from "./pr-status.js";
 import { RELEASE_NOTES } from "./release-notes.js";
@@ -616,7 +616,7 @@ export function startHealthServer(
             url: created.url,
           });
         } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
+          const message = formatError(err);
           return Response.json({ success: false, error: message }, { status: 500 });
         }
       }

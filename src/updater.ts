@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { chmodSync, copyFileSync, existsSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { log, logError } from "./logger.js";
+import { formatError, log, logError } from "./logger.js";
 import { VERSION } from "./version.js";
 
 // Canonical release source — update this if the repo ever moves.
@@ -333,6 +333,6 @@ export async function checkForUpdate(
       // best-effort restore — if this fails too, the error message below still prints
     }
 
-    printError(`Update failed: ${err instanceof Error ? err.message : String(err)}`);
+    printError(`Update failed: ${formatError(err)}`);
   }
 }

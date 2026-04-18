@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { loadConfig } from "./config.js";
 import type { CritterTypeConfig } from "./critter-type.js";
+import { formatError } from "./logger.js";
 import { createTracker } from "./tracker/index.js";
 import type { IssueTracker, TrackerTask } from "./tracker/types.js";
 
@@ -218,7 +219,7 @@ export async function runRetryAllFailed(options: {
       console.log(`  Retried ${task.identifier}`);
       succeeded++;
     } catch (err) {
-      console.error(`  Failed to retry ${task.identifier}: ${err instanceof Error ? err.message : String(err)}`);
+      console.error(`  Failed to retry ${task.identifier}: ${formatError(err)}`);
     }
   }
 
