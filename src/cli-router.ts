@@ -42,6 +42,7 @@ Commands:
   tail        Live-stream output from all active critters
   init-repo   Scaffold .critters.yaml in current repo
   prompt-help Launch Claude to help design critter types and prompts
+  prompt      Work with phase prompts (render — preview substituted prompt)
   clean       Clean up stale work directories (--branches, --panes)
   validate    Validate config file without starting daemon
   help        Show this help
@@ -174,6 +175,17 @@ Tail flags:
     const { runPromptHelp } = await import("./prompt-help.js");
     await runPromptHelp();
     process.exit(0);
+  }
+
+  if (subcommand === "prompt") {
+    const sub = Bun.argv[3];
+    if (sub === "render") {
+      const { runPromptRender } = await import("./cli-prompt-render.js");
+      await runPromptRender(Bun.argv.slice(4));
+      process.exit(0);
+    }
+    console.error(`Unknown 'prompt' subcommand: ${sub ?? "(none)"}\nUsage: critters prompt render <type> <phase> [flags]`);
+    process.exit(1);
   }
 
   if (subcommand === "list-types") {
