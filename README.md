@@ -29,6 +29,7 @@ This downloads the latest binary, installs it to your PATH, and walks you throug
 - `critters list-types` — show configured critter types
 - `critters init-repo` — scaffold `.critters.yaml` in the current repo
 - `critters prompt-help` — launch Claude to help design critter types and prompts
+- `critters prompt render <type> <phase>` — preview a phase prompt with variables substituted, skills concatenated, and tools resolved (flags: `--identifier`, `--title`, `--description`, `--repo`, `--branch`, `--work-dir`, `--json`)
 - `critters clean` — clean up stale work directories (`--all`, `--dry-run`, `--branches`, `--panes`)
 - `critters release-notes` — show release notes for recent versions
 - `critters validate` — validate config file without starting daemon
