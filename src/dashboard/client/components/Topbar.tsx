@@ -7,9 +7,11 @@ interface TopbarProps {
   countdown: number;
   onOpenCreate: () => void;
   onRefreshNow: () => void;
+  sidebarCollapsed: boolean;
+  onToggleSidebar: () => void;
 }
 
-export function Topbar({ typeFilter, countdown, onOpenCreate, onRefreshNow }: TopbarProps) {
+export function Topbar({ typeFilter, countdown, onOpenCreate, onRefreshNow, sidebarCollapsed, onToggleSidebar }: TopbarProps) {
   const [polling, setPolling] = useState(false);
   const [pollLabel, setPollLabel] = useState("Poll now");
 
@@ -31,6 +33,15 @@ export function Topbar({ typeFilter, countdown, onOpenCreate, onRefreshNow }: To
 
   return (
     <div className="topbar" id="top">
+      <button
+        type="button"
+        className="sidebar-toggle"
+        onClick={onToggleSidebar}
+        title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+        aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+      >
+        {sidebarCollapsed ? "\u2630" : "\u00AB"}
+      </button>
       <h1>Console</h1>
       <span className="breadcrumb">
         &middot; critters daemon

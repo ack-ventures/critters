@@ -24,6 +24,13 @@ export function App() {
   const [createOpen, setCreateOpen] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL_SEC);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("critters-sidebar-collapsed") === "1");
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((c) => {
+      localStorage.setItem("critters-sidebar-collapsed", c ? "0" : "1");
+      return !c;
+    });
+  }, []);
 
   const paused = createOpen;
   const fetcher = useCallback((signal: AbortSignal) => fetchDashboard(typeFilter, signal), [typeFilter]);
@@ -58,7 +65,7 @@ export function App() {
 
   if (identifier) {
     return (
-      <div className="app">
+      <div className={`app${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
         {data && <Sidebar data={data} />}
         <main className="main" style={data ? undefined : { gridColumn: "1 / -1" }}>
           <LogPage identifier={identifier} />
@@ -76,7 +83,7 @@ export function App() {
   if (!data) return null;
 
   return (
-    <div className="app">
+    <div className={`app${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
       <Sidebar data={data} />
       <main className="main">
         <Topbar
@@ -84,6 +91,8 @@ export function App() {
           countdown={countdown}
           onOpenCreate={() => setCreateOpen(true)}
           onRefreshNow={refresh}
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleSidebar={toggleSidebar}
         />
         <div className="content">
           {authRequired && <AuthPrompt onSaved={() => setAuthRequired(false)} />}
@@ -103,12 +112,12 @@ export function App() {
           )}
           <KPIStrip data={data} />
           <LiveHero data={data} />
+          <div className="insights-row">
+            <ThroughputCard data={data} />
+            <TypeBreakdownCard data={data} />
+          </div>
           <div className="lower-grid">
             <ActivityTable data={data} />
-            <div className="side-col">
-              <ThroughputCard data={data} />
-              <TypeBreakdownCard data={data} />
-            </div>
           </div>
         </div>
       </main>
