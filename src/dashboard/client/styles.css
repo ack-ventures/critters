@@ -36,7 +36,11 @@ code { font-family: var(--mono); font-size: 13px; color: var(--fg-2); }
 .app-error { color: var(--danger); }
 
 .app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
-@media (min-width: 981px) { .app { zoom: 1.2; } }
+.app.sidebar-collapsed { grid-template-columns: 1fr; }
+.app.sidebar-collapsed .sidebar { display: none; }
+.sidebar-toggle { background: transparent; border: 1px solid var(--border); color: var(--fg-2); cursor: pointer; padding: 4px 8px; border-radius: 6px; font-size: 14px; line-height: 1; margin-right: 4px; }
+.sidebar-toggle:hover { background: var(--surface-2); color: var(--fg); }
+.insights-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
 
 .sidebar {
   border-right: 1px solid var(--border);
@@ -148,7 +152,7 @@ code { font-family: var(--mono); font-size: 13px; color: var(--fg-2); }
 .tail-foot .br { color: var(--fg-2); }
 .tail-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--fg-3); font-family: var(--mono); font-size: 14px; padding: 32px; }
 
-.lower-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; }
+.lower-grid { display: flex; flex-direction: column; gap: 16px; }
 .card { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow: hidden; }
 .card .body { padding: 18px; }
 .side-col { display: flex; flex-direction: column; gap: 16px; }
@@ -243,13 +247,16 @@ table.activity .status.fail { color: var(--danger); }
 .auth-prompt input { background: var(--bg); border: 1px solid var(--border); color: var(--fg); padding: 6px 10px; border-radius: 6px; font-size: 13px; }
 .auth-prompt .btn { font-family: var(--mono); font-size: 13px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--fg); cursor: pointer; }
 
+@media (max-width: 1500px) {
+  .live-hero { grid-template-columns: 1fr; }
+  .active-col { border-right: none; border-bottom: 1px solid var(--border); }
+  .insights-row { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 980px) {
   .app { grid-template-columns: 1fr; }
   .sidebar { position: relative; height: auto; }
   .kpi-strip { grid-template-columns: repeat(2, 1fr); }
-  .live-hero { grid-template-columns: 1fr; }
-  .active-col { border-right: none; border-bottom: 1px solid var(--border); }
-  .lower-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 768px) and (min-width: 641px) {
