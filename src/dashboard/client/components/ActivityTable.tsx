@@ -139,11 +139,12 @@ function ActivityRow({ a }: { a: DashboardActivity }) {
   const isOk = a.event === "task_completed" || a.event === "review_completed";
   const statusText = isReview ? (isOk ? "reviewed" : "review·fail") : isOk ? "shipped" : "failed";
   const logHref = `/dashboard/${encodeURIComponent(a.identifier)}`;
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
 
   return (
-    <tr>
+    <tr className="row-clickable" onClick={() => { window.location.href = logHref; }}>
       <td>
-        <a className="id" href={logHref}>
+        <a className="id" href={logHref} onClick={stop}>
           {a.identifier}
         </a>
         {a.title && <span className="issue-title">{a.title}</span>}
@@ -154,6 +155,7 @@ function ActivityRow({ a }: { a: DashboardActivity }) {
             target="_blank"
             rel="noreferrer"
             title="Open in tracker"
+            onClick={stop}
           >
             &#x2197;
           </a>
@@ -173,7 +175,7 @@ function ActivityRow({ a }: { a: DashboardActivity }) {
       <td>
         {a.prUrl ? (
           <>
-            <a href={a.prUrl} target="_blank" rel="noreferrer">PR</a>
+            <a href={a.prUrl} target="_blank" rel="noreferrer" onClick={stop}>PR</a>
             {a.prStatus && <PrStatusIcons s={a.prStatus} />}
           </>
         ) : (

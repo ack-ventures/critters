@@ -178,6 +178,9 @@ table.activity th { font-family: var(--mono); font-size: 10px; text-transform: u
 table.activity td { padding: 10px 16px; vertical-align: middle; border-top: 1px solid var(--border-subtle); }
 table.activity th.num, table.activity td.num { text-align: right; }
 table.activity tr:hover td { background: oklch(0.22 0.008 80); }
+table.activity tr.row-clickable { cursor: pointer; }
+table.activity tr.row-clickable td:first-child { padding-top: 14px; padding-bottom: 14px; }
+table.activity tr.row-clickable a { position: relative; z-index: 1; }
 table.activity .id { font-family: var(--mono); font-weight: 600; }
 table.activity .repo { font-family: var(--mono); color: var(--fg-2); }
 table.activity .when { font-family: var(--mono); color: var(--fg-3); }
