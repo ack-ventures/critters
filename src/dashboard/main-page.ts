@@ -18,13 +18,17 @@ export function renderDashboard(
   _uptime: number,
   typeFilter?: string,
   dashboardToken?: string,
+  identifier?: string,
 ): string {
   const bootstrap = JSON.stringify({
     token: dashboardToken ?? null,
     typeFilter: typeFilter ?? null,
+    identifier: identifier ?? null,
   });
 
-  const title = typeFilter ? `Critters · ${escapeHtml(typeFilter)}` : "Critters Dashboard";
+  const title = identifier ? `${escapeHtml(identifier)} - Critters`
+    : typeFilter ? `Critters \u00b7 ${escapeHtml(typeFilter)}`
+    : "Critters Dashboard";
 
   return `<!DOCTYPE html>
 <html lang="en">

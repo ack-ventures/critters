@@ -4,6 +4,7 @@ import { AuthPrompt } from "./components/AuthPrompt.js";
 import { CreateModal } from "./components/CreateModal.js";
 import { KPIStrip } from "./components/KPIStrip.js";
 import { LiveHero } from "./components/LiveHero.js";
+import { LogPage } from "./components/LogPage.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { ThroughputCard } from "./components/ThroughputCard.js";
 import { Topbar } from "./components/Topbar.js";
@@ -15,6 +16,11 @@ const REFRESH_INTERVAL_SEC = 10;
 
 export function App() {
   const typeFilter = window.__CRITTERS__?.typeFilter ?? null;
+  const identifier = window.__CRITTERS__?.identifier
+    ?? (() => {
+      const m = window.location.pathname.match(/^\/dashboard\/(.+)/);
+      return m ? decodeURIComponent(m[1]) : null;
+    })();
   const [createOpen, setCreateOpen] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL_SEC);
@@ -49,6 +55,17 @@ export function App() {
     }, 1000);
     return () => clearInterval(id);
   }, [paused]);
+
+  if (identifier) {
+    return (
+      <div className="app">
+        {data && <Sidebar data={data} />}
+        <main className="main" style={data ? undefined : { gridColumn: "1 / -1" }}>
+          <LogPage identifier={identifier} />
+        </main>
+      </div>
+    );
+  }
 
   if (loading && !data) {
     return <div className="app-loading">Loading dashboard…</div>;

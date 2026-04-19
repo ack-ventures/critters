@@ -2,7 +2,7 @@ import { statSync } from "node:fs";
 import { checkAuth } from "./auth.js";
 import { getCliAdapter } from "./cli/registry.js";
 import type { CritterTypeConfig } from "./critter-type.js";
-import { renderDashboard, renderIssuePage, renderReleaseNotesPage } from "./dashboard/index.js";
+import { renderDashboard, renderReleaseNotesPage } from "./dashboard/index.js";
 import { phaseFileTag, readLogTail, renderReadableLines, resolveCliAdapterForLog, resolveLogFile, resolveWorkDirForIdentifier } from "./log-resolver.js";
 import { formatError, log, logError } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
@@ -135,15 +135,11 @@ export function startHealthServer(
 
       if (url.pathname.startsWith("/dashboard/") && url.pathname.length > "/dashboard/".length) {
         const identifier = decodeURIComponent(url.pathname.slice("/dashboard/".length));
+        // Serve the SPA shell — the React client detects the identifier and renders LogPage
         const status = getStatus();
-
-        // Fetch PR status for this issue's PR (if any)
-        const issueMetrics = getRecentMetrics(10000).filter(m => m.identifier === identifier);
-        const prUrl = status.activeCritterDetails.find(d => d.identifier === identifier)?.prUrl
-          ?? issueMetrics.find(m => m.prUrl)?.prUrl;
-        const prStatuses = prUrl ? await getPrStatuses([prUrl]) : new Map();
-
-        const html = await renderIssuePage(identifier, status, workDir ?? "/tmp/critters-work", prStatuses, context?.trackers);
+        const uptime = Date.now() - startTime;
+        const typeFilter = url.searchParams.get("type") || undefined;
+        const html = renderDashboard(metricsPath ?? "", status, uptime, typeFilter, dashboardToken, identifier);
         return new Response(html, {
           headers: { "Content-Type": "text/html; charset=utf-8" },
         });
@@ -164,6 +160,18 @@ export function startHealthServer(
         const status = getStatus();
         const uptime = Date.now() - startTime;
         return handleDashboardApi(url, status, uptime);
+      }
+
+      if (url.pathname.startsWith("/api/v1/issue/") && url.pathname.length > "/api/v1/issue/".length) {
+        const identifier = decodeURIComponent(url.pathname.slice("/api/v1/issue/".length));
+        const { buildIssueData } = await import("./dashboard/issue-data.js");
+        const status = getStatus();
+        const issueMetrics = getRecentMetrics(10000).filter(m => m.identifier === identifier);
+        const prUrl = status.activeCritterDetails.find(d => d.identifier === identifier)?.prUrl
+          ?? issueMetrics.find(m => m.prUrl)?.prUrl;
+        const prStatuses = prUrl ? await getPrStatuses([prUrl]) : new Map();
+        const data = await buildIssueData(identifier, status, workDir ?? "/tmp/critters-work", prStatuses, context?.trackers);
+        return Response.json(data);
       }
 
       if (url.pathname === "/poll") {

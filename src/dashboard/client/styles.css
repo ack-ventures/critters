@@ -259,3 +259,82 @@ table.activity .status.fail { color: var(--danger); }
   .tail-head { font-size: 10px; }
   .tail-foot { font-size: 9px; }
 }
+
+/* Log page */
+.log-topbar-back { color: var(--fg-3); font-size: 12px; font-family: var(--mono); }
+.log-topbar-id { font-family: var(--mono); font-weight: 600; }
+
+.info-grid {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 6px 16px;
+  font-size: 13px;
+}
+.info-grid .label { color: var(--fg-3); font-family: var(--mono); font-size: 11px; text-transform: uppercase; }
+
+.cost-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+.cost-item { text-align: center; }
+.cost-item .value { font-size: 22px; font-weight: 500; font-family: var(--mono); }
+.cost-item .label { font-size: 11px; color: var(--fg-3); font-family: var(--mono); margin-top: 2px; }
+
+.phase-tabs { display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; }
+
+.log-viewer {
+  background: var(--terminal-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 16px;
+  min-height: 400px;
+  max-height: calc(100vh - 280px);
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--terminal-fg);
+  line-height: 1.6;
+}
+
+.new-logs-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--accent);
+  color: var(--bg);
+  padding: 8px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--mono);
+  border: none;
+  z-index: 100;
+}
+
+.badge-sm {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--mono);
+}
+.badge-sm.live { background: color-mix(in oklch, var(--green) 15%, transparent); color: var(--green); }
+.badge-sm.success { background: color-mix(in oklch, var(--green) 15%, transparent); color: var(--green); }
+.badge-sm.fail { background: color-mix(in oklch, var(--danger) 15%, transparent); color: var(--danger); }
+.badge-sm.neutral { background: var(--surface-2); color: var(--fg-3); }
+.badge-sm.running { background: color-mix(in oklch, var(--accent) 15%, transparent); color: var(--accent); }
+.badge-sm.type { background: var(--surface-2); color: var(--fg-2); border: 1px solid var(--border); }
+
+.external-link { color: var(--fg-3); font-size: 11px; margin-left: 6px; }
+.external-link:hover { color: var(--accent); }
+
+@media (max-width: 640px) {
+  .info-grid { grid-template-columns: 1fr; }
+  .cost-grid { grid-template-columns: repeat(2, 1fr); }
+}

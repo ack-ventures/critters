@@ -138,16 +138,26 @@ function ActivityRow({ a }: { a: DashboardActivity }) {
   const isReview = a.event === "review_completed" || a.event === "review_failed";
   const isOk = a.event === "task_completed" || a.event === "review_completed";
   const statusText = isReview ? (isOk ? "reviewed" : "review·fail") : isOk ? "shipped" : "failed";
-  const issueHref = a.issueUrl ?? `/dashboard/${encodeURIComponent(a.identifier)}`;
-  const issueTarget = a.issueUrl ? "_blank" : undefined;
+  const logHref = `/dashboard/${encodeURIComponent(a.identifier)}`;
 
   return (
     <tr>
       <td>
-        <a className="id" href={issueHref} target={issueTarget} rel={issueTarget ? "noreferrer" : undefined}>
+        <a className="id" href={logHref}>
           {a.identifier}
         </a>
         {a.title && <span className="issue-title">{a.title}</span>}
+        {a.issueUrl && (
+          <a
+            className="external-link"
+            href={a.issueUrl}
+            target="_blank"
+            rel="noreferrer"
+            title="Open in tracker"
+          >
+            &#x2197;
+          </a>
+        )}
       </td>
       <td>
         <Pill color={typeColor(a.critterType)}>{a.critterType}</Pill>
