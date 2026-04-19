@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { IssueData } from "../lib/api.js";
 import { fetchIssueData, getAuthHeaders } from "../lib/api.js";
-import { fmtCost, fmtDuration, fmtAgo } from "../lib/format.js";
+import { fmtAgo, fmtCost, fmtDuration } from "../lib/format.js";
 import { useSSE } from "../lib/useSSE.js";
 
 function formatTokenCount(n: number | null | undefined): string {
