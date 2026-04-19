@@ -104,7 +104,7 @@ export function buildDashboardData(
     return {
       event: m.event,
       identifier: m.identifier ?? m.issueId ?? "",
-      title: null, // not stored in metrics
+      title: m.title ?? null,
       critterType: inferType(m),
       repo,
       timestamp: m.timestamp,

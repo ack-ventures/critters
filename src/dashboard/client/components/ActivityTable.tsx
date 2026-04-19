@@ -28,7 +28,7 @@ export function ActivityTable({ data }: ActivityTableProps) {
       const isOk = a.event === "task_completed" || a.event === "review_completed";
       if (statusFilter === "ok" && !isOk) return false;
       if (statusFilter === "fail" && isOk) return false;
-      if (ql && !(a.identifier.toLowerCase().includes(ql) || a.repo.toLowerCase().includes(ql))) return false;
+      if (ql && !(a.identifier.toLowerCase().includes(ql) || a.repo.toLowerCase().includes(ql) || (a.title && a.title.toLowerCase().includes(ql)))) return false;
       return true;
     });
 
@@ -147,6 +147,7 @@ function ActivityRow({ a }: { a: DashboardActivity }) {
         <a className="id" href={issueHref} target={issueTarget} rel={issueTarget ? "noreferrer" : undefined}>
           {a.identifier}
         </a>
+        {a.title && <span className="issue-title">{a.title}</span>}
       </td>
       <td>
         <Pill color={typeColor(a.critterType)}>{a.critterType}</Pill>

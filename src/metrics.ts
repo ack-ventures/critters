@@ -15,6 +15,7 @@ export type MetricEvent = {
     | "poll_completed";
   issueId?: string;
   identifier?: string;
+  title?: string;
   repoUrl?: string;
   duration?: number;
   phase?: "planning" | "execution" | "review";
