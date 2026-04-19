@@ -237,3 +237,9 @@ table.activity .status.fail { color: var(--danger); }
   .active-col { border-right: none; border-bottom: 1px solid var(--border); }
   .lower-grid { grid-template-columns: 1fr; }
 }
+
+@media (max-width: 640px) {
+  .tail-body { font-size: 11px; line-height: 1.5; }
+  .tail-head { font-size: 11px; }
+  .tail-foot { font-size: 10px; }
+}
