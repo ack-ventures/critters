@@ -16,6 +16,33 @@ export function fmtDuration(ms: number | undefined): string {
   return formatDuration(ms);
 }
 
+export function fmtDurationShort(ms: number | undefined): string {
+  if (ms == null || Number.isNaN(ms) || ms < 0) return "\u2014";
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  return rm ? `${h}h ${rm}m` : `${h}h`;
+}
+
+export function fmtAgoShort(ts: string | number): string {
+  try {
+    const t = typeof ts === "number" ? ts : new Date(ts).getTime();
+    const ms = Date.now() - t;
+    const s = Math.floor(ms / 1000);
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h`;
+    return `${Math.floor(h / 24)}d`;
+  } catch {
+    return "\u2014";
+  }
+}
+
 export function formatCost(cost: number | undefined): string {
   if (cost == null || Number.isNaN(cost)) return "\u2014";
   return `$${cost.toFixed(2)}`;

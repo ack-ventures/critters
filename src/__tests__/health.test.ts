@@ -26,6 +26,9 @@ function defaultStatus(): HealthStatus {
     perType: {},
     lastPollAt: null,
     activeCritterDetails: [],
+    queuedCritterDetails: [],
+    pollIntervalSeconds: 120,
+    concurrencyMax: 1,
   };
 }
 
@@ -75,6 +78,9 @@ describe("GET /healthz", () => {
       perType: { create: { active: 2, queued: 3 }, review: { active: 1, queued: 0 } },
       lastPollAt: "2026-01-15T10:00:00.000Z",
       activeCritterDetails: [],
+      queuedCritterDetails: [],
+      pollIntervalSeconds: 120,
+      concurrencyMax: 3,
     }));
 
     const res = await fetch(`http://localhost:${port}/healthz`);
