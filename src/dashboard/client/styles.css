@@ -36,6 +36,7 @@ code { font-family: var(--mono); font-size: 12px; color: var(--fg-2); }
 .app-error { color: var(--danger); }
 
 .app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+@media (min-width: 981px) { .app { zoom: 1.2; } }
 
 .sidebar {
   border-right: 1px solid var(--border);
