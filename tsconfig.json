@@ -8,7 +8,9 @@
     "skipLibCheck": true,
     "outDir": "dist",
     "rootDir": "src",
-    "types": ["bun"]
+    "types": ["bun"],
+    "jsx": "react-jsx",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"]
   },
   "include": ["src"]
 }
