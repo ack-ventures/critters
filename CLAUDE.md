@@ -22,6 +22,7 @@ TypeScript daemon that watches issue trackers (Linear/Jira) for labeled issues, 
 - Use `console` via `src/logger.ts` wrapper (timestamped)
 - Config loaded from `critters.config.yaml` + `.env`
 - jq filter for stream output lives in `src/stream-filter.jq` (not a JS template — edit directly)
+- Dashboard client code (`src/dashboard/client/**`, including `styles.css`) is bundled into `src/dashboard/bundle.ts` at build time. After editing anything under `client/`, run `bun run build:dashboard` and commit the regenerated `bundle.ts` alongside your change — the daemon serves from `bundle.ts`, not the source files.
 
 ## Architecture
 
