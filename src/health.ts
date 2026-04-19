@@ -153,22 +153,17 @@ export function startHealthServer(
         const status = getStatus();
         const uptime = Date.now() - startTime;
         const typeFilter = url.searchParams.get("type") || undefined;
-
-        // Collect PR URLs from recent metrics and active critters
-        const recentMetrics = getRecentMetrics(50);
-        const prUrls: string[] = [];
-        for (const m of recentMetrics) {
-          if (m.prUrl) prUrls.push(m.prUrl);
-        }
-        for (const d of status.activeCritterDetails) {
-          if (d.prUrl) prUrls.push(d.prUrl);
-        }
-        const prStatuses = await getPrStatuses(prUrls);
-
-        const html = renderDashboard(metricsPath ?? "", status, uptime, typeFilter, dashboardToken, prStatuses);
+        const html = renderDashboard(metricsPath ?? "", status, uptime, typeFilter, dashboardToken);
         return new Response(html, {
           headers: { "Content-Type": "text/html; charset=utf-8" },
         });
+      }
+
+      if (url.pathname === "/api/v1/dashboard") {
+        const { handleDashboardApi } = await import("./dashboard/api.js");
+        const status = getStatus();
+        const uptime = Date.now() - startTime;
+        return handleDashboardApi(url, status, uptime);
       }
 
       if (url.pathname === "/poll") {

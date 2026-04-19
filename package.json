@@ -21,7 +21,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check src/",
     "test": "bun test",
-    "build": "node scripts/bundle-release-notes.cjs && bun build --compile src/index.ts --outfile dist/critters",
+    "build:dashboard": "bun scripts/bundle-dashboard.ts",
+    "build": "bun run build:dashboard && node scripts/bundle-release-notes.cjs && bun build --compile src/index.ts --outfile dist/critters",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -29,11 +30,15 @@
   },
   "dependencies": {
     "@linear/sdk": "latest",
+    "react": "18",
+    "react-dom": "18",
     "yaml": "^2"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.0",
     "@types/bun": "latest",
+    "@types/react": "18",
+    "@types/react-dom": "18",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "typescript": "^5"

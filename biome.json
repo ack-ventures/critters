@@ -17,6 +17,6 @@
     "enabled": false
   },
   "files": {
-    "includes": ["src/**/*.ts"]
+    "includes": ["src/**/*.ts", "src/**/*.tsx", "!src/dashboard/bundle.ts"]
   }
 }
