@@ -238,8 +238,14 @@ table.activity .status.fail { color: var(--danger); }
   .lower-grid { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) and (min-width: 641px) {
   .tail-body { font-size: 11px; line-height: 1.5; }
   .tail-head { font-size: 11px; }
   .tail-foot { font-size: 10px; }
+}
+
+@media (max-width: 640px) {
+  .tail-body { font-size: 10px; line-height: 1.4; }
+  .tail-head { font-size: 10px; }
+  .tail-foot { font-size: 9px; }
 }
