@@ -360,6 +360,9 @@ export async function startDaemon(): Promise<void> {
       perType: spawner.getPerTypeCounts(),
       lastPollAt,
       activeCritterDetails: spawner.getActiveDetails(),
+      queuedCritterDetails: spawner.getQueuedDetails(),
+      pollIntervalSeconds: config.polling.intervalSeconds,
+      concurrencyMax: config.critterTypes.reduce((sum, ct) => sum + ct.concurrency, 0),
       circuitBreakers: watcher.getCircuitBreakerStatus(),
     }), metricsPath, {
       triggerPoll: () => watcher.triggerPoll(),

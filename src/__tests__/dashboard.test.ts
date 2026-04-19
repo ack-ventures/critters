@@ -17,6 +17,9 @@ function defaultStatus(): HealthStatus {
     perType: {},
     lastPollAt: null,
     activeCritterDetails: [],
+    queuedCritterDetails: [],
+    pollIntervalSeconds: 120,
+    concurrencyMax: 1,
   };
 }
 
@@ -73,11 +76,11 @@ describe("renderDashboard", () => {
     const html = renderDashboard("", defaultStatus(), 0);
     expect(html).toContain("ACK-42");
     expect(html).toContain("ACK-99");
-    expect(html).toContain("Completed");
-    expect(html).toContain("Failed");
+    expect(html).toContain("shipped");
+    expect(html).toContain("failed");
   });
 
-  test("shows active critters section with per-type cards", () => {
+  test("shows KPI strip with in-flight and slot counts", () => {
     const status: HealthStatus = {
       activeCritters: 2,
       queuedCritters: 1,
@@ -86,18 +89,19 @@ describe("renderDashboard", () => {
       perType: { create: { active: 2, queued: 1 }, review: { active: 3, queued: 0 } },
       lastPollAt: null,
       activeCritterDetails: [],
+      queuedCritterDetails: [],
+      pollIntervalSeconds: 120,
+      concurrencyMax: 4,
     };
     const html = renderDashboard("", status, 0);
-    expect(html).toContain(">2<");
-    expect(html).toContain(">1<");
-    expect(html).toContain(">3<");
-    expect(html).toContain("Active create");
-    expect(html).toContain("Queued create");
-    expect(html).toContain("Active review");
-    expect(html).toContain("Queued review");
+    // Sidebar slots pill: 5/4 (active/max)
+    expect(html).toContain("5/4");
+    expect(html).toContain("In flight");
+    // Poll interval surfaced in daemon card
+    expect(html).toContain("every 120s");
   });
 
-  test("falls back to flat fields when perType is empty", () => {
+  test("shows queued count in KPI sub-label", () => {
     const status: HealthStatus = {
       activeCritters: 1,
       queuedCritters: 2,
@@ -106,10 +110,17 @@ describe("renderDashboard", () => {
       perType: {},
       lastPollAt: null,
       activeCritterDetails: [],
+      queuedCritterDetails: [
+        { identifier: "Q-1", title: "first", critterType: "create", repo: "org/repo", enqueuedAt: Date.now() },
+        { identifier: "Q-2", title: "second", critterType: "create", repo: "org/repo", enqueuedAt: Date.now() },
+      ],
+      pollIntervalSeconds: 60,
+      concurrencyMax: 2,
     };
     const html = renderDashboard("", status, 0);
-    expect(html).toContain("Active Tasks");
-    expect(html).toContain("Queued Tasks");
+    expect(html).toContain("2 queued");
+    expect(html).toContain("Q-1");
+    expect(html).toContain("Q-2");
   });
 
   test("handles empty metrics gracefully", () => {
@@ -146,13 +157,11 @@ describe("renderDashboard", () => {
     expect(html).toContain("&lt;script&gt;");
   });
 
-  test("contains chart sections", () => {
+  test("contains throughput and breakdown sections", () => {
     const html = renderDashboard("", defaultStatus(), 0);
-    expect(html).toContain("Tasks per Day");
-    expect(html).toContain("Cost per Day");
-    expect(html).toContain("Success vs Failure");
-    expect(html).toContain("<canvas");
-    expect(html).toContain("__chartData");
+    expect(html).toContain("Throughput");
+    expect(html).toContain("tasks / day");
+    expect(html).toContain("Recent activity");
   });
 
   test("renders PR links in activity table", () => {
@@ -190,38 +199,17 @@ describe("renderDashboard", () => {
     recordMetric({ timestamp: now, event: "review_failed", identifier: "R-2", costUsd: 0.2 });
 
     const html = renderDashboard("", defaultStatus(), 0);
-    // Total tasks = 4 (includes reviews)
-    expect(html).toContain(">4<");
     // Total cost includes review costs: 1.0 + 0.5 + 0.3 + 0.2 = $2.00
     expect(html).toContain("$2.00");
-    // Review status text
-    expect(html).toContain("Review Completed");
-    expect(html).toContain("Review Failed");
+    // Review status labels
+    expect(html).toContain("reviewed");
+    expect(html).toContain("review·fail");
   });
 
-  test("review events appear in daily charts", () => {
-    const now = new Date().toISOString();
-    recordMetric({ timestamp: now, event: "review_completed", identifier: "R-3", costUsd: 0.5 });
-
-    const html = renderDashboard("", defaultStatus(), 0);
-    // Chart data should include the review event as a completed task
-    expect(html).toContain("__chartData");
-    expect(html).toContain('"completed":1');
-  });
-
-  test("chart containers have canvas elements", () => {
-    const html = renderDashboard("", defaultStatus(), 0);
-    expect(html).toContain('id="chart-tasks"');
-    expect(html).toContain('id="chart-cost"');
-    expect(html).toContain('id="chart-duration"');
-    expect(html).toContain('id="chart-donut"');
-    expect(html).toContain("chart-container");
-  });
-
-  test("contains New Critter button", () => {
+  test("contains New critter button", () => {
     const html = renderDashboard("", defaultStatus(), 0);
     expect(html).toContain('id="new-critter-btn"');
-    expect(html).toContain("New Critter");
+    expect(html).toContain("New critter");
   });
 
   test("contains create modal markup", () => {

@@ -215,6 +215,15 @@ export interface ActiveCritterDetail {
   costBudget?: number;     // effective cost budget (if configured)
 }
 
+export interface QueuedCritterDetail {
+  identifier: string;
+  title: string;
+  critterType: string;
+  repo: string;         // short repo name (org/repo)
+  issueUrl?: string;
+  enqueuedAt: number;   // Date.now() timestamp
+}
+
 export interface ReviewTask extends CritterTask {
   prUrl: string;
   prNumber: number;

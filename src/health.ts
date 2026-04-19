@@ -9,7 +9,7 @@ import { getRecentMetrics } from "./metrics.js";
 import { getPrStatuses } from "./pr-status.js";
 import { RELEASE_NOTES } from "./release-notes.js";
 import type { IssueTracker, TrackerTeam } from "./tracker/types.js";
-import type { ActiveCritterDetail } from "./types.js";
+import type { ActiveCritterDetail, QueuedCritterDetail } from "./types.js";
 import type { KillResult } from "./unified-spawner.js";
 import { getDisplayVersion } from "./updater.js";
 import { formatDuration } from "./utils.js";
@@ -25,6 +25,9 @@ export interface HealthStatus {
   perType: Record<string, { active: number; queued: number }>;
   lastPollAt: string | null;
   activeCritterDetails: ActiveCritterDetail[];
+  queuedCritterDetails: QueuedCritterDetail[];
+  pollIntervalSeconds: number;
+  concurrencyMax: number;
   circuitBreakers?: Record<string, {
     state: string;
     consecutiveFailures: number;

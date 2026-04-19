@@ -33,7 +33,7 @@ import {
 import { applyOutcome, type TaskResult } from "./task-outcome.js";
 import { addPrTimeoutComment, buildLogFileList, salvagePartialProgress } from "./task-salvage.js";
 import type { IssueTracker, TrackerTask } from "./tracker/types.js";
-import type { ActiveCritterDetail, Config, SpawnResult } from "./types.js";
+import type { ActiveCritterDetail, Config, QueuedCritterDetail, SpawnResult } from "./types.js";
 import { aggregatePhaseResults, branchName, formatDuration, formatPhaseStats, getTracker, runCommand, shortRepoName, tailLines, truncateComment } from "./utils.js";
 import { VERSION } from "./version.js";
 
@@ -41,6 +41,7 @@ interface QueuedTask {
   task: TrackerTask;
   critterType: CritterTypeConfig;
   resolve: (result: TaskResult) => void;
+  enqueuedAt: number;
 }
 
 export class UnifiedSpawner {
@@ -161,12 +162,29 @@ export class UnifiedSpawner {
     return Array.from(this.activeCritterMap.values());
   }
 
+  getQueuedDetails(): QueuedCritterDetail[] {
+    const result: QueuedCritterDetail[] = [];
+    for (const [typeName, queue] of this.queues.entries()) {
+      for (const item of queue) {
+        result.push({
+          identifier: item.task.identifier,
+          title: item.task.title,
+          critterType: typeName,
+          repo: shortRepoName(item.task.repoUrl),
+          issueUrl: item.task.issueUrl,
+          enqueuedAt: item.enqueuedAt,
+        });
+      }
+    }
+    return result;
+  }
+
   async dispatch(task: TrackerTask, critterType: CritterTypeConfig): Promise<TaskResult> {
     return new Promise((resolve) => {
       if (!this.queues.has(critterType.name)) {
         this.queues.set(critterType.name, []);
       }
-      this.queues.get(critterType.name)!.push({ task, critterType, resolve });
+      this.queues.get(critterType.name)!.push({ task, critterType, resolve, enqueuedAt: Date.now() });
       logTask(task.identifier, `Task queued [${critterType.name}] (queue: ${this.getQueueSize(critterType.name)}, running: ${this.getActiveCount(critterType.name)})`);
       this.processQueue(critterType.name);
     });

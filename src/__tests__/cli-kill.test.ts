@@ -25,6 +25,9 @@ function defaultStatus(): HealthStatus {
     perType: {},
     lastPollAt: null,
     activeCritterDetails: [],
+    queuedCritterDetails: [],
+    pollIntervalSeconds: 120,
+    concurrencyMax: 1,
   };
 }
 
@@ -56,6 +59,9 @@ function statusWithCritters(): HealthStatus {
         critterType: "review",
       },
     ],
+    queuedCritterDetails: [],
+    pollIntervalSeconds: 120,
+    concurrencyMax: 2,
   };
 }
 
