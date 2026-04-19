@@ -72,11 +72,57 @@ export async function checkAuth(): Promise<boolean> {
   }
 }
 
+export interface IssueData {
+  identifier: string;
+  title: string;
+  critterType: string;
+  repo: string;
+  branch: string;
+  prUrl: string | null;
+  issueUrl: string | null;
+  isActive: boolean;
+  isCompleted: boolean;
+  isFailed: boolean;
+  startedAt: string | null;
+  durationMs: number | null;
+  currentPhase: string | null;
+  phases: string[];
+  cost: {
+    totalCost: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+  };
+  phaseResults: Array<{
+    phase: string;
+    isRunning: boolean;
+    isDone: boolean;
+    costUsd: number | null;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    cacheReadTokens: number | null;
+    numTurns: number | null;
+  }>;
+  multipleRuns: boolean;
+  prStatus: { ciStatus: string; reviewStatus: string } | null;
+  noData: boolean;
+}
+
+export async function fetchIssueData(identifier: string, signal?: AbortSignal): Promise<IssueData> {
+  const res = await fetch(`/api/v1/issue/${encodeURIComponent(identifier)}`, {
+    headers: getAuthHeaders(),
+    signal,
+  });
+  if (!res.ok) throw new Error(`issue fetch failed: ${res.status}`);
+  return res.json() as Promise<IssueData>;
+}
+
 declare global {
   interface Window {
     __CRITTERS__?: {
       token?: string | null;
       typeFilter: string | null;
+      identifier?: string | null;
     };
   }
 }
