@@ -296,11 +296,13 @@ table.activity .status.fail { color: var(--danger); }
   min-height: 400px;
   max-height: calc(100vh - 280px);
   overflow-y: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
   color: var(--terminal-fg);
   line-height: 1.6;
 }
+.log-viewer .ln { margin-bottom: 4px; display: flex; gap: 10px; }
+.log-viewer .ln .txt { flex: 1; white-space: pre-wrap; word-break: break-word; }
+.log-viewer .ln.tool .txt { color: var(--sky); }
+.log-viewer .ln.assistant .txt { color: var(--accent); }
 
 .new-logs-btn {
   position: fixed;

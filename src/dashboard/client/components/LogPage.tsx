@@ -268,8 +268,14 @@ interface LogViewerCardProps {
   onDone: () => void;
 }
 
+function classifyLine(line: string): "tool" | "assistant" | "stdout" {
+  if (/^\s*→\s/.test(line)) return "tool";
+  if (/^\s*\[/.test(line)) return "stdout";
+  return "assistant";
+}
+
 function LogViewerCard({ identifier, isActive, phases, activePhase, onPhaseChange, onDone }: LogViewerCardProps) {
-  const logRef = useRef<HTMLPreElement>(null);
+  const logRef = useRef<HTMLDivElement>(null);
   const [userScrolledUp, setUserScrolledUp] = useState(false);
   const [showNewLogsBtn, setShowNewLogsBtn] = useState(false);
 
@@ -354,9 +360,12 @@ function LogViewerCard({ identifier, isActive, phases, activePhase, onPhaseChang
     setShowNewLogsBtn(false);
   }
 
-  const logContent = isActive
-    ? (sseLines.length > 0 ? sseLines.join("\n") : "Loading logs...")
-    : (staticLoading ? "Loading logs..." : (staticLog ?? "Loading logs..."));
+  const logLines = isActive
+    ? sseLines
+    : staticLoading || !staticLog ? [] : staticLog.split("\n");
+  const placeholder = isActive
+    ? (sseLines.length === 0 ? "Loading logs..." : null)
+    : (staticLoading || !staticLog ? "Loading logs..." : null);
 
   return (
     <div className="card">
@@ -376,9 +385,13 @@ function LogViewerCard({ identifier, isActive, phases, activePhase, onPhaseChang
             ))}
           </div>
         )}
-        <pre ref={logRef} className="log-viewer" onScroll={handleScroll}>
-          {logContent}
-        </pre>
+        <div ref={logRef} className="log-viewer" onScroll={handleScroll}>
+          {placeholder ? <span className="txt">{placeholder}</span> : logLines.map((l, i) => (
+            <div key={`${i}:${l.slice(0, 40)}`} className={`ln ${classifyLine(l)}`}>
+              <span className="txt">{l}</span>
+            </div>
+          ))}
+        </div>
         {showNewLogsBtn && (
           <button type="button" className="new-logs-btn" onClick={scrollToBottom}>
             &darr; New logs
