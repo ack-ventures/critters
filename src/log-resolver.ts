@@ -285,6 +285,7 @@ export function resolvePhasesFromAttachments(
   const ORDER: Record<string, number> = { planning: 0, execution: 1, review: 2 };
 
   const pattern = new RegExp(`^${escapeRegExp(identifier)}-(.+)-output\\.txt$`);
+  const seen = new Set<string>();
   const phases: Array<{ phase: string }> = [];
 
   for (const a of attachments) {
@@ -292,6 +293,8 @@ export function resolvePhasesFromAttachments(
     if (!m) continue;
     const tag = m[1];
     const phaseName = TAG_TO_PHASE[tag] ?? tag;
+    if (seen.has(phaseName)) continue;
+    seen.add(phaseName);
     phases.push({ phase: phaseName });
   }
 
