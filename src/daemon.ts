@@ -22,6 +22,7 @@ import type { Config } from "./types.js";
 import { UnifiedSpawner } from "./unified-spawner.js";
 import { UnifiedWatcher } from "./unified-watcher.js";
 import { checkForUpdate, fetchLatestVersion, getDisplayVersion } from "./updater.js";
+import { recoverOrphanedIssues } from "./recovery.js";
 import { formatDuration, runCommand, shellEscape } from "./utils.js";
 import { VERSION } from "./version.js";
 
@@ -261,6 +262,9 @@ export async function startDaemon(): Promise<void> {
       for (const pane of stalePanes) log(`  Killed pane ${pane.paneId}: ${pane.title} (${pane.reason})`);
     }
   }
+
+  // Recover orphaned in-progress issues before starting the poll loop
+  await recoverOrphanedIssues(config, trackers, spawner);
 
   // Create circuit breakers (one per provider)
   let slackNotifier = new SlackNotifier({
