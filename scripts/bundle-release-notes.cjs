@@ -61,11 +61,17 @@ try {
       ";\n"
   );
   console.log(`Bundled ${notes.length} release notes into src/release-notes.ts`);
-} catch {
-  // If gh is not available or fails, write empty notes
-  fs.writeFileSync(
-    "src/release-notes.ts",
-    "export const RELEASE_NOTES: Array<{ tag: string; date: string; name: string; body: string }> = [];\n"
-  );
-  console.log("gh not available — wrote empty release notes");
+} catch (err) {
+  // If gh is not available or fails, preserve whatever is already checked in
+  // rather than clobbering it with an empty array (which would wipe release
+  // notes for any downstream local build that doesn't have gh auth).
+  if (!fs.existsSync("src/release-notes.ts")) {
+    fs.writeFileSync(
+      "src/release-notes.ts",
+      "export const RELEASE_NOTES: Array<{ tag: string; date: string; name: string; body: string }> = [];\n"
+    );
+    console.log(`gh not available (${err.message}) — wrote empty release notes (no existing file)`);
+  } else {
+    console.log(`gh not available (${err.message}) — keeping existing src/release-notes.ts`);
+  }
 }
