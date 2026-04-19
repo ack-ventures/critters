@@ -26,7 +26,7 @@
     "prepare": "husky"
   },
   "lint-staged": {
-    "src/**/*.ts": ["biome check"]
+    "src/**/*.ts": ["biome check --no-errors-on-unmatched"]
   },
   "dependencies": {
     "@linear/sdk": "latest",
