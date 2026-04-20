@@ -318,17 +318,38 @@ The daemon runs an HTTP server on port 3847 (configurable via `healthPort`, set 
 
 | Route | Method | Description |
 |---|---|---|
-| `/` or `/dashboard` | GET | Live dashboard with task stats, charts, and recent activity. Includes a "New Critter" button for creating tickets |
-| `/dashboard/release-notes` | GET | Bundled release notes for recent versions, with the currently running version highlighted |
+| `/` or `/dashboard` | GET | Live dashboard (Console view) with task stats, charts, and recent activity. Includes a "New Critter" button for creating tickets |
+| `/dashboard/inflight` | GET | Card grid of in-flight critters with elapsed/cost/timeout metrics |
+| `/dashboard/queue` | GET | Queued critters with next-poll countdown and "Poll now" trigger |
+| `/dashboard/history` | GET | Full activity table with type/status/repo filters and search |
+| `/dashboard/logs` | GET | Split view: run list on the left, per-run detail (issue info, cost summary, phase timeline, logs) on the right |
+| `/dashboard/types` | GET | Configured critter types with phase pipeline visualization and per-type run/success/cost stats |
+| `/dashboard/repos` | GET | Configured repos with 14-day runs, success rate, cost, and extra tools |
+| `/dashboard/hooks` | GET | Lifecycle hook commands + inbound webhook status + tunnel URL |
+| `/dashboard/tokens` | GET | Presence-only listing of known env vars (values are never exposed) |
+| `/dashboard/costs` | GET | Spend summary, breakdowns by type and repo, top 10 most expensive runs |
+| `/dashboard/models` | GET | Models in use by phase, pulled from critter-type config |
+| `/dashboard/releases` | GET | Release notes for recent versions, with the currently running version highlighted |
+| `/dashboard/<id>` | GET | Deep link to a single critter's log page |
 | `/healthz` | GET | JSON health check (uptime, version, per-type active/queued counts, active critter details, metrics summary) |
 | `/metrics` | GET | JSON array of recent metric events |
 | `/poll` | POST | Trigger an immediate poll cycle |
 | `/review-poll` | POST | Trigger an immediate review poll cycle |
 | `/restart` | POST | Restart the daemon process |
 | `/stop` | POST | Stop the daemon gracefully |
+| `/kill` | POST | Kill active critters by identifier (`{ identifiers: string[] }`) |
+| `/api/v1/dashboard` | GET | Dashboard data payload (status, metrics, activity) |
+| `/api/v1/issue/<id>` | GET | Per-issue data (phases, cost, PR status) for the log page |
 | `/api/v1/metadata` | GET | Provider teams, critter types, and repo info |
 | `/api/v1/issues` | POST | Create a critter issue (`{ provider, teamId, title, description, critterType }`) |
+| `/api/v1/types` | GET | Configured critter types with per-type 14-day stats |
+| `/api/v1/repos` | GET | Configured repos with per-repo 14-day stats |
+| `/api/v1/models` | GET | Model usage pulled from phase configs |
+| `/api/v1/hooks` | GET | Lifecycle hook commands + webhook + tunnel status |
+| `/api/v1/env-status` | GET | Presence-only status of known env vars (no values) |
+| `/api/v1/releases` | GET | Bundled release notes JSON |
 | `/api/logs/<id>` | GET | Processed log tail for a critter run |
+| `/api/logs/<id>/stream` | GET | SSE stream of a critter's live log |
 | `/webhook/linear` | POST | Linear webhook endpoint (requires `linearWebhookSecret`) |
 | `/webhook/jira` | POST | Jira webhook endpoint (requires `jiraWebhookSecret`) |
 
