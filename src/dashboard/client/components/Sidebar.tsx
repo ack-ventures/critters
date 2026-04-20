@@ -1,13 +1,37 @@
 import type { DashboardData } from "../../dashboard-data.js";
 import { fmtAgo } from "../lib/format.js";
+import { hrefFor, type RouteKey } from "../lib/routes.js";
 import { useTick } from "../lib/useTick.js";
 import { Dot } from "./primitives.js";
 
 interface SidebarProps {
   data: DashboardData;
+  route: RouteKey;
 }
 
-export function Sidebar({ data }: SidebarProps) {
+interface NavLinkProps {
+  route: RouteKey;
+  currentRoute: RouteKey;
+  label: string;
+  count?: number;
+  dot?: boolean;
+}
+
+function NavLink({ route, currentRoute, label, count, dot }: NavLinkProps) {
+  const active = route === currentRoute;
+  return (
+    <a
+      className={`nav-item${active ? " active" : ""}`}
+      href={hrefFor(route)}
+    >
+      {dot && <Dot color="var(--accent)" pulse />}
+      <span className="nav-label">{label}</span>
+      {count != null && <span className="count">{count}</span>}
+    </a>
+  );
+}
+
+export function Sidebar({ data, route }: SidebarProps) {
   useTick(5000);
   const uptimeStr = fmtDurationAbs(data.uptimeMs);
 
@@ -21,25 +45,26 @@ export function Sidebar({ data }: SidebarProps) {
 
       <nav className="nav-group">
         <div className="label">Monitor</div>
-        <a className="nav-item active" href="#top">
-          <Dot color="var(--accent)" pulse /> Dashboard
-        </a>
-        <a className="nav-item" href="#active-section">
-          In flight <span className="count">{data.activeCritters.length}</span>
-        </a>
-        <a className="nav-item" href="#active-section">
-          Queue <span className="count">{data.queuedCritters.length}</span>
-        </a>
-        <a className="nav-item" href="#activity-section">
-          History
-        </a>
+        <NavLink route="dashboard" currentRoute={route} label="Dashboard" dot />
+        <NavLink route="inflight" currentRoute={route} label="In flight" count={data.activeCritters.length} />
+        <NavLink route="queue" currentRoute={route} label="Queue" count={data.queuedCritters.length} />
+        <NavLink route="history" currentRoute={route} label="History" />
+        <NavLink route="logs" currentRoute={route} label="Logs" />
+      </nav>
+
+      <nav className="nav-group">
+        <div className="label">Configure</div>
+        <NavLink route="types" currentRoute={route} label="Critter types" />
+        <NavLink route="repos" currentRoute={route} label="Repos" />
+        <NavLink route="hooks" currentRoute={route} label="Hooks & webhooks" />
+        <NavLink route="tokens" currentRoute={route} label="Tokens" />
       </nav>
 
       <nav className="nav-group">
         <div className="label">Insights</div>
-        <a className="nav-item" href="/dashboard/release-notes">
-          Release notes
-        </a>
+        <NavLink route="costs" currentRoute={route} label="Costs" />
+        <NavLink route="models" currentRoute={route} label="Models" />
+        <NavLink route="releases" currentRoute={route} label="Release notes" />
       </nav>
 
       <div className="daemon-card">

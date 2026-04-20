@@ -2,12 +2,11 @@ import { statSync } from "node:fs";
 import { checkAuth } from "./auth.js";
 import { getCliAdapter } from "./cli/registry.js";
 import type { CritterTypeConfig } from "./critter-type.js";
-import { renderDashboard, renderReleaseNotesPage } from "./dashboard/index.js";
+import { renderDashboard } from "./dashboard/index.js";
 import { phaseFileTag, readLogTail, renderReadableLines, resolveCliAdapterForLog, resolveLogFile, resolveWorkDirForIdentifier } from "./log-resolver.js";
 import { formatError, log, logError } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
 import { getPrStatuses } from "./pr-status.js";
-import { RELEASE_NOTES } from "./release-notes.js";
 import type { IssueTracker, TrackerTeam } from "./tracker/types.js";
 import type { ActiveCritterDetail, QueuedCritterDetail } from "./types.js";
 import type { KillResult } from "./unified-spawner.js";
@@ -74,6 +73,8 @@ export function startHealthServer(
     defaultProvider?: string;
     repos?: Record<string, { url: string; extraAllowedTools?: string[] }>;
     teamRepos?: Record<string, string>;
+    hooks?: Record<string, string>;
+    getTunnelUrl?: () => string | null;
   },
   webhookConfig?: {
     linearWebhookSecret?: string;
@@ -126,20 +127,15 @@ export function startHealthServer(
         return Response.json(entries);
       }
 
-      if (url.pathname === "/dashboard/release-notes") {
-        const html = renderReleaseNotesPage(RELEASE_NOTES, VERSION);
-        return new Response(html, {
-          headers: { "Content-Type": "text/html; charset=utf-8" },
-        });
-      }
-
       if (url.pathname.startsWith("/dashboard/") && url.pathname.length > "/dashboard/".length) {
-        const identifier = decodeURIComponent(url.pathname.slice("/dashboard/".length));
-        // Serve the SPA shell — the React client detects the identifier and renders LogPage
+        // Serve the SPA shell for every sub-path — the React client parses
+        // the pathname and routes to a page or, if the segment is not a
+        // known page, treats it as an issue identifier for the log view.
+        const segment = decodeURIComponent(url.pathname.slice("/dashboard/".length));
         const status = getStatus();
         const uptime = Date.now() - startTime;
         const typeFilter = url.searchParams.get("type") || undefined;
-        const html = renderDashboard(metricsPath ?? "", status, uptime, typeFilter, dashboardToken, identifier);
+        const html = renderDashboard(metricsPath ?? "", status, uptime, typeFilter, dashboardToken, segment);
         return new Response(html, {
           headers: { "Content-Type": "text/html; charset=utf-8" },
         });
@@ -505,6 +501,37 @@ export function startHealthServer(
 
       if (url.pathname === "/api/v1/auth-check") {
         return Response.json({ required: !!dashboardToken });
+      }
+
+      if (url.pathname === "/api/v1/types") {
+        const { buildTypesResponse } = await import("./dashboard/config-api.js");
+        return Response.json(buildTypesResponse(context?.critterTypes));
+      }
+
+      if (url.pathname === "/api/v1/repos") {
+        const { buildReposResponse } = await import("./dashboard/config-api.js");
+        return Response.json(buildReposResponse(context?.repos, context?.teamRepos));
+      }
+
+      if (url.pathname === "/api/v1/models") {
+        const { buildModelsResponse } = await import("./dashboard/config-api.js");
+        return Response.json(buildModelsResponse(context?.critterTypes));
+      }
+
+      if (url.pathname === "/api/v1/hooks") {
+        const { buildHooksResponse } = await import("./dashboard/config-api.js");
+        const tunnelDomain = context?.getTunnelUrl?.() ?? undefined;
+        return Response.json(buildHooksResponse(webhookConfig, context?.hooks, tunnelDomain ?? undefined));
+      }
+
+      if (url.pathname === "/api/v1/env-status") {
+        const { buildEnvStatusResponse } = await import("./dashboard/config-api.js");
+        return Response.json(buildEnvStatusResponse());
+      }
+
+      if (url.pathname === "/api/v1/releases") {
+        const { buildReleasesResponse } = await import("./dashboard/config-api.js");
+        return Response.json(buildReleasesResponse());
       }
 
       if (url.pathname === "/api/v1/metadata") {

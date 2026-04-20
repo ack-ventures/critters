@@ -13,9 +13,10 @@ function formatTokenCount(n: number | null | undefined): string {
 
 interface LogPageProps {
   identifier: string;
+  embedded?: boolean;
 }
 
-export function LogPage({ identifier }: LogPageProps) {
+export function LogPage({ identifier, embedded = false }: LogPageProps) {
   const [issueData, setIssueData] = useState<IssueData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,37 +48,42 @@ export function LogPage({ identifier }: LogPageProps) {
   if (issueData.noData) {
     return (
       <>
-        <LogPageTopbar identifier={identifier} />
-        <div className="content">
+        {!embedded && <LogPageTopbar identifier={identifier} />}
+        <div className={embedded ? undefined : "content"}>
           <div className="empty-state">
             <span className="icon">?</span>
             No data found for {identifier}.
-            <br />
-            <a href="/dashboard">Back to dashboard</a>
+            {!embedded && <><br /><a href="/dashboard">Back to dashboard</a></>}
           </div>
         </div>
       </>
     );
   }
 
+  const content = (
+    <>
+      <IssueInfoCard data={issueData} />
+      <CostSummaryCard data={issueData} />
+      {issueData.phaseResults.length > 0 && <PhaseTimeline data={issueData} />}
+      <LogViewerCard
+        identifier={identifier}
+        isActive={issueData.isActive}
+        phases={issueData.phases}
+        activePhase={activePhase}
+        onPhaseChange={setActivePhase}
+        onDone={() => {
+          fetchIssueData(identifier).then(setIssueData).catch(() => {});
+        }}
+      />
+    </>
+  );
+
+  if (embedded) return <>{content}</>;
+
   return (
     <>
       <LogPageTopbar issueData={issueData} identifier={identifier} />
-      <div className="content">
-        <IssueInfoCard data={issueData} />
-        <CostSummaryCard data={issueData} />
-        {issueData.phaseResults.length > 0 && <PhaseTimeline data={issueData} />}
-        <LogViewerCard
-          identifier={identifier}
-          isActive={issueData.isActive}
-          phases={issueData.phases}
-          activePhase={activePhase}
-          onPhaseChange={setActivePhase}
-          onDone={() => {
-            fetchIssueData(identifier).then(setIssueData).catch(() => {});
-          }}
-        />
-      </div>
+      <div className="content">{content}</div>
     </>
   );
 }

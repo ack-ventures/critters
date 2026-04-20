@@ -117,6 +117,113 @@ export async function fetchIssueData(identifier: string, signal?: AbortSignal): 
   return res.json() as Promise<IssueData>;
 }
 
+export interface TypeEntry {
+  name: string;
+  builtin: boolean;
+  enabled: boolean;
+  provider: string[];
+  trigger: { label: string; status: string };
+  claimStatus: string | null;
+  concurrency: number;
+  timeoutMinutes: number;
+  costBudget: number | null;
+  phases: Array<{
+    name: string;
+    prompt: string;
+    cli: string;
+    model: string;
+    maxTurns: number;
+    tools: string;
+    permissionMode: string | null;
+    sandbox: string | null;
+  }>;
+  outcomes: Record<string, { status?: string; comment?: boolean; removeLabel?: boolean }>;
+  stats: {
+    total: number;
+    succeeded: number;
+    failed: number;
+    totalCost: number;
+    avgCost: number | null;
+    avgDuration: number | null;
+  };
+}
+
+export async function fetchTypes(signal?: AbortSignal): Promise<{ types: TypeEntry[] }> {
+  const res = await fetch("/api/v1/types", { headers: getAuthHeaders(), signal });
+  if (!res.ok) throw new Error(`types fetch failed: ${res.status}`);
+  return res.json();
+}
+
+export interface RepoEntry {
+  url: string;
+  short: string;
+  projectId: string | null;
+  extraTools: string[];
+  runs14d: number;
+  successRate: number | null;
+  cost14d: number;
+  topType: string | null;
+}
+
+export async function fetchRepos(signal?: AbortSignal): Promise<{ repos: RepoEntry[] }> {
+  const res = await fetch("/api/v1/repos", { headers: getAuthHeaders(), signal });
+  if (!res.ok) throw new Error(`repos fetch failed: ${res.status}`);
+  return res.json();
+}
+
+export interface ModelEntry {
+  name: string;
+  provider: string;
+  runs: number;
+  succeeded: number;
+  totalCost: number;
+  avgCost: number;
+  avgDuration: number | null;
+  usedBy: string[];
+}
+
+export async function fetchModels(signal?: AbortSignal): Promise<{ models: ModelEntry[] }> {
+  const res = await fetch("/api/v1/models", { headers: getAuthHeaders(), signal });
+  if (!res.ok) throw new Error(`models fetch failed: ${res.status}`);
+  return res.json();
+}
+
+export interface HooksResponse {
+  hooks: Array<{ event: string; cmd: string; enabled: boolean }>;
+  webhooks: Array<{ provider: string; endpoint: string; secretSet: boolean }>;
+  tunnel: { domain: string | null } | null;
+}
+
+export async function fetchHooks(signal?: AbortSignal): Promise<HooksResponse> {
+  const res = await fetch("/api/v1/hooks", { headers: getAuthHeaders(), signal });
+  if (!res.ok) throw new Error(`hooks fetch failed: ${res.status}`);
+  return res.json();
+}
+
+export interface EnvStatusResponse {
+  envVars: Array<{ key: string; set: boolean; category: string }>;
+}
+
+export async function fetchEnvStatus(signal?: AbortSignal): Promise<EnvStatusResponse> {
+  const res = await fetch("/api/v1/env-status", { headers: getAuthHeaders(), signal });
+  if (!res.ok) throw new Error(`env-status fetch failed: ${res.status}`);
+  return res.json();
+}
+
+export interface ReleaseEntry {
+  version: string;
+  date: string;
+  current: boolean;
+  body: string;
+  name: string;
+}
+
+export async function fetchReleases(signal?: AbortSignal): Promise<{ current: string; releases: ReleaseEntry[] }> {
+  const res = await fetch("/api/v1/releases", { headers: getAuthHeaders(), signal });
+  if (!res.ok) throw new Error(`releases fetch failed: ${res.status}`);
+  return res.json();
+}
+
 declare global {
   interface Window {
     __CRITTERS__?: {

@@ -283,18 +283,23 @@ export async function startDaemon(): Promise<void> {
     critterTypes: config.critterTypes,
   };
   let healthServer: { port: number; stop: () => void } | null = null;
+  let tunnelHandle: TunnelHandle | null = null;
   const healthContext: {
     trackers: Map<string, IssueTracker>;
     critterTypes: CritterTypeConfig[];
     defaultProvider: string;
     repos: Record<string, { url: string; extraAllowedTools?: string[] }>;
     teamRepos: Record<string, string>;
+    hooks: Record<string, string>;
+    getTunnelUrl: () => string | null;
   } = {
     trackers,
     critterTypes: config.critterTypes,
     defaultProvider: config.provider,
     repos: config.repos,
     teamRepos: config.teamRepos,
+    hooks: (config.hooks ?? {}) as Record<string, string>,
+    getTunnelUrl: () => tunnelHandle?.url ?? null,
   };
   // Start auto-updater
   const autoUpdater = startAutoUpdater(config, spawner, slackNotifier, restartDaemon);
@@ -375,7 +380,6 @@ export async function startDaemon(): Promise<void> {
   }
 
   // Start tunnel if configured
-  let tunnelHandle: TunnelHandle | null = null;
   if (config.tunnel?.enabled && config.daemon.healthPort !== 0) {
     const { startTunnel } = await import("./tunnel.js");
     tunnelHandle = await startTunnel(config.daemon.healthPort, config.tunnel);
