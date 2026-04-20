@@ -11,16 +11,24 @@ import { Topbar } from "./components/Topbar.js";
 import { TypeBreakdownCard } from "./components/TypeBreakdownCard.js";
 import { checkAuth, fetchDashboard } from "./lib/api.js";
 import { usePoll } from "./lib/usePoll.js";
+import { useRoute } from "./lib/useRoute.js";
+import { CostsPage } from "./pages/CostsPage.js";
+import { CritterTypesPage } from "./pages/CritterTypesPage.js";
+import { HistoryPage } from "./pages/HistoryPage.js";
+import { HooksPage } from "./pages/HooksPage.js";
+import { InFlightPage } from "./pages/InFlightPage.js";
+import { LogsPage } from "./pages/LogsPage.js";
+import { ModelsPage } from "./pages/ModelsPage.js";
+import { QueuePage } from "./pages/QueuePage.js";
+import { ReleasesPage } from "./pages/ReleasesPage.js";
+import { ReposPage } from "./pages/ReposPage.js";
+import { TokensPage } from "./pages/TokensPage.js";
 
 const REFRESH_INTERVAL_SEC = 10;
 
 export function App() {
   const typeFilter = window.__CRITTERS__?.typeFilter ?? null;
-  const identifier = window.__CRITTERS__?.identifier
-    ?? (() => {
-      const m = window.location.pathname.match(/^\/dashboard\/(.+)/);
-      return m ? decodeURIComponent(m[1]) : null;
-    })();
+  const parsed = useRoute();
   const [createOpen, setCreateOpen] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL_SEC);
@@ -49,7 +57,6 @@ export function App() {
     };
   }, []);
 
-  // Reset the countdown whenever a fresh payload arrives (identity swap).
   // biome-ignore lint/correctness/useExhaustiveDependencies: `data` is the trigger — the effect doesn't read it.
   useEffect(() => {
     setCountdown(REFRESH_INTERVAL_SEC);
@@ -63,12 +70,13 @@ export function App() {
     return () => clearInterval(id);
   }, [paused]);
 
-  if (identifier) {
+  // Deep link to a specific identifier: show just the LogPage (no sidebar sub-nav churn).
+  if (parsed.route === "logs" && parsed.identifier) {
     return (
       <div className={`app${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
-        {data && <Sidebar data={data} />}
+        {data && <Sidebar data={data} route={parsed.route} />}
         <main className="main" style={data ? undefined : { gridColumn: "1 / -1" }}>
-          <LogPage identifier={identifier} />
+          <LogPage identifier={parsed.identifier} />
         </main>
       </div>
     );
@@ -82,11 +90,67 @@ export function App() {
   }
   if (!data) return null;
 
+  const renderPage = (): React.ReactNode => {
+    switch (parsed.route) {
+      case "dashboard":
+        return (
+          <>
+            {data.allTypes.length >= 2 && (
+              <div className="type-filters">
+                <a href="/dashboard" className={`chip${!typeFilter ? " active" : ""}`}>all</a>
+                {data.allTypes.map((t) => (
+                  <a
+                    key={t}
+                    href={`/dashboard?type=${encodeURIComponent(t)}`}
+                    className={`chip${typeFilter === t ? " active" : ""}`}
+                  >
+                    {t}
+                  </a>
+                ))}
+              </div>
+            )}
+            <KPIStrip data={data} />
+            <LiveHero data={data} />
+            <div className="insights-row">
+              <ThroughputCard data={data} />
+              <TypeBreakdownCard data={data} />
+            </div>
+            <div className="lower-grid">
+              <ActivityTable data={data} />
+            </div>
+          </>
+        );
+      case "inflight":
+        return <InFlightPage data={data} />;
+      case "queue":
+        return <QueuePage data={data} onRefresh={refresh} />;
+      case "history":
+        return <HistoryPage data={data} />;
+      case "logs":
+        return <LogsPage data={data} />;
+      case "types":
+        return <CritterTypesPage />;
+      case "repos":
+        return <ReposPage />;
+      case "hooks":
+        return <HooksPage />;
+      case "tokens":
+        return <TokensPage />;
+      case "costs":
+        return <CostsPage data={data} />;
+      case "models":
+        return <ModelsPage />;
+      case "releases":
+        return <ReleasesPage />;
+    }
+  };
+
   return (
     <div className={`app${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
-      <Sidebar data={data} />
+      <Sidebar data={data} route={parsed.route} />
       <main className="main">
         <Topbar
+          route={parsed.route}
           typeFilter={typeFilter}
           countdown={countdown}
           onOpenCreate={() => setCreateOpen(true)}
@@ -96,29 +160,7 @@ export function App() {
         />
         <div className="content">
           {authRequired && <AuthPrompt onSaved={() => setAuthRequired(false)} />}
-          {data.allTypes.length >= 2 && (
-            <div className="type-filters">
-              <a href="/dashboard" className={`chip${!typeFilter ? " active" : ""}`}>all</a>
-              {data.allTypes.map((t) => (
-                <a
-                  key={t}
-                  href={`/dashboard?type=${encodeURIComponent(t)}`}
-                  className={`chip${typeFilter === t ? " active" : ""}`}
-                >
-                  {t}
-                </a>
-              ))}
-            </div>
-          )}
-          <KPIStrip data={data} />
-          <LiveHero data={data} />
-          <div className="insights-row">
-            <ThroughputCard data={data} />
-            <TypeBreakdownCard data={data} />
-          </div>
-          <div className="lower-grid">
-            <ActivityTable data={data} />
-          </div>
+          {renderPage()}
         </div>
       </main>
       <CreateModal
