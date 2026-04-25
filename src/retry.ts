@@ -1,4 +1,5 @@
 import { log } from "./logger.js";
+import { withCappedJitter } from "./task-retry.js";
 import { sleep } from "./utils.js";
 
 export interface RetryOptions {
@@ -34,10 +35,7 @@ export async function withRetry<T>(
       if (attempt === maxRetries) break;
       if (shouldRetry && !shouldRetry(error)) throw error;
 
-      let delay = Math.min(baseDelayMs * 2 ** attempt, maxDelayMs);
-      if (jitter) {
-        delay += Math.random() * 0.25 * delay;
-      }
+      const delay = withCappedJitter(baseDelayMs * 2 ** attempt, maxDelayMs, jitter);
 
       onRetry?.(error, attempt, delay);
       log(`Retry ${attempt + 1}/${maxRetries} in ${Math.round(delay)}ms...`);

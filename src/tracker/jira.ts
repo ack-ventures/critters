@@ -99,14 +99,22 @@ export class JiraTracker implements IssueTracker {
 
   async findIssueByIdentifier(identifier: string): Promise<IssueTrackerIssue | null> {
     try {
-      const resp = await this.request(`/issue/${encodeURIComponent(identifier)}?fields=status,labels,project`);
+      const resp = await this.request(`/issue/${encodeURIComponent(identifier)}?fields=summary,description,status,labels,project,updated&expand=renderedFields`);
       const issue = (await resp.json()) as JiraIssue;
+      const description = extractPlainText(issue.renderedFields?.description ?? "") ||
+        adfToPlainText(issue.fields.description);
       return {
         id: issue.id,
         identifier: issue.key,
+        title: issue.fields.summary,
+        description,
         statusName: issue.fields.status?.name ?? "Unknown",
         labels: issue.fields.labels ?? [],
+        group: issue.fields.project.name,
         groupId: issue.fields.project.key,
+        projectId: issue.fields.project.id,
+        issueUrl: `https://${this.host}/browse/${issue.key}`,
+        ...(issue.fields.updated ? { updatedAt: new Date(issue.fields.updated) } : {}),
       };
     } catch {
       return null;

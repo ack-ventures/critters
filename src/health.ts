@@ -3,6 +3,7 @@ import { checkAuth } from "./auth.js";
 import { getCliAdapter } from "./cli/registry.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import { renderDashboard } from "./dashboard/index.js";
+import { isDashboardApiPath } from "./health-routes.js";
 import { phaseFileTag, readLogTail, renderReadableLines, resolveCliAdapterForLog, resolveLogFile, resolveWorkDirForIdentifier } from "./log-resolver.js";
 import { formatError, log, logError } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
@@ -88,6 +89,8 @@ export function startHealthServer(
     port,
     async fetch(req) {
       const url = new URL(req.url);
+      const protectedResp = checkDashboardApiAuth(req, url.pathname, dashboardToken);
+      if (protectedResp) return protectedResp;
 
       if (url.pathname === "/healthz") {
         const status = getStatus();
@@ -208,7 +211,7 @@ export function startHealthServer(
 
         // Use setTimeout to let the HTTP response flush before process replacement
         setTimeout(() => {
-          triggers.triggerRestart!();
+          triggers.triggerRestart?.();
         }, 250);
 
         return Response.json({ ok: true, message: "Restarting..." });
@@ -225,7 +228,7 @@ export function startHealthServer(
         }
 
         setTimeout(() => {
-          triggers.triggerStop!();
+          triggers.triggerStop?.();
         }, 250);
 
         return Response.json({ ok: true, message: "Stopping..." });
@@ -737,9 +740,16 @@ export function startHealthServer(
   log(`Health server listening on port ${server.port}`);
 
   return {
-    port: server.port!,
+    port: server.port ?? port,
     stop: () => server.stop(true),
   };
+}
+
+function checkDashboardApiAuth(req: Request, pathname: string, dashboardToken: string | undefined): Response | null {
+  if (isDashboardApiPath(pathname)) {
+    return checkAuth(req, dashboardToken);
+  }
+  return null;
 }
 
 function computeMetricsSummary(): { totalTasks: number; succeeded: number; failed: number; totalCost: number; avgCost: number } {

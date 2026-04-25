@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { withRetry } from "../retry.js";
+import { withCappedJitter } from "../task-retry.js";
 
 // Mock sleep to avoid real delays and capture delay values
 const sleepCalls: number[] = [];
-const originalSleep = await import("../utils.js").then((m) => m.sleep);
 
 mock.module("../utils.js", () => ({
   ...require("../utils.js"),
@@ -145,6 +145,10 @@ describe("withRetry", () => {
       expect(sleepCalls[i]).toBeGreaterThanOrEqual(baseDelay);
       expect(sleepCalls[i]).toBeLessThanOrEqual(baseDelay * 1.25);
     }
+  });
+
+  test("jitter never exceeds maxDelayMs", () => {
+    expect(withCappedJitter(10_000, 5_000, true)).toBeLessThanOrEqual(5_000);
   });
 
   test("jitter disabled gives exact delays", async () => {

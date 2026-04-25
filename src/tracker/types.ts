@@ -3,9 +3,16 @@ import type { TriggerConfig } from "../critter-type.js";
 export interface IssueTrackerIssue {
   id: string;
   identifier: string;
+  title?: string;
+  description?: string;
   statusName: string;
+  statusType?: string;
   labels: string[];
+  group?: string;
   groupId: string;
+  projectId?: string;
+  issueUrl?: string;
+  updatedAt?: Date;
 }
 
 export interface IssueTracker {

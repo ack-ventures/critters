@@ -5,8 +5,8 @@ import { escapeHtml } from "./helpers.js";
 /**
  * Renders the HTML shell for the React dashboard. The shell inlines the
  * bundled client JS + CSS so the daemon binary can serve the app as a single
- * response with no separate asset routes. Server-side state (token, filter)
- * is passed to the client via `window.__CRITTERS__`.
+ * response with no separate asset routes. Server-side route state is passed
+ * to the client via `window.__CRITTERS__`.
  *
  * `status` and `uptime` are accepted for backwards compatibility with the
  * previous signature; they are not used at render time because the client
@@ -17,11 +17,10 @@ export function renderDashboard(
   _status: HealthStatus,
   _uptime: number,
   typeFilter?: string,
-  dashboardToken?: string,
+  _dashboardToken?: string,
   identifier?: string,
 ): string {
   const bootstrap = JSON.stringify({
-    token: dashboardToken ?? null,
     typeFilter: typeFilter ?? null,
     identifier: identifier ?? null,
   });
