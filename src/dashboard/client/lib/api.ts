@@ -1,8 +1,21 @@
 import type { DashboardData } from "../../dashboard-data.js";
 
 export function getAuthHeaders(): Record<string, string> {
-  const token = window.__CRITTERS__?.token ?? localStorage.getItem("critters-token");
+  const token = localStorage.getItem("critters-token");
   return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export function rememberAuthToken(token: string): void {
+  localStorage.setItem("critters-token", token);
+  const secure = location.protocol === "https:" ? "; Secure" : "";
+  // biome-ignore lint/suspicious/noDocumentCookie: EventSource cannot send Authorization headers, so log streams use a same-origin cookie.
+  document.cookie = `critters_token=${encodeURIComponent(token)}; Path=/; SameSite=Strict${secure}`;
+}
+
+export function clearAuthToken(): void {
+  localStorage.removeItem("critters-token");
+  // biome-ignore lint/suspicious/noDocumentCookie: Keep the EventSource auth cookie in sync with local token state.
+  document.cookie = "critters_token=; Path=/; Max-Age=0; SameSite=Strict";
 }
 
 export async function fetchDashboard(typeFilter: string | null, signal?: AbortSignal): Promise<DashboardData> {
@@ -13,7 +26,7 @@ export async function fetchDashboard(typeFilter: string | null, signal?: AbortSi
 }
 
 export async function fetchLogTail(identifier: string, signal?: AbortSignal): Promise<string> {
-  const res = await fetch(`/api/logs/${encodeURIComponent(identifier)}?tail=40`, { signal });
+  const res = await fetch(`/api/logs/${encodeURIComponent(identifier)}?tail=40`, { headers: getAuthHeaders(), signal });
   if (!res.ok) throw new Error(`log fetch failed: ${res.status}`);
   return res.text();
 }
@@ -29,7 +42,7 @@ export interface MetadataResponse {
 }
 
 export async function fetchMetadata(): Promise<MetadataResponse> {
-  const res = await fetch("/api/v1/metadata");
+  const res = await fetch("/api/v1/metadata", { headers: getAuthHeaders() });
   if (!res.ok) throw new Error(`metadata fetch failed: ${res.status}`);
   return res.json() as Promise<MetadataResponse>;
 }
@@ -56,7 +69,7 @@ export async function createIssue(body: CreateIssueBody): Promise<CreateIssueRes
     body: JSON.stringify(body),
   });
   if (res.status === 401) {
-    localStorage.removeItem("critters-token");
+    clearAuthToken();
     throw new Error("Unauthorized");
   }
   return res.json() as Promise<CreateIssueResponse>;

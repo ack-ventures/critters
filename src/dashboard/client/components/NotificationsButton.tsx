@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getAuthHeaders } from "../lib/api.js";
 
 export function NotificationsButton() {
   const [enabled, setEnabled] = useState(false);
@@ -14,7 +15,7 @@ export function NotificationsButton() {
     let cancelled = false;
     const lastSeen = localStorage.getItem("critters-notif-last-seen") ?? new Date().toISOString();
 
-    fetch("/metrics")
+    fetch("/metrics", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((events: Array<Record<string, unknown>>) => {
         if (cancelled) return;

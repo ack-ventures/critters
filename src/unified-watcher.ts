@@ -3,7 +3,7 @@ import type { CritterTypeConfig } from "./critter-type.js";
 import { log, logError, logTask, logTaskError } from "./logger.js";
 import { recordMetric } from "./metrics.js";
 import { parseBaseBranch, resolveRepoUrl, resolveRepoUrlWithSource } from "./prompt.js";
-import type { IssueTracker, TrackerTask } from "./tracker/types.js";
+import type { IssueTracker, IssueTrackerIssue, TrackerTask } from "./tracker/types.js";
 import type { Config } from "./types.js";
 import type { UnifiedSpawner } from "./unified-spawner.js";
 import { getTracker as getTrackerUtil, sleep } from "./utils.js";
@@ -120,8 +120,10 @@ export class UnifiedWatcher {
 
     for (const critterType of this.config.critterTypes) {
       const tracker = this.getTracker(critterType);
-      const issues = await tracker.findIssues(critterType.trigger);
-      const matchingTask = issues.find((t) => t.identifier === identifier);
+      const singleIssue = await tracker.findIssueByIdentifier(identifier);
+      if (!singleIssue || !this.issueMatchesTrigger(singleIssue, critterType.trigger)) continue;
+
+      const matchingTask = this.issueToTask(singleIssue);
       if (!matchingTask) continue;
 
       if (await this.tryDispatch(matchingTask, critterType, tracker)) {
@@ -130,6 +132,28 @@ export class UnifiedWatcher {
     }
 
     return dispatched;
+  }
+
+  private issueMatchesTrigger(issue: IssueTrackerIssue, trigger: CritterTypeConfig["trigger"]): boolean {
+    if (!issue.labels.includes(trigger.label)) return false;
+    if (trigger.statusType && issue.statusType) return issue.statusType === trigger.statusType;
+    return issue.statusName === trigger.status;
+  }
+
+  private issueToTask(issue: IssueTrackerIssue): TrackerTask {
+    return {
+      id: issue.id,
+      identifier: issue.identifier,
+      title: issue.title ?? issue.identifier,
+      description: issue.description ?? "",
+      repoUrl: "",
+      group: issue.group ?? issue.groupId,
+      groupId: issue.groupId,
+      projectId: issue.projectId,
+      labels: issue.labels,
+      issueUrl: issue.issueUrl,
+      updatedAt: issue.updatedAt,
+    };
   }
 
   async dryRunPoll(): Promise<{ total: number; wouldPickUp: number; blocked: number; skipped: number }> {
@@ -293,6 +317,18 @@ export class UnifiedWatcher {
       const enriched = await this.enrichReviewTask(task, tracker);
       if (!enriched) {
         this.activeIssueIds.delete(task.id);
+        return false;
+      }
+    }
+
+    // Persist the claim before queueing so a daemon restart does not leave a
+    // queued task in the trigger status and eligible for duplicate pickup.
+    if (critterType.claimStatus) {
+      try {
+        await tracker.updateStatus(task.id, critterType.claimStatus, task.groupId, task.identifier);
+      } catch (err) {
+        this.activeIssueIds.delete(task.id);
+        logTaskError(task.identifier, `Failed to claim issue: ${err}`);
         return false;
       }
     }

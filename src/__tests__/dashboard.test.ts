@@ -43,17 +43,18 @@ describe("renderDashboard (shell HTML)", () => {
     expect(html).toContain("</html>");
   });
 
-  test("injects bootstrap config with token and filter", () => {
+  test("injects bootstrap config with filter but not token", () => {
     const html = renderDashboard("", defaultStatus(), 0, "create", "secret-token");
     expect(html).toContain("window.__CRITTERS__");
     expect(html).toContain('"typeFilter":"create"');
-    expect(html).toContain('"token":"secret-token"');
+    expect(html).not.toContain("secret-token");
+    expect(html).not.toContain('"token"');
   });
 
-  test("omits token when not provided", () => {
+  test("omits token from bootstrap config", () => {
     const html = renderDashboard("", defaultStatus(), 0);
-    expect(html).toContain('"token":null');
     expect(html).toContain('"typeFilter":null');
+    expect(html).not.toContain('"token"');
   });
 
   test("no-script fallback preserves type filter in redirect URL", () => {

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { rememberAuthToken } from "../lib/api.js";
 
 interface AuthPromptProps {
   onSaved: () => void;
@@ -10,7 +11,7 @@ export function AuthPrompt({ onSaved }: AuthPromptProps) {
   function save() {
     const trimmed = token.trim();
     if (!trimmed) return;
-    localStorage.setItem("critters-token", trimmed);
+    rememberAuthToken(trimmed);
     onSaved();
   }
 

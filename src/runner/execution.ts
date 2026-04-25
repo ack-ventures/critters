@@ -176,6 +176,24 @@ function formatStatsSection(stats: { name: string; durationMs: number; costUsd?:
   return lines.join("\n");
 }
 
+const STATS_START = "<!-- critters:stats:start -->";
+const STATS_END = "<!-- critters:stats:end -->";
+const PLAN_START = "<!-- critters:plan:start -->";
+const PLAN_END = "<!-- critters:plan:end -->";
+
+export function replaceManagedSection(body: string, start: string, end: string, content: string): string {
+  const section = `${start}\n${content}\n${end}`;
+  const pattern = new RegExp(`${escapeRegExp(start)}[\\s\\S]*?${escapeRegExp(end)}`);
+  if (pattern.test(body)) {
+    return body.replace(pattern, section);
+  }
+  return `${body.trimEnd()}\n\n${section}`.trim();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export async function updatePrWithPlan(
   workDir: string,
   prUrl: string,
@@ -190,7 +208,7 @@ export async function updatePrWithPlan(
     // Truncate very long plans to keep PR body manageable
     const MAX_PLAN_LENGTH = 10000;
     if (planContent.length > MAX_PLAN_LENGTH) {
-      planContent = planContent.slice(0, MAX_PLAN_LENGTH) + "\n\n*(plan truncated)*";
+      planContent = `${planContent.slice(0, MAX_PLAN_LENGTH)}\n\n*(plan truncated)*`;
     }
   }
 
@@ -219,10 +237,10 @@ export async function updatePrWithPlan(
 
   let newBody = currentBody;
   if (phaseStats && phaseStats.length > 0) {
-    newBody += "\n\n" + formatStatsSection(phaseStats);
+    newBody = replaceManagedSection(newBody, STATS_START, STATS_END, formatStatsSection(phaseStats));
   }
   if (planContent) {
-    newBody += "\n\n## Plan\n\n" + planContent;
+    newBody = replaceManagedSection(newBody, PLAN_START, PLAN_END, `## Plan\n\n${planContent}`);
   }
 
   const { code } = await runCommand(

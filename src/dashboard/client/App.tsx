@@ -9,7 +9,7 @@ import { Sidebar } from "./components/Sidebar.js";
 import { ThroughputCard } from "./components/ThroughputCard.js";
 import { Topbar } from "./components/Topbar.js";
 import { TypeBreakdownCard } from "./components/TypeBreakdownCard.js";
-import { checkAuth, fetchDashboard } from "./lib/api.js";
+import { checkAuth, fetchDashboard, rememberAuthToken } from "./lib/api.js";
 import { usePoll } from "./lib/usePoll.js";
 import { useRoute } from "./lib/useRoute.js";
 import { CostsPage } from "./pages/CostsPage.js";
@@ -48,7 +48,10 @@ export function App() {
     let live = true;
     checkAuth().then((required) => {
       if (!live) return;
-      if (required && !window.__CRITTERS__?.token && !localStorage.getItem("critters-token")) {
+      const storedToken = localStorage.getItem("critters-token");
+      if (required && storedToken) {
+        rememberAuthToken(storedToken);
+      } else if (required) {
         setAuthRequired(true);
       }
     });

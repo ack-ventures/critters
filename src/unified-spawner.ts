@@ -31,6 +31,7 @@ import {
   SlackNotifier,
 } from "./slack.js";
 import { applyOutcome, type TaskResult } from "./task-outcome.js";
+import { isTransientTaskError, withCappedJitter } from "./task-retry.js";
 import { addPrTimeoutComment, buildLogFileList, salvagePartialProgress } from "./task-salvage.js";
 import type { IssueTracker, TrackerTask } from "./tracker/types.js";
 import type { ActiveCritterDetail, Config, QueuedCritterDetail, SpawnResult } from "./types.js";
@@ -59,8 +60,6 @@ export class UnifiedSpawner {
   private activeCritterMap = new Map<string, ActiveCritterDetail>();
   private slackNotifier: SlackNotifier;
   private retryCounts = new Map<string, number>();
-
-  private static TRANSIENT_ERROR_RE = /Could not resolve host|Connection refused|Connection timed out|Connection reset|fatal: unable to access|fatal: Could not read from remote|SSL_ERROR|TLS handshake|rate limit|429|500 Internal Server Error|502 Bad Gateway|503 Service|504 Gateway|ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|shallow file has changed/i;
 
   constructor(config: Config, trackers: Map<string, IssueTracker>) {
     this.config = config;
@@ -96,7 +95,7 @@ export class UnifiedSpawner {
   }
 
   isTransientError(error: string): boolean {
-    return UnifiedSpawner.TRANSIENT_ERROR_RE.test(error);
+    return isTransientTaskError(error);
   }
 
   private shouldAutoRetry(taskId: string, error: string, timedOut: boolean): boolean {
@@ -181,10 +180,9 @@ export class UnifiedSpawner {
 
   async dispatch(task: TrackerTask, critterType: CritterTypeConfig): Promise<TaskResult> {
     return new Promise((resolve) => {
-      if (!this.queues.has(critterType.name)) {
-        this.queues.set(critterType.name, []);
-      }
-      this.queues.get(critterType.name)!.push({ task, critterType, resolve, enqueuedAt: Date.now() });
+      const queue = this.queues.get(critterType.name) ?? [];
+      this.queues.set(critterType.name, queue);
+      queue.push({ task, critterType, resolve, enqueuedAt: Date.now() });
       logTask(task.identifier, `Task queued [${critterType.name}] (queue: ${this.getQueueSize(critterType.name)}, running: ${this.getActiveCount(critterType.name)})`);
       this.processQueue(critterType.name);
     });
@@ -307,11 +305,6 @@ export class UnifiedSpawner {
       // Ensure work dir base exists
       if (!existsSync(this.config.daemon.workDir)) {
         mkdirSync(this.config.daemon.workDir, { recursive: true });
-      }
-
-      // Claim status: move issue out of trigger status immediately to prevent duplicate dispatch
-      if (critterType.claimStatus) {
-        await tracker.updateStatus(task.id, critterType.claimStatus, task.groupId, task.identifier);
       }
 
       // Post picking-up comments
@@ -816,7 +809,7 @@ export class UnifiedSpawner {
       return this.runTask(task, critterType);
     }
 
-    let lastResult: TaskResult;
+    let lastResult: TaskResult | undefined;
     for (let attempt = 0; attempt <= autoRetry.maxRetries; attempt++) {
       lastResult = await this.runTask(task, critterType);
 
@@ -830,8 +823,7 @@ export class UnifiedSpawner {
       // Retryable transient failure — compute exponential backoff delay
       const baseMs = autoRetry.baseDelaySeconds * 1000;
       const maxMs = autoRetry.maxDelaySeconds * 1000;
-      let delayMs = Math.min(baseMs * (2 ** attempt), maxMs);
-      delayMs += Math.random() * 0.25 * delayMs; // jitter
+      const delayMs = withCappedJitter(baseMs * (2 ** attempt), maxMs);
 
       this.retryCounts.set(task.id, attempt + 1);
       const nextAttempt = attempt + 2;
@@ -849,7 +841,7 @@ export class UnifiedSpawner {
     }
 
     this.retryCounts.delete(task.id);
-    return lastResult!;
+    return lastResult ?? { success: false, error: "Auto-retry did not produce a task result" };
   }
 
   private async handleCreateSuccess(
@@ -1112,4 +1104,3 @@ export interface KillResult {
   critterType: string;
   startedAt: number;
 }
-

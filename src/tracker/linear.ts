@@ -308,13 +308,21 @@ export class LinearTracker implements IssueTracker {
     const state = await issue.state;
     const labels = await issue.labels();
     const team = await issue.team;
+    const project = await issue.project;
 
     return {
       id: issue.id,
       identifier: issue.identifier,
+      title: issue.title,
+      description: issue.description ?? "",
       statusName: state?.name ?? "Unknown",
+      statusType: state?.type,
       labels: labels.nodes.map((l) => l.name),
+      group: team?.name ?? "",
       groupId: team?.id ?? "",
+      projectId: project?.id,
+      issueUrl: issue.url,
+      updatedAt: issue.updatedAt,
     };
   }
 

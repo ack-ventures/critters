@@ -15,6 +15,14 @@ describe("checkAuth", () => {
     expect(checkAuth(req, "my-secret-token")).toBeNull();
   });
 
+  test("returns null when critters_token cookie matches token", () => {
+    const req = new Request("http://localhost/poll", {
+      method: "POST",
+      headers: { Cookie: "other=value; critters_token=my-secret-token" },
+    });
+    expect(checkAuth(req, "my-secret-token")).toBeNull();
+  });
+
   test("returns 401 when Authorization header is missing", () => {
     const req = new Request("http://localhost/poll", { method: "POST" });
     const resp = checkAuth(req, "my-secret-token");
