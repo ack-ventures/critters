@@ -94,6 +94,9 @@ docker compose up -d
 docker compose logs -f
 
 # Dashboard at http://localhost:3847
+
+# Smoke-test: verify the container is healthy
+curl -f http://localhost:3847/healthz
 ```
 
 The Docker image includes all runtime dependencies (Claude Code CLI, `gh`, `git`, `jq`).
