@@ -159,6 +159,8 @@ docker compose logs -f
 
 The image includes all runtime dependencies (Claude Code CLI, Codex CLI, `gh`, `git`, `jq`, `ngrok`). It runs with `--no-tmux --json-logs --skip-update`.
 
+If you run Codex phases inside an already sandboxed Docker or VM environment and Codex cannot create its own sandbox namespaces (for example, `bwrap: No permissions to create a new namespace`), set `permissionMode: bypassPermissions` on the affected Codex phase. Use this only when the surrounding container or VM is already the sandbox boundary.
+
 **Volume mounts** (configured in `docker-compose.yaml`):
 - `~/.critters` — config, metrics, state
 - `~/.ssh` — SSH keys for git clone (read-only)
