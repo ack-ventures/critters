@@ -259,6 +259,16 @@ export function validateConfigFile(configPath?: string): { errors: string[]; war
       ) {
         errors.push(`Invalid permissionMode "${phase.permissionMode}" (type "${ct.name}", phase "${phase.name}")`);
       }
+      const phaseCli = phase.cli ?? ct.cli ?? ((yaml.cli as string | undefined) ?? "claude");
+      if (
+        phaseCli === "codex" &&
+        phase.permissionMode !== undefined &&
+        !["default", "auto", "bypassPermissions", "dontAsk"].includes(phase.permissionMode)
+      ) {
+        errors.push(
+          `Unsupported Codex permissionMode "${phase.permissionMode}" (type "${ct.name}", phase "${phase.name}"). Use "auto" for --full-auto or "bypassPermissions" for the no-sandbox bypass.`,
+        );
+      }
       if (phase.skills) {
         for (const skillRef of phase.skills) {
           const filePath = skillRef.startsWith("~")

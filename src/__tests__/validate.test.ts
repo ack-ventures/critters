@@ -338,6 +338,50 @@ critterTypes:
     expect(result.errors.some((e) => e.includes("permissionMode"))).toBe(false);
   });
 
+  test("valid Codex auto permissionMode does not produce error", () => {
+    const path = writeYaml(`
+defaultAllowedTools:
+  - "Read"
+critterTypes:
+  create:
+    trigger: { label: "Critter", status: "Todo" }
+    phases:
+      - name: planning
+        prompt: builtin:planning
+        cli: codex
+        model: gpt-5.5
+        maxTurns: 50
+        permissionMode: auto
+    outcomes:
+      success: { status: "Done" }
+      failure: { status: "Critter Failed" }
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors.some((e) => e.includes("permissionMode"))).toBe(false);
+  });
+
+  test("unsupported Codex permissionMode collects error", () => {
+    const path = writeYaml(`
+defaultAllowedTools:
+  - "Read"
+critterTypes:
+  create:
+    trigger: { label: "Critter", status: "Todo" }
+    phases:
+      - name: planning
+        prompt: builtin:planning
+        cli: codex
+        model: gpt-5.5
+        maxTurns: 50
+        permissionMode: plan
+    outcomes:
+      success: { status: "Done" }
+      failure: { status: "Critter Failed" }
+`);
+    const result = validateConfigFile(path);
+    expect(result.errors.some((e) => e.includes('Unsupported Codex permissionMode "plan"'))).toBe(true);
+  });
+
   test("invalid top-level cli collects error", () => {
     const path = writeYaml(`
 defaultAllowedTools:

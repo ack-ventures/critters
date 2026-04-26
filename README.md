@@ -235,7 +235,7 @@ Settings live in `critters.config.yaml`:
 | `maxReviewTurns` | 30 | Max turns per review |
 | `cli` | "claude" | Default CLI adapter: `"claude"` or `"codex"` |
 | `phases[].sandbox` | — | Optional phase-level sandbox override for adapters that support it, e.g. Codex `read-only`, `workspace-write`, or `danger-full-access` |
-| `phases[].permissionMode` | — | Optional Claude CLI `--permission-mode` override (`default`, `auto`, `acceptEdits`, `bypassPermissions`, `plan`, `dontAsk`). Only honored by the Claude CLI adapter. |
+| `phases[].permissionMode` | — | Optional CLI approval override. Claude forwards this as `--permission-mode` (`default`, `auto`, `acceptEdits`, `bypassPermissions`, `plan`, `dontAsk`). Codex supports `auto` (`--full-auto`), `bypassPermissions` (`--dangerously-bypass-approvals-and-sandbox`), `default`, and `dontAsk`. |
 | `autoRetry` | — | Auto-retry config: `{ maxRetries, baseDelaySeconds, maxDelaySeconds }` |
 | `circuitBreaker` | — | Circuit breaker config: `{ failureThreshold, maxBackoffMinutes }` |
 | `mcpConfig` | — | Path(s) to MCP config JSON file(s), applied to all critters |
@@ -283,7 +283,7 @@ Critters preserves the existing `tools` config for both adapters. Claude enforce
 
 For Codex phases that need outbound GitHub access through `gh`, set a phase `sandbox` explicitly. In practice, PR review and review-fixing phases often need `danger-full-access`, because Codex `workspace-write` can block the GitHub API calls that `gh` relies on.
 
-Phases can also set a `permissionMode` to control Claude's tool approval behavior:
+Phases can also set a `permissionMode` to control CLI approval behavior. For Claude phases, `auto` is forwarded directly as `--permission-mode auto`:
 
 ```yaml
 critterTypes:
@@ -297,7 +297,24 @@ critterTypes:
         permissionMode: auto
 ```
 
-This forwards `--permission-mode auto` to the Claude CLI, letting Claude's auto-classifier approve reasonable tool calls outside the explicit allowlist. Only honored by the Claude CLI adapter; Codex phases ignore this field.
+This lets Claude's auto-classifier approve reasonable tool calls outside the explicit allowlist.
+
+For Codex phases, `permissionMode: auto` emits Codex's native `--full-auto` flag while still preserving the configured sandbox:
+
+```yaml
+critterTypes:
+  create:
+    phases:
+      - name: planning
+        prompt: builtin:planning
+        cli: codex
+        model: gpt-5.5
+        maxTurns: 50
+        tools: readonly
+        permissionMode: auto
+```
+
+If a daemon runs inside an external container or VM sandbox where Codex's own sandbox cannot create namespaces, set `permissionMode: bypassPermissions` on that Codex phase. Critters emits `--dangerously-bypass-approvals-and-sandbox` for that mode, so only use it when the surrounding runtime already provides the execution boundary.
 
 ### Hooks
 

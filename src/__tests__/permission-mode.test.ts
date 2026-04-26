@@ -32,7 +32,7 @@ describe("permissionMode in buildCommand", () => {
     expect(cmd.script).not.toContain("--permission-mode");
   });
 
-  test("Codex adapter ignores permissionMode", () => {
+  test("Codex adapter maps auto permissionMode to full-auto", () => {
     const adapter = new CodexAdapter();
     const cmd = adapter.buildCommand({
       prompt: "test",
@@ -45,5 +45,6 @@ describe("permissionMode in buildCommand", () => {
       permissionMode: "auto",
     });
     expect(cmd.script).not.toContain("--permission-mode");
+    expect(cmd.script).toContain("--full-auto");
   });
 });
