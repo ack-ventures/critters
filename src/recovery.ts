@@ -1,9 +1,15 @@
 import type { CritterTypeConfig, TriggerConfig } from "./critter-type.js";
 import { formatError, log, logError } from "./logger.js";
-import type { IssueTracker } from "./tracker/types.js";
+import type { IssueTracker, TrackerTask } from "./tracker/types.js";
 import type { Config } from "./types.js";
 import type { UnifiedSpawner } from "./unified-spawner.js";
 import { getTracker } from "./utils.js";
+
+interface RecoveryCandidate {
+  critterType: CritterTypeConfig;
+  issue: TrackerTask;
+  tracker: IssueTracker;
+}
 
 /**
  * Recover orphaned issues that were left in claimStatus after a daemon crash.
@@ -15,6 +21,7 @@ export async function recoverOrphanedIssues(
   config: Config,
   trackers: Map<string, IssueTracker>,
   spawner: UnifiedSpawner,
+  startupActiveIdentifiers: Set<string> = new Set(),
 ): Promise<void> {
   // Track recovered issue IDs across types to avoid double-processing
   // when multiple types share the same claimStatus
@@ -25,6 +32,9 @@ export async function recoverOrphanedIssues(
   const activeIdentifiers = new Set(
     spawner.getActiveDetails().map((d) => d.identifier),
   );
+  for (const identifier of startupActiveIdentifiers) {
+    activeIdentifiers.add(identifier);
+  }
   const queuedIdentifiers = new Set(
     spawner.getQueuedDetails().map((d) => d.identifier),
   );
@@ -45,54 +55,57 @@ export async function recoverOrphanedIssues(
         tracker = getTracker(critterType, config, trackers);
       } catch (err) {
         logError(`Orphan recovery skipped for type "${critterType.name}": ${formatError(err)}`);
-        return 0;
+        return [];
       }
+
+      const claimStatus = critterType.claimStatus;
+      if (!claimStatus) return [];
 
       const orphanTrigger: TriggerConfig = {
         label: critterType.trigger.label,
-        status: critterType.claimStatus!,
+        status: claimStatus,
         assignee: critterType.trigger.assignee,
       };
 
-      let issues;
+      let issues: TrackerTask[];
       try {
         issues = await tracker.findIssues(orphanTrigger);
       } catch (err) {
         logError(`Orphan recovery failed for type "${critterType.name}": ${formatError(err)}`);
-        return 0;
+        return [];
       }
 
-      let typeRecovered = 0;
-      for (const issue of issues) {
-        // Skip if already recovered by another type with same claimStatus
-        if (recoveredIds.has(issue.id)) continue;
-
-        // Skip if currently active or queued
-        if (activeIdentifiers.has(issue.identifier)) continue;
-        if (queuedIdentifiers.has(issue.identifier)) continue;
-
-        try {
-          await tracker.updateStatus(
-            issue.id,
-            critterType.trigger.status,
-            issue.groupId,
-            issue.identifier,
-          );
-          recoveredIds.add(issue.id);
-          typeRecovered++;
-          log(`Recovered orphaned issue ${issue.identifier} from ${critterType.claimStatus} → ${critterType.trigger.status}`);
-        } catch (err) {
-          logError(`Failed to recover issue ${issue.identifier}: ${formatError(err)}`);
-        }
-      }
-
-      return typeRecovered;
+      return issues.map((issue) => ({ critterType, issue, tracker }));
     }),
   );
 
+  const candidates: RecoveryCandidate[] = [];
   for (const result of results) {
     if (result.status === "fulfilled") {
-      recoveredCount += result.value;
+      candidates.push(...result.value);
+    }
+  }
+
+  for (const { critterType, issue, tracker } of candidates) {
+    // Skip if already recovered by another type with same claimStatus.
+    if (recoveredIds.has(issue.id)) continue;
+
+    // Skip if currently active or queued.
+    if (activeIdentifiers.has(issue.identifier)) continue;
+    if (queuedIdentifiers.has(issue.identifier)) continue;
+
+    recoveredIds.add(issue.id);
+    try {
+      await tracker.updateStatus(
+        issue.id,
+        critterType.trigger.status,
+        issue.groupId,
+        issue.identifier,
+      );
+      recoveredCount++;
+      log(`Recovered orphaned issue ${issue.identifier} from ${critterType.claimStatus} -> ${critterType.trigger.status}`);
+    } catch (err) {
+      logError(`Failed to recover issue ${issue.identifier}: ${formatError(err)}`);
     }
   }
 

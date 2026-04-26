@@ -14,6 +14,7 @@ import { startHealthServer } from "./health.js";
 import { enableJsonLogs, formatError, initFileLogging, log, logError } from "./logger.js";
 import { initMetrics, pruneMetrics } from "./metrics.js";
 import { checkPrerequisites } from "./prerequisites.js";
+import { recoverOrphanedIssues } from "./recovery.js";
 import { SlackNotifier } from "./slack.js";
 import { createTracker } from "./tracker/index.js";
 import type { IssueTracker } from "./tracker/types.js";
@@ -22,7 +23,6 @@ import type { Config } from "./types.js";
 import { UnifiedSpawner } from "./unified-spawner.js";
 import { UnifiedWatcher } from "./unified-watcher.js";
 import { checkForUpdate, fetchLatestVersion, getDisplayVersion } from "./updater.js";
-import { recoverOrphanedIssues } from "./recovery.js";
 import { formatDuration, runCommand, shellEscape } from "./utils.js";
 import { VERSION } from "./version.js";
 
@@ -75,7 +75,7 @@ export async function startDaemon(): Promise<void> {
   if (noTmux && existsSync(pidFile)) {
     try {
       const oldPid = parseInt(readFileSync(pidFile, "utf-8").trim(), 10);
-      if (!isNaN(oldPid) && oldPid !== process.pid) {
+      if (!Number.isNaN(oldPid) && oldPid !== process.pid) {
         try {
           process.kill(oldPid, 0); // Check if process exists
           // Process exists — another daemon may be running
@@ -155,7 +155,7 @@ export async function startDaemon(): Promise<void> {
   // so only the needed provider's tracker is instantiated)
   if (typeFilter) {
     const match = config.critterTypes.filter(
-      (ct) => ct.name === typeFilter || ct.name.startsWith(typeFilter + ":")
+      (ct) => ct.name === typeFilter || ct.name.startsWith(`${typeFilter}:`)
     );
     if (match.length === 0) {
       const baseNames = [...new Set(config.critterTypes.map((ct) => ct.name.split(":")[0]))];
@@ -163,7 +163,7 @@ export async function startDaemon(): Promise<void> {
         ? baseNames.join(", ")
         : baseNames.map((base) => {
             const variants = config.critterTypes
-              .filter((ct) => ct.name === base || ct.name.startsWith(base + ":"))
+              .filter((ct) => ct.name === base || ct.name.startsWith(`${base}:`))
               .map((ct) => ct.name);
             return variants.length > 1 ? `${base} (${variants.join(", ")})` : base;
           }).join(", ");
@@ -254,17 +254,21 @@ export async function startDaemon(): Promise<void> {
 
   // Clean up stale tmux panes from previous daemon runs
   if (!noTmux) {
-    const { cleanupStalePanes, killStalePanes } = await import("./claude.js");
-    const stalePanes = await cleanupStalePanes(config.daemon.tmuxSession, spawner.getActiveWorkDirs(), mainPaneId);
+    const { cleanupStalePanes, killStalePanes, listActiveCritterPaneIdentifiers } = await import("./claude.js");
+    const activePaneIdentifiers = await listActiveCritterPaneIdentifiers(config.daemon.tmuxSession, mainPaneId);
+    const stalePanes = await cleanupStalePanes(config.daemon.tmuxSession, spawner.getActiveWorkDirs(), mainPaneId, activePaneIdentifiers);
     if (stalePanes.length > 0) {
       const result = await killStalePanes(config.daemon.tmuxSession, stalePanes);
       log(`Cleaned up ${result.killed} stale tmux pane(s)`);
       for (const pane of stalePanes) log(`  Killed pane ${pane.paneId}: ${pane.title} (${pane.reason})`);
     }
+    // Recover orphaned in-progress issues before starting the poll loop. Live
+    // critter panes are treated as active startup evidence.
+    await recoverOrphanedIssues(config, trackers, spawner, activePaneIdentifiers);
+  } else {
+    // Recover orphaned in-progress issues before starting the poll loop.
+    await recoverOrphanedIssues(config, trackers, spawner);
   }
-
-  // Recover orphaned in-progress issues before starting the poll loop
-  await recoverOrphanedIssues(config, trackers, spawner);
 
   // Create circuit breakers (one per provider)
   let slackNotifier = new SlackNotifier({
@@ -396,10 +400,11 @@ export async function startDaemon(): Promise<void> {
   let titleInterval: ReturnType<typeof setInterval> | null = null;
   if (!noTmux) {
     titleInterval = setInterval(() => {
+      if (!mainPaneId) return;
       const uptime = formatDuration(Date.now() - startTime);
       const active = spawner.getActiveCount();
       const title = `Critters ${getDisplayVersion()} | up ${uptime} | ${active} active`;
-      runCommand("tmux", ["select-pane", "-t", mainPaneId!, "-T", title]).catch(() => {});
+      runCommand("tmux", ["select-pane", "-t", mainPaneId, "-T", title]).catch(() => {});
     }, 10_000);
     titleInterval.unref();
   }
@@ -513,10 +518,9 @@ async function ensureLabelsAndStatuses(config: Config, trackers: Map<string, Iss
   const typesByProvider = new Map<string, CritterTypeConfig[]>();
   for (const ct of config.critterTypes) {
     const provider = ct.provider ?? config.provider;
-    if (!typesByProvider.has(provider)) {
-      typesByProvider.set(provider, []);
-    }
-    typesByProvider.get(provider)!.push(ct);
+    const types = typesByProvider.get(provider) ?? [];
+    types.push(ct);
+    typesByProvider.set(provider, types);
   }
 
   for (const [provider, types] of typesByProvider) {

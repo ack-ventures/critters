@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import type { SlackNotifier } from "../slack.js";
+import type { Config } from "../types.js";
+import type { UnifiedSpawner } from "../unified-spawner.js";
 
 // Capture log output
 const logCalls: string[] = [];
@@ -21,17 +24,21 @@ afterEach(() => {
   Object.defineProperty(process, "execPath", { value: originalExecPath, writable: true });
 });
 
-function makeMockSpawner(activeCount = 0) {
-  return { getActiveCount: () => activeCount } as { getActiveCount(): number };
+function makeConfig(autoUpdate?: Config["autoUpdate"]): Config {
+  return { autoUpdate } as unknown as Config;
 }
 
-function makeMockSlack(configured = true) {
+function makeMockSpawner(activeCount = 0): UnifiedSpawner {
+  return { getActiveCount: () => activeCount } as unknown as UnifiedSpawner;
+}
+
+function makeMockSlack(configured = true): SlackNotifier & { notifications: string[] } {
   const notifications: string[] = [];
   return {
     isConfigured: configured,
     notify: async (_id: string, msg: string) => { notifications.push(msg); },
     notifications,
-  };
+  } as unknown as SlackNotifier & { notifications: string[] };
 }
 
 // Use _version param to bypass the VERSION === "dev" guard in tests
@@ -41,9 +48,9 @@ describe("startAutoUpdater", () => {
   test("returns null when running via bun (not compiled binary)", () => {
     Object.defineProperty(process, "execPath", { value: "/usr/local/bin/bun", writable: true });
     const handle = startAutoUpdater(
-      { autoUpdate: { enabled: true, intervalMinutes: 1 } } as any,
-      makeMockSpawner() as any,
-      makeMockSlack() as any,
+      makeConfig({ enabled: true, intervalMinutes: 1 }),
+      makeMockSpawner(),
+      makeMockSlack(),
       () => {},
       TEST_VERSION,
     );
@@ -54,9 +61,9 @@ describe("startAutoUpdater", () => {
   test("returns null for dev build", () => {
     Object.defineProperty(process, "execPath", { value: "/usr/local/bin/critters", writable: true });
     const handle = startAutoUpdater(
-      { autoUpdate: { enabled: true, intervalMinutes: 1 } } as any,
-      makeMockSpawner() as any,
-      makeMockSlack() as any,
+      makeConfig({ enabled: true, intervalMinutes: 1 }),
+      makeMockSpawner(),
+      makeMockSlack(),
       () => {},
       "dev",
     );
@@ -67,9 +74,9 @@ describe("startAutoUpdater", () => {
   test("returns null when enabled is false", () => {
     Object.defineProperty(process, "execPath", { value: "/usr/local/bin/critters", writable: true });
     const handle = startAutoUpdater(
-      { autoUpdate: { enabled: false, intervalMinutes: 1440 } } as any,
-      makeMockSpawner() as any,
-      makeMockSlack() as any,
+      makeConfig({ enabled: false, intervalMinutes: 1440 }),
+      makeMockSpawner(),
+      makeMockSlack(),
       () => {},
       TEST_VERSION,
     );
@@ -80,9 +87,9 @@ describe("startAutoUpdater", () => {
   test("starts interval when enabled with compiled binary", () => {
     Object.defineProperty(process, "execPath", { value: "/usr/local/bin/critters", writable: true });
     const handle = startAutoUpdater(
-      { autoUpdate: { enabled: true, intervalMinutes: 60 } } as any,
-      makeMockSpawner() as any,
-      makeMockSlack() as any,
+      makeConfig({ enabled: true, intervalMinutes: 60 }),
+      makeMockSpawner(),
+      makeMockSlack(),
       () => {},
       TEST_VERSION,
     );
@@ -94,9 +101,9 @@ describe("startAutoUpdater", () => {
   test("uses defaults when autoUpdate config is omitted", () => {
     Object.defineProperty(process, "execPath", { value: "/usr/local/bin/critters", writable: true });
     const handle = startAutoUpdater(
-      {} as any,
-      makeMockSpawner() as any,
-      makeMockSlack() as any,
+      makeConfig(),
+      makeMockSpawner(),
+      makeMockSlack(),
       () => {},
       TEST_VERSION,
     );
@@ -108,14 +115,14 @@ describe("startAutoUpdater", () => {
   test("updateConfig disables when enabled set to false", () => {
     Object.defineProperty(process, "execPath", { value: "/usr/local/bin/critters", writable: true });
     const handle = startAutoUpdater(
-      { autoUpdate: { enabled: true, intervalMinutes: 60 } } as any,
-      makeMockSpawner() as any,
-      makeMockSlack() as any,
+      makeConfig({ enabled: true, intervalMinutes: 60 }),
+      makeMockSpawner(),
+      makeMockSlack(),
       () => {},
       TEST_VERSION,
     );
     expect(handle).not.toBeNull();
-    handle?.updateConfig({ autoUpdate: { enabled: false, intervalMinutes: 60 } } as any);
+    handle?.updateConfig(makeConfig({ enabled: false, intervalMinutes: 60 }));
     expect(logCalls.some((l) => l.includes("disabled by config reload"))).toBe(true);
     handle?.stop();
   });
@@ -123,14 +130,14 @@ describe("startAutoUpdater", () => {
   test("updateConfig changes interval", () => {
     Object.defineProperty(process, "execPath", { value: "/usr/local/bin/critters", writable: true });
     const handle = startAutoUpdater(
-      { autoUpdate: { enabled: true, intervalMinutes: 60 } } as any,
-      makeMockSpawner() as any,
-      makeMockSlack() as any,
+      makeConfig({ enabled: true, intervalMinutes: 60 }),
+      makeMockSpawner(),
+      makeMockSlack(),
       () => {},
       TEST_VERSION,
     );
     expect(handle).not.toBeNull();
-    handle?.updateConfig({ autoUpdate: { enabled: true, intervalMinutes: 120 } } as any);
+    handle?.updateConfig(makeConfig({ enabled: true, intervalMinutes: 120 }));
     expect(logCalls.some((l) => l.includes("interval changed to 120 minutes"))).toBe(true);
     handle?.stop();
   });

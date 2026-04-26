@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { CritterTypeConfig } from "../critter-type.js";
+import type { CritterTypeConfig, TriggerConfig } from "../critter-type.js";
 import { recoverOrphanedIssues } from "../recovery.js";
 import type { IssueTracker, TrackerTask } from "../tracker/types.js";
 import type { ActiveCritterDetail, Config, QueuedCritterDetail } from "../types.js";
@@ -138,6 +138,22 @@ describe("recoverOrphanedIssues", () => {
     expect(updateStatus).not.toHaveBeenCalled();
   });
 
+  test("skips critter with live startup pane", async () => {
+    const updateStatus = mock(async () => {});
+    const orphanedIssue = createTrackerTask();
+    const tracker = createMockTracker({
+      findIssues: async () => [orphanedIssue],
+      updateStatus,
+    });
+    const trackers = new Map([["linear", tracker]]);
+    const config = createMockConfig([createCritterType()]);
+    const spawner = createMockSpawner();
+
+    await recoverOrphanedIssues(config, trackers, spawner, new Set(["ACK-100"]));
+
+    expect(updateStatus).not.toHaveBeenCalled();
+  });
+
   test("skips types without claimStatus", async () => {
     const findIssues = mock(async () => []);
     const tracker = createMockTracker({ findIssues });
@@ -228,7 +244,9 @@ describe("recoverOrphanedIssues", () => {
   });
 
   test("uses correct trigger fields: claimStatus as status, same label, same assignee, no statusType", async () => {
-    const findIssues = mock(async () => []);
+    const findIssues = mock<(trigger: TriggerConfig) => Promise<TrackerTask[]>>(
+      async () => [],
+    );
     const tracker = createMockTracker({ findIssues });
     const trackers = new Map([["linear", tracker]]);
     const config = createMockConfig([
@@ -242,7 +260,7 @@ describe("recoverOrphanedIssues", () => {
     await recoverOrphanedIssues(config, trackers, spawner);
 
     expect(findIssues).toHaveBeenCalledTimes(1);
-    const triggerArg = findIssues.mock.calls[0][0];
+    const triggerArg = findIssues.mock.calls[0]?.[0];
     expect(triggerArg).toEqual({
       label: "MyLabel",
       status: "In Progress",

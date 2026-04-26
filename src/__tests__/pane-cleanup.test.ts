@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parsePaneList } from "../claude.js";
+import { activeCritterIdentifiersFromPanes, parsePaneList } from "../claude.js";
 
 describe("parsePaneList", () => {
   test("parses standard critter pane output", () => {
@@ -62,5 +62,18 @@ describe("parsePaneList", () => {
     const panes = parsePaneList(output);
     expect(panes).toHaveLength(1);
     expect(panes[0].paneId).toBe("%1");
+  });
+
+  test("collects live critter identifiers and skips the daemon pane", () => {
+    const output = [
+      "%0 12345 bash Critters v1.8.2 | up 2h | 1 active",
+      "%1 12346 bash ACK-123: Fix login bug / plan | org/repo",
+      "%2 12347 bash ACK-456: Add feature / exec | org/repo | 5m",
+      "%3 12348 bash scratch",
+    ].join("\n");
+
+    const identifiers = activeCritterIdentifiersFromPanes(parsePaneList(output), "%0");
+
+    expect([...identifiers].sort()).toEqual(["ACK-123", "ACK-456"]);
   });
 });
