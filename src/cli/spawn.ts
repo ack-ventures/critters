@@ -398,6 +398,33 @@ export function parsePaneList(output: string): ParsedPane[] {
   return panes;
 }
 
+export function activeCritterIdentifiersFromPanes(panes: ParsedPane[], mainPaneId?: string): Set<string> {
+  const activeIdentifiers = new Set<string>();
+  for (const pane of panes) {
+    if (mainPaneId && pane.paneId === mainPaneId) continue;
+    if (!pane.identifier) continue;
+    if (pane.title.startsWith("Critters ")) continue;
+    activeIdentifiers.add(pane.identifier);
+  }
+  return activeIdentifiers;
+}
+
+export async function listActiveCritterPaneIdentifiers(
+  tmuxSession: string,
+  mainPaneId?: string,
+): Promise<Set<string>> {
+  const hasSession = await runCommand("tmux", ["has-session", "-t", tmuxSession]);
+  if (hasSession.code !== 0) return new Set();
+
+  const listResult = await runCommand("tmux", [
+    "list-panes", "-t", tmuxSession, "-F",
+    "#{pane_id} #{pane_pid} #{pane_current_command} #{pane_title}",
+  ]);
+  if (listResult.code !== 0) return new Set();
+
+  return activeCritterIdentifiersFromPanes(parsePaneList(listResult.stdout), mainPaneId);
+}
+
 export interface StalePane {
   paneId: string;
   title: string;
@@ -413,6 +440,7 @@ export async function cleanupStalePanes(
   tmuxSession: string,
   activeWorkDirs: Set<string>,
   mainPaneId?: string,
+  activePaneIdentifiers: Set<string> = new Set(),
 ): Promise<StalePane[]> {
   // Check if session exists
   const hasSession = await runCommand("tmux", ["has-session", "-t", tmuxSession]);
@@ -433,6 +461,9 @@ export async function cleanupStalePanes(
     const basename = dir.split("/").pop() ?? "";
     const match = basename.replace(/^review-/, "").match(/^([A-Z]+-\d+)/);
     if (match) activeIdentifiers.add(match[1]);
+  }
+  for (const identifier of activePaneIdentifiers) {
+    activeIdentifiers.add(identifier);
   }
 
   const stalePanes: StalePane[] = [];

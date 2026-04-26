@@ -6,8 +6,10 @@
 export type { StalePane } from "./cli/spawn.js";
 // Re-export spawn utilities from cli/spawn
 export {
+  activeCritterIdentifiersFromPanes,
   cleanupStalePanes,
   killStalePanes,
+  listActiveCritterPaneIdentifiers,
   parsePaneList,
   spawnForPhase,
 } from "./cli/spawn.js";
