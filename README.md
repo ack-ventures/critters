@@ -96,7 +96,7 @@ docker compose logs -f
 # Dashboard at http://localhost:3847
 ```
 
-The Docker image includes all runtime dependencies (Claude Code CLI, `gh`, `git`, `jq`).
+The Docker image includes all runtime dependencies (Claude Code CLI, Codex CLI, `gh`, `git`, `jq`).
 
 **Installing additional tools (Node.js, Bun, Python, etc.):**
 
@@ -123,6 +123,7 @@ The script is `source`'d so any `PATH` or env changes persist into the daemon an
 
 **Auth requirements:**
 - `CLAUDE_CODE_OAUTH_TOKEN` — Claude Max/Team subscription token (run `claude setup-token` on the host, then add to `.env` or export in your shell). Alternatively, set `ANTHROPIC_API_KEY` for direct API access.
+- `~/.codex` — Codex CLI auth/config (mounted into the container when using Codex phases)
 - `~/.ssh` — SSH keys for git clone (mounted read-only)
 - `GITHUB_TOKEN` — GitHub CLI auth (run `gh auth token` on the host, then add to `.env` or export in your shell)
 

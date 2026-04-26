@@ -23,11 +23,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     gnupg \
+    nodejs \
+    npm \
   && rm -rf /var/lib/apt/lists/*
 
 # Install Claude Code CLI (native binary)
 RUN curl -fsSL https://claude.ai/install.sh | bash
 ENV PATH="/root/.local/bin:${PATH}"
+
+# Install Codex CLI
+RUN npm install -g @openai/codex@0.125.0
 
 # Install GitHub CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
