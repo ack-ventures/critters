@@ -33,6 +33,64 @@ describe("CodexAdapter", () => {
     expect(overrideScript).toContain("--sandbox 'danger-full-access'");
   });
 
+  test("maps auto permission mode to Codex full-auto", () => {
+    const adapter = new CodexAdapter();
+
+    const script = adapter.buildCommand({
+      prompt: "Implement the task",
+      promptFile: "/tmp/prompt.txt",
+      lastMessageFile: "/tmp/last.txt",
+      allowedTools: [],
+      workDir: "/tmp/work",
+      maxTurns: 10,
+      model: "gpt-5.5",
+      permissionMode: "auto",
+    }).script;
+
+    expect(script).toContain("--full-auto");
+    expect(script).toContain("--sandbox 'workspace-write'");
+    expect(script).not.toContain("-a never");
+  });
+
+  test("preserves explicit sandbox with Codex full-auto", () => {
+    const adapter = new CodexAdapter();
+
+    const script = adapter.buildCommand({
+      prompt: "Review the PR",
+      promptFile: "/tmp/prompt.txt",
+      lastMessageFile: "/tmp/last.txt",
+      allowedTools: [],
+      workDir: "/tmp/work",
+      maxTurns: 10,
+      model: "gpt-5.5",
+      permissionMode: "auto",
+      sandbox: "danger-full-access",
+    }).script;
+
+    expect(script).toContain("--full-auto");
+    expect(script).toContain("--sandbox 'danger-full-access'");
+  });
+
+  test("maps bypass permission mode to Codex no-sandbox bypass", () => {
+    const adapter = new CodexAdapter();
+
+    const script = adapter.buildCommand({
+      prompt: "Implement the task",
+      promptFile: "/tmp/prompt.txt",
+      lastMessageFile: "/tmp/last.txt",
+      allowedTools: [],
+      workDir: "/tmp/work",
+      maxTurns: 10,
+      model: "gpt-5.5",
+      permissionMode: "bypassPermissions",
+      sandbox: "danger-full-access",
+    }).script;
+
+    expect(script).toContain("--dangerously-bypass-approvals-and-sandbox");
+    expect(script).not.toContain("--sandbox");
+    expect(script).not.toContain("-a never");
+  });
+
   test("parses turns and usage metrics from JSONL", () => {
     const tmp = createTempDir();
     try {

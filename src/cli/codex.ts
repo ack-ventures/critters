@@ -33,14 +33,15 @@ export class CodexAdapter implements CliAdapter {
 
   buildCommand(opts: SpawnOptions): CliCommand {
     const sandbox = opts.sandbox?.trim() || "workspace-write";
+    const permissionMode = opts.permissionMode?.trim();
+    const automationArgs = codexAutomationArgs(permissionMode, sandbox);
     const args = [
       "codex",
-      "-a", "never",
+      ...automationArgs,
       "exec",
       "--json",
       "--skip-git-repo-check",
       "--output-last-message", shellEscape(opts.lastMessageFile),
-      "--sandbox", shellEscape(sandbox),
       "-m", shellEscape(opts.model),
       "-C", shellEscape(opts.workDir),
       "-",
@@ -290,6 +291,16 @@ Use targeted file reads and searches instead of dumping large files all at once.
   ): { mcpConfig: string[]; strictMcpConfig: boolean } {
     return resolveMcpConfigShared(critterType, config);
   }
+}
+
+function codexAutomationArgs(permissionMode: string | undefined, sandbox: string): string[] {
+  if (permissionMode === "auto") {
+    return ["--full-auto", "--sandbox", shellEscape(sandbox)];
+  }
+  if (permissionMode === "bypassPermissions") {
+    return ["--dangerously-bypass-approvals-and-sandbox"];
+  }
+  return ["-a", "never", "--sandbox", shellEscape(sandbox)];
 }
 
 function readNumber(obj: unknown, candidateKeys: string[]): number | undefined {
