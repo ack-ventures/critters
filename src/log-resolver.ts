@@ -1,4 +1,6 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { getCliAdapter, getCliAdapterByBinary } from "./cli/registry.js";
 import type { CliAdapter } from "./cli/types.js";
 
@@ -141,6 +143,34 @@ export function resolveCliAdapterForLog(logFile: string): CliAdapter {
   return getCliAdapter("claude");
 }
 
+export function inferCliAdapterForLogContent(content: string): CliAdapter {
+  const lines = content.split("\n").filter((line) => line.trim()).slice(0, 100);
+
+  for (const line of lines) {
+    try {
+      const obj = JSON.parse(line) as Record<string, unknown>;
+      const type = typeof obj.type === "string" ? obj.type : "";
+      if (
+        type === "thread.started" ||
+        type === "turn.started" ||
+        type === "turn.completed" ||
+        type === "item.completed" ||
+        type.startsWith("exec.") ||
+        type.startsWith("response.")
+      ) {
+        return getCliAdapter("codex");
+      }
+      if (type === "result" || type === "assistant" || type === "user") {
+        return getCliAdapter("claude");
+      }
+    } catch {
+      // Ignore non-JSON lines; uploaded logs can contain truncated tails.
+    }
+  }
+
+  return getCliAdapter("claude");
+}
+
 export function formatToolUse(block: { name: string; input?: Record<string, unknown> }): string {
   const name = block.name;
   const input = block.input ?? {};
@@ -239,6 +269,39 @@ export function extractPhaseResult(logFile: string): {
   return parsed;
 }
 
+export function extractPhaseResultFromContent(
+  content: string,
+  identifier: string,
+): {
+  costUsd?: number;
+  numTurns?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+} | null {
+  if (!content.trim()) return null;
+
+  const dir = mkdtempSync(join(tmpdir(), "critters-log-"));
+  const logFile = join(dir, "output.json");
+  try {
+    writeFileSync(logFile, content);
+    const adapter = inferCliAdapterForLogContent(content);
+    const parsed = adapter.parseOutputLog(logFile, identifier);
+    if (
+      parsed.costUsd == null &&
+      parsed.numTurns == null &&
+      parsed.inputTokens == null &&
+      parsed.outputTokens == null &&
+      parsed.cacheReadTokens == null
+    ) {
+      return null;
+    }
+    return parsed;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 export function readLogTail(logFile: string, lines: number): string {
   try {
     const content = readFileSync(logFile, "utf-8");
@@ -276,7 +339,7 @@ function escapeRegExp(s: string): string {
 export function resolvePhasesFromAttachments(
   identifier: string,
   attachments: Array<{ name: string; url: string }>,
-): Array<{ phase: string }> {
+): Array<{ phase: string; url: string }> {
   const TAG_TO_PHASE: Record<string, string> = {
     plan: "planning",
     exec: "execution",
@@ -286,7 +349,7 @@ export function resolvePhasesFromAttachments(
 
   const pattern = new RegExp(`^${escapeRegExp(identifier)}-(.+)-output\\.txt$`);
   const seen = new Set<string>();
-  const phases: Array<{ phase: string }> = [];
+  const phases: Array<{ phase: string; url: string }> = [];
 
   for (const a of attachments) {
     const m = a.name.match(pattern);
@@ -295,7 +358,7 @@ export function resolvePhasesFromAttachments(
     const phaseName = TAG_TO_PHASE[tag] ?? tag;
     if (seen.has(phaseName)) continue;
     seen.add(phaseName);
-    phases.push({ phase: phaseName });
+    phases.push({ phase: phaseName, url: a.url });
   }
 
   phases.sort((a, b) => (ORDER[a.phase] ?? 99) - (ORDER[b.phase] ?? 99));
