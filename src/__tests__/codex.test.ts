@@ -18,6 +18,7 @@ describe("CodexAdapter", () => {
       model: "gpt-5.4",
     }).script;
     expect(defaultScript).toContain("--sandbox 'workspace-write'");
+    expect(defaultScript).toContain("--skip-git-repo-check");
 
     const overrideScript = adapter.buildCommand({
       prompt: "Review the PR",
@@ -95,6 +96,38 @@ describe("CodexAdapter", () => {
         inputTokens: 25,
         outputTokens: 10,
         cacheReadTokens: 3,
+        costUsd: undefined,
+      });
+    } finally {
+      tmp.cleanup();
+    }
+  });
+
+  test("parses current Codex turn.completed usage shape", () => {
+    const tmp = createTempDir();
+    try {
+      const adapter = new CodexAdapter();
+      const logFile = `${tmp.path}/output.json`;
+      writeFileSync(logFile, [
+        JSON.stringify({ type: "thread.started", thread_id: "thread-1" }),
+        JSON.stringify({ type: "turn.started" }),
+        JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "Done" } }),
+        JSON.stringify({
+          type: "turn.completed",
+          usage: {
+            input_tokens: 17370,
+            cached_input_tokens: 4480,
+            output_tokens: 22,
+            reasoning_output_tokens: 8,
+          },
+        }),
+      ].join("\n"));
+
+      expect(adapter.parseOutputLog(logFile, "ACK-3")).toEqual({
+        numTurns: 1,
+        inputTokens: 17370,
+        outputTokens: 22,
+        cacheReadTokens: 4480,
         costUsd: undefined,
       });
     } finally {
