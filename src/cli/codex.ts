@@ -38,6 +38,7 @@ export class CodexAdapter implements CliAdapter {
       "-a", "never",
       "exec",
       "--json",
+      "--skip-git-repo-check",
       "--output-last-message", shellEscape(opts.lastMessageFile),
       "--sandbox", shellEscape(sandbox),
       "-m", shellEscape(opts.model),
@@ -94,7 +95,7 @@ export class CodexAdapter implements CliAdapter {
           }
 
           if (!sawTotalUsage) {
-            const usage = readObject(obj, ["token_usage", "tokenUsage"]);
+            const usage = readObject(obj, ["token_usage", "tokenUsage", "usage"]);
             if (usage) {
               inputTokens += readNumber(usage, ["input_tokens", "inputTokens", "input_tokens_total"]) ?? 0;
               outputTokens += readNumber(usage, ["output_tokens", "outputTokens", "output_tokens_total"]) ?? 0;
