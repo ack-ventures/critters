@@ -12,6 +12,7 @@ services:
       - ~/.ssh:/root/.ssh:ro              # SSH keys for git clone
       - ~/.claude:/root/.claude             # Claude CLI data
       - ~/.claude.json:/root/.claude.json    # Claude CLI auth config
+      - ~/.codex:/root/.codex             # Codex CLI auth/config
     ports:
       - "3847:3847"
     restart: unless-stopped

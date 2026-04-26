@@ -157,12 +157,13 @@ docker compose logs -f
 # Dashboard at http://localhost:3847
 ```
 
-The image includes all runtime dependencies (Claude Code CLI, `gh`, `git`, `jq`, `ngrok`). It runs with `--no-tmux --json-logs --skip-update`.
+The image includes all runtime dependencies (Claude Code CLI, Codex CLI, `gh`, `git`, `jq`, `ngrok`). It runs with `--no-tmux --json-logs --skip-update`.
 
 **Volume mounts** (configured in `docker-compose.yaml`):
 - `~/.critters` — config, metrics, state
 - `~/.ssh` — SSH keys for git clone (read-only)
 - `~/.claude` and `~/.claude.json` — Claude CLI auth
+- `~/.codex` — Codex CLI auth/config
 
 **Auth:** Interactive keychain-based auth doesn't work in containers. Set these env vars (in `.env` or your shell):
 
