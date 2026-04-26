@@ -1,10 +1,17 @@
 import { statSync } from "node:fs";
 import { checkAuth } from "./auth.js";
-import { getCliAdapter } from "./cli/registry.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import { renderDashboard } from "./dashboard/index.js";
 import { isDashboardApiPath } from "./health-routes.js";
-import { phaseFileTag, readLogTail, renderReadableLines, resolveCliAdapterForLog, resolveLogFile, resolveWorkDirForIdentifier } from "./log-resolver.js";
+import {
+  inferCliAdapterForLogContent,
+  phaseFileTag,
+  readLogTail,
+  renderReadableLines,
+  resolveCliAdapterForLog,
+  resolveLogFile,
+  resolveWorkDirForIdentifier,
+} from "./log-resolver.js";
 import { formatError, log, logError } from "./logger.js";
 import { getRecentMetrics } from "./metrics.js";
 import { getPrStatuses } from "./pr-status.js";
@@ -455,8 +462,9 @@ export function startHealthServer(
         }
 
         // Render JSON stream lines into human-readable output via the CLI adapter.
-        // Tracker attachments don't carry meta sidecars, so fall back to the claude adapter.
-        const remoteAdapter = getCliAdapter("claude");
+        // Tracker attachments do not carry meta sidecars, so infer the adapter
+        // from the uploaded JSON event shape.
+        const remoteAdapter = inferCliAdapterForLogContent(remoteContent);
         const remoteJsonLines = remoteContent.split("\n").filter((l) => l.trim());
         const remoteReadable = renderReadableLines(remoteJsonLines, remoteAdapter);
         const remoteTailLines = remoteReadable.slice(-tailCount);

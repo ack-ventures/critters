@@ -1,5 +1,11 @@
 import type { HealthStatus } from "../health.js";
-import { extractPhaseResult, resolveAllPhases, resolvePhasesFromAttachments, resolveWorkDirForIdentifier } from "../log-resolver.js";
+import {
+  extractPhaseResult,
+  extractPhaseResultFromContent,
+  resolveAllPhases,
+  resolvePhasesFromAttachments,
+  resolveWorkDirForIdentifier,
+} from "../log-resolver.js";
 import { aggregateCostFromEvents, getRecentMetrics } from "../metrics.js";
 import type { PrStatus } from "../pr-status.js";
 import type { IssueTracker } from "../tracker/types.js";
@@ -59,7 +65,9 @@ export async function buildIssueData(
   }
 
   // Get available phases and their results
-  let phases: Array<{ phase: string; logFile: string }> = targetDir ? resolveAllPhases(targetDir) : [];
+  let phases: Array<{ phase: string; logFile: string; attachmentUrl?: string; tracker?: IssueTracker }> = targetDir
+    ? resolveAllPhases(targetDir)
+    : [];
 
   // Fallback: discover phases from tracker attachments when local logs are gone
   if (phases.length === 0 && trackers && trackers.size > 0) {
@@ -70,7 +78,7 @@ export async function buildIssueData(
           const attachments = await tracker.getAttachments(issue.id);
           const remotePhs = resolvePhasesFromAttachments(identifier, attachments);
           if (remotePhs.length > 0) {
-            phases = remotePhs.map((p) => ({ phase: p.phase, logFile: "" }));
+            phases = remotePhs.map((p) => ({ phase: p.phase, logFile: "", attachmentUrl: p.url, tracker }));
             break;
           }
         }
@@ -80,10 +88,21 @@ export async function buildIssueData(
     }
   }
 
-  const phaseResultsRaw = phases.map((p) => ({
-    phase: p.phase,
-    logFile: p.logFile,
-    result: extractPhaseResult(p.logFile),
+  const phaseResultsRaw = await Promise.all(phases.map(async (p) => {
+    let result = p.logFile ? extractPhaseResult(p.logFile) : null;
+    if (!result && p.attachmentUrl && p.tracker) {
+      try {
+        const content = await p.tracker.fetchAttachmentContent(p.attachmentUrl);
+        result = content ? extractPhaseResultFromContent(content, identifier) : null;
+      } catch {
+        result = null;
+      }
+    }
+    return {
+      phase: p.phase,
+      logFile: p.logFile,
+      result,
+    };
   }));
 
   // Get metrics data for this identifier
