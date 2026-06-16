@@ -57,8 +57,11 @@ export class GenericPhaseRunner implements PhaseRunner {
     // Read the report file that the CLI was instructed to write
     const reportPath = `${workDir}/${REPORT_FILE}`;
     let responseText: string | null = null;
-    if (existsSync(reportPath)) {
-      responseText = readFileSync(reportPath, "utf-8");
+    // Treat an empty/whitespace-only report as missing so we still fall through to
+    // the stream-json fallback instead of returning an empty responseText.
+    const reportContent = existsSync(reportPath) ? readFileSync(reportPath, "utf-8") : null;
+    if (reportContent !== null && reportContent.trim().length > 0) {
+      responseText = reportContent;
       logTask(task.identifier, `Report file found: ${REPORT_FILE} (${responseText.length} chars)`);
       // Also copy to the plans directory so builtin:execution can find it
       const planPath = `${workDir}/critters/plans/${task.identifier}.md`;
@@ -67,7 +70,12 @@ export class GenericPhaseRunner implements PhaseRunner {
       }
     } else {
       // Fallback: extract from stream-json output
-      logTaskWarn(task.identifier, `No ${REPORT_FILE} found — extracting from CLI output`);
+      logTaskWarn(
+        task.identifier,
+        reportContent !== null
+          ? `${REPORT_FILE} was empty — extracting from CLI output`
+          : `No ${REPORT_FILE} found — extracting from CLI output`,
+      );
       const jsonLogFile = `${workDir}/.critter-output-${phase.name}.json`;
       const lastMessageFile = `${workDir}/.critter-last-message-${phase.name}.txt`;
       responseText = ctx.cliAdapter.extractFinalResponse(jsonLogFile, lastMessageFile);

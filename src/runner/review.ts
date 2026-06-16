@@ -86,7 +86,16 @@ export class ReviewPhaseRunner implements PhaseRunner {
         ["pr", "view", String(task.prNumber), "--json", "headRefName", "--jq", ".headRefName"],
         { cwd: workDir },
       );
-      task.prBranch = branchResult.stdout.trim();
+      // Fail loudly if branch resolution failed: a silent empty result would leave
+      // prBranch unset and cause the review to run against the BASE branch (which
+      // the agent could then approve/merge).
+      const resolvedBranch = branchResult.stdout.trim();
+      if (branchResult.code !== 0 || !resolvedBranch) {
+        throw new Error(
+          `Failed to resolve PR branch for #${task.prNumber}: ${branchResult.stderr.trim() || "empty headRefName"}`,
+        );
+      }
+      task.prBranch = resolvedBranch;
     }
 
     if (task.prBranch) {
@@ -143,6 +152,27 @@ export class ReviewPhaseRunner implements PhaseRunner {
     const jsonLogFile = `${workDir}/.critter-output-review.json`;
     const lastMessageFile = `${workDir}/.critter-last-message-review.txt`;
     const outcome = ctx.cliAdapter.extractReviewDecision(jsonLogFile, lastMessageFile);
+
+    // Guard against a hallucinated REVIEW_RESULT:MERGED sentinel: the agent can
+    // claim it merged the PR even when the merge never happened. Confirm the PR is
+    // actually merged on GitHub before applying the terminal "merged" outcome;
+    // otherwise downgrade to "unknown" so the task fails loudly instead of moving
+    // the issue to Done with an open PR.
+    if (outcome.decision === "merged" && task.prNumber) {
+      const confirmState = await runCommand(
+        "gh",
+        ["pr", "view", String(task.prNumber), "--json", "state", "--jq", ".state"],
+        { cwd: workDir },
+      );
+      if (confirmState.stdout.trim() !== "MERGED") {
+        logTask(
+          task.identifier,
+          `Review reported MERGED but PR #${task.prNumber} state is ${confirmState.stdout.trim() || "unknown"} — downgrading`,
+        );
+        outcome.decision = "unknown";
+        outcome.reason = "Review reported merged but the PR is not actually merged on GitHub";
+      }
+    }
 
     // Fallback: if no sentinel, check if PR was actually merged
     if (outcome.decision === "unknown" && task.prNumber) {
