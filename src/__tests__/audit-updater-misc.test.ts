@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createTempDir } from "./helpers.js";
@@ -84,6 +85,19 @@ describe("B20: normalizeCheckVerdict (pr-status.ts)", () => {
 
   test("CheckRun in progress (no conclusion, not COMPLETED) → pending", () => {
     expect(normalizeCheckVerdict({ status: "IN_PROGRESS" })).toBe("pending");
+  });
+
+  test("COMPLETED CheckRun with a non-failing conclusion → success, not pending", () => {
+    // Regression: SKIPPED/NEUTRAL/STALE/CANCELLED used to read as perpetually pending.
+    expect(normalizeCheckVerdict({ status: "COMPLETED", conclusion: "SKIPPED" })).toBe("success");
+    expect(normalizeCheckVerdict({ status: "COMPLETED", conclusion: "NEUTRAL" })).toBe("success");
+    expect(normalizeCheckVerdict({ status: "COMPLETED", conclusion: "STALE" })).toBe("success");
+    expect(normalizeCheckVerdict({ status: "COMPLETED", conclusion: "CANCELLED" })).toBe("success");
+  });
+
+  test("CheckRun with a genuinely failing conclusion → failure", () => {
+    expect(normalizeCheckVerdict({ status: "COMPLETED", conclusion: "TIMED_OUT" })).toBe("failure");
+    expect(normalizeCheckVerdict({ status: "COMPLETED", conclusion: "ACTION_REQUIRED" })).toBe("failure");
   });
 });
 
@@ -209,11 +223,15 @@ describe("checkForUpdate integrity (updater.ts)", () => {
 
   test("returns false on a truncated download (buffer.length !== Content-Length)", async () => {
     const body = "x".repeat(100);
+    // Use the VALID checksum of the received body so this test isolates the
+    // truncation guard — the download fails the length check before checksum
+    // verification, and a passing checksum proves nothing else rejected it.
+    const validHash = createHash("sha256").update(body).digest("hex");
     mockFetch({
       includeChecksumAsset: true,
       binaryBody: body,
       contentLength: "200", // advertises more than we received
-      checksumText: `0000  ${EXPECTED_ASSET}\n`,
+      checksumText: `${validHash}  ${EXPECTED_ASSET}\n`,
     });
     const result = await checkForUpdate("1.0.0");
     expect(result).toBe(false);

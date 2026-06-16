@@ -23,19 +23,45 @@ export function normalizeCheckVerdict(check: {
   conclusion?: string;
   state?: string;
 }): "success" | "failure" | "pending" {
-  const raw = (check.conclusion ?? check.state ?? "").toUpperCase();
-  if (raw === "FAILURE" || raw === "ERROR" || raw === "TIMED_OUT" || raw === "CANCELLED" || raw === "ACTION_REQUIRED") {
-    return "failure";
+  // Legacy StatusContext nodes (commit statuses) carry a `state` and no
+  // conclusion; they never report COMPLETED, so map their state directly.
+  if (check.conclusion === undefined && check.state !== undefined) {
+    const state = check.state.toUpperCase();
+    if (state === "SUCCESS") return "success";
+    if (state === "FAILURE" || state === "ERROR") return "failure";
+    // PENDING, EXPECTED, or any unrecognized value is still in flight.
+    return "pending";
   }
-  if (raw === "SUCCESS") {
-    return "success";
-  }
-  // No verdict yet: CheckRuns are pending until status === COMPLETED; StatusContext
-  // entries with state PENDING (or any unrecognized value) are likewise pending.
-  if (check.conclusion === undefined && check.state === undefined) {
-    // CheckRun without a conclusion: trust its status field.
+
+  // CheckRun nodes carry a `conclusion` once they reach a terminal state. Until
+  // then conclusion is absent and we trust the `status` field.
+  const conclusion = (check.conclusion ?? "").toUpperCase();
+  if (conclusion === "") {
     return check.status === "COMPLETED" ? "success" : "pending";
   }
+  // Genuinely failing terminal conclusions.
+  if (
+    conclusion === "FAILURE" ||
+    conclusion === "ERROR" ||
+    conclusion === "TIMED_OUT" ||
+    conclusion === "ACTION_REQUIRED" ||
+    conclusion === "STARTUP_FAILURE"
+  ) {
+    return "failure";
+  }
+  // Non-failing terminal conclusions: a completed CheckRun that didn't fail
+  // should not read as perpetually pending (the hourglass-forever bug). SKIPPED,
+  // NEUTRAL, STALE and CANCELLED all mean "not blocking" → treat as success.
+  if (
+    conclusion === "SUCCESS" ||
+    conclusion === "SKIPPED" ||
+    conclusion === "NEUTRAL" ||
+    conclusion === "STALE" ||
+    conclusion === "CANCELLED"
+  ) {
+    return "success";
+  }
+  // Unknown / non-terminal conclusion value: still in flight.
   return "pending";
 }
 
