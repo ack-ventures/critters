@@ -35,6 +35,6 @@ export function getPhaseRunner(phase: PhaseConfig): PhaseRunner {
 export { ExecutionPhaseRunner } from "./execution.js";
 export { GenericPhaseRunner } from "./generic.js";
 export { PlanningPhaseRunner } from "./planning.js";
-export { parseReviewOutcome, ReviewPhaseRunner } from "./review.js";
+export { ReviewPhaseRunner } from "./review.js";
 export type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
 export { validatePhaseResult } from "./validate.js";
