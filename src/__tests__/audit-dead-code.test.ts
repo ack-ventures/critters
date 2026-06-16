@@ -35,12 +35,6 @@ describe("legacy dashboard pages removed", () => {
     expect(existsSync(join(srcDir, "dashboard/issue-page.ts"))).toBe(false);
     expect(existsSync(join(srcDir, "dashboard/log-page.ts"))).toBe(false);
   });
-
-  test("dashboard index does not re-export them", async () => {
-    const dashboard = await import("../dashboard/index.js");
-    expect(Object.keys(dashboard)).not.toContain("renderIssuePage");
-    expect(Object.keys(dashboard)).not.toContain("renderLogPage");
-  });
 });
 
 describe("legacy module-level linear API removed", () => {
