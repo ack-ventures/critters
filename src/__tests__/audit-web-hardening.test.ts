@@ -31,6 +31,19 @@ describe("verifyHmacSignature (B19)", () => {
     expect(verifyHmacSignature(body, "abc", secret)).toBe(false);
   });
 
+  test("returns false (does not throw) for a 64-unit header whose byte length differs", () => {
+    // Reproduces the original B19 bug: the old guard compared JS string
+    // `.length` (UTF-16 code units). This header is exactly 64 code units —
+    // matching the 64-char hex digest length — but its multi-byte char makes the
+    // UTF-8 byte length 65, so the old code passed the length guard and then
+    // threw a RangeError inside timingSafeEqual on mismatched buffer sizes.
+    const header = `${"0".repeat(63)}Ω`;
+    expect(header.length).toBe(64);
+    expect(Buffer.byteLength(header, "utf8")).toBe(65);
+    expect(() => verifyHmacSignature(body, header, secret)).not.toThrow();
+    expect(verifyHmacSignature(body, header, secret)).toBe(false);
+  });
+
   test("returns false for a wrong but valid-length hex signature", () => {
     const wrong = "0".repeat(64);
     expect(verifyHmacSignature(body, wrong, secret)).toBe(false);
@@ -81,10 +94,11 @@ describe("escapeSlackText (B21)", () => {
     expect(msg).toContain("&lt;@U999&gt;");
   });
 
-  test("format helpers escape a malicious repo URL", () => {
-    const msg = formatTaskPickedUp("ACK-1", "Title", "<https://evil|pwn>");
-    expect(msg).not.toContain("<https://evil|pwn>");
-    expect(msg).toContain("&lt;https://evil|pwn&gt;");
+  test("format helpers leave URL fields unescaped (so query-string '&' and auto-linking survive)", () => {
+    const url = "https://github.com/o/r/pull/1?a=1&b=2";
+    const msg = formatTaskPickedUp("ACK-1", "Title", url);
+    expect(msg).toContain(url);
+    expect(msg).not.toContain("&amp;");
   });
 });
 

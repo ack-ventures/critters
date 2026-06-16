@@ -32,12 +32,10 @@ export interface LinearWebhookPayload {
 export function verifyHmacSignature(body: string, header: string, secret: string): boolean {
   const expected = Buffer.from(createHmac("sha256", secret).update(body).digest("hex"), "hex");
   const providedHex = header.replace(/^sha256=/, "");
-  let provided: Buffer;
-  try {
-    provided = Buffer.from(providedHex, "hex");
-  } catch {
-    return false;
-  }
+  // `Buffer.from(..., "hex")` never throws in Bun — malformed/odd-length hex is
+  // silently truncated, so the byte-length compare below is what rejects bad
+  // input. The decoded byte lengths must match before timingSafeEqual runs.
+  const provided = Buffer.from(providedHex, "hex");
   if (provided.length !== expected.length) return false;
   return timingSafeEqual(provided, expected);
 }

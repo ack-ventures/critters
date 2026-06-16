@@ -149,8 +149,10 @@ export async function sendSlackNotification(
 /**
  * Escape text for Slack mrkdwn. Per Slack's rules only `&`, `<` and `>` must be
  * encoded (in that order — `&` first). This neutralizes injection of control
- * sequences like `<!channel>`, `<@U123>` and `<url|text>` via untrusted issue
- * titles, error messages, reasons and repo URLs.
+ * sequences like `<!channel>`, `<@U123>` and `<url|text>` via untrusted
+ * free-text fields (issue titles, error messages, reasons). URL fields are left
+ * verbatim: escaping `&` to `&amp;` would corrupt query strings and break
+ * Slack's auto-linking.
  */
 export function escapeSlackText(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -158,7 +160,7 @@ export function escapeSlackText(text: string): string {
 
 export function formatSuccess(identifier: string, title: string, prUrl: string, duration?: string): string {
   const durationSuffix = duration ? ` (completed in ${duration})` : "";
-  return `*${escapeSlackText(identifier)}* — ${escapeSlackText(title)}\nPR created: ${escapeSlackText(prUrl)}${durationSuffix}`;
+  return `*${escapeSlackText(identifier)}* — ${escapeSlackText(title)}\nPR created: ${prUrl}${durationSuffix}`;
 }
 
 export function formatFailure(identifier: string, title: string, error: string, duration?: string): string {
@@ -168,7 +170,7 @@ export function formatFailure(identifier: string, title: string, error: string, 
 
 export function formatReviewMerged(identifier: string, title: string, prUrl: string, duration?: string): string {
   const durationSuffix = duration ? ` (reviewed in ${duration})` : "";
-  return `*${escapeSlackText(identifier)}* — ${escapeSlackText(title)}\nPR merged: ${escapeSlackText(prUrl)}${durationSuffix}`;
+  return `*${escapeSlackText(identifier)}* — ${escapeSlackText(title)}\nPR merged: ${prUrl}${durationSuffix}`;
 }
 
 export function formatReviewNeedsChanges(identifier: string, title: string, reason: string, duration?: string): string {
@@ -182,7 +184,7 @@ export function formatReviewFailure(identifier: string, title: string, error: st
 }
 
 export function formatTaskPickedUp(identifier: string, title: string, repoUrl: string): string {
-  return `*${escapeSlackText(identifier)}* — ${escapeSlackText(title)}\nPicked up — cloning ${escapeSlackText(repoUrl)}...`;
+  return `*${escapeSlackText(identifier)}* — ${escapeSlackText(title)}\nPicked up — cloning ${repoUrl}...`;
 }
 
 export function formatPlanningComplete(
@@ -199,7 +201,7 @@ export function formatPlanningComplete(
 }
 
 export function formatReviewStarted(identifier: string, title: string, prUrl: string): string {
-  return `*${escapeSlackText(identifier)}* — ${escapeSlackText(title)}\nReview started: ${escapeSlackText(prUrl)}`;
+  return `*${escapeSlackText(identifier)}* — ${escapeSlackText(title)}\nReview started: ${prUrl}`;
 }
 
 export function formatTimeoutWarning(
