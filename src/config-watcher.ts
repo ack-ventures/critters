@@ -1,4 +1,5 @@
 import { type FSWatcher, watch } from "node:fs";
+import { basename, dirname } from "node:path";
 import { loadConfig } from "./config.js";
 import { log, logError } from "./logger.js";
 import type { Config } from "./types.js";
@@ -16,7 +17,15 @@ export class ConfigWatcher {
 
 	start(): void {
 		try {
-			this.watcher = watch(this.configPath, () => {
+			// Watch the parent directory rather than the file itself. A single
+			// fs.watch on the file stops firing after the first atomic-rename
+			// save (most editors replace the inode), whereas the directory
+			// handle survives renames. Filter events down to our basename.
+			const dir = dirname(this.configPath);
+			const file = basename(this.configPath);
+			this.watcher = watch(dir, (_event, filename) => {
+				// filename can be null on some platforms; treat that as a match.
+				if (filename != null && filename !== file) return;
 				if (this.debounceTimer) {
 					clearTimeout(this.debounceTimer);
 				}

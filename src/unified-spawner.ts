@@ -109,10 +109,9 @@ export class UnifiedSpawner {
   }
 
   cleanupStale(): void {
-    if (this.getActiveCount() > 0 || this.getQueueSize() > 0) {
-      log("Skipping stale cleanup — critters are active or queued");
-      return;
-    }
+    // No active/queued guard: cleanupStaleWorkDirs already excludes every dir
+    // in activeWorkDirs and only removes dirs older than maxAgeMinutes, so it
+    // is safe to run even while critters are busy.
     const maxAgeMinutes = this.config.limits.cleanupStaleMinutes
       ?? Math.max(...this.config.critterTypes.map(ct => ct.timeoutMinutes)) + 30;
     cleanupStaleWorkDirs(this.config.daemon.workDir, this.activeWorkDirs, maxAgeMinutes);
@@ -197,6 +196,14 @@ export class UnifiedSpawner {
     for (const ac of this.activeProcesses) {
       ac.abort();
     }
+    // Drain queued-but-unstarted tasks so their dispatch promise settles;
+    // otherwise the caller awaits forever and the issue stays in claimStatus.
+    for (const queue of this.queues.values()) {
+      while (queue.length > 0) {
+        const item = queue.shift();
+        item?.resolve({ success: false, error: "Daemon stopping" });
+      }
+    }
   }
 
   private processQueue(typeName: string): void {
@@ -213,18 +220,8 @@ export class UnifiedSpawner {
       this.running.set(typeName, runningNow + 1);
       logTask(item.task.identifier, `Task started [${typeName}] (queue: ${queue.length}, running: ${(this.running.get(typeName) ?? 0)})`);
       logTask(item.task.identifier, `Repo: ${shortRepoName(item.task.repoUrl)} | Branch: ${branchName(item.task.identifier, item.task.title, this.config.daemon.branchPrefix)}`);
-      this.activeCritterMap.set(item.task.id, {
-        identifier: item.task.identifier,
-        title: item.task.title,
-        phase: item.critterType.phases[0]?.name ?? typeName,
-        repo: shortRepoName(item.task.repoUrl),
-        branch: item.task.prBranch ?? branchName(item.task.identifier, item.task.title, this.config.daemon.branchPrefix),
-        startedAt: Date.now(),
-        prUrl: item.task.prUrl,
-        issueUrl: item.task.issueUrl,
-        timeoutMinutes: item.critterType.timeoutMinutes,
-        critterType: typeName,
-      });
+      // Note: activeCritterMap registration happens at the top of runTask so
+      // that each (re)attempt re-registers itself (see runTaskWithRetry).
 
       const metricEvent = typeName === "review" ? "review_started" : "task_started";
       recordMetric({
@@ -254,6 +251,22 @@ export class UnifiedSpawner {
   }
 
   private async runTask(task: TrackerTask, critterType: CritterTypeConfig): Promise<TaskResult> {
+    // Register (or re-register on retry) this attempt in the active map. The
+    // finally block deletes it after every attempt, so runTaskWithRetry's
+    // re-invocation would otherwise leave the task invisible/unkillable.
+    this.activeCritterMap.set(task.id, {
+      identifier: task.identifier,
+      title: task.title,
+      phase: critterType.phases[0]?.name ?? critterType.name,
+      repo: shortRepoName(task.repoUrl),
+      branch: task.prBranch ?? branchName(task.identifier, task.title, this.config.daemon.branchPrefix),
+      startedAt: Date.now(),
+      prUrl: task.prUrl,
+      issueUrl: task.issueUrl,
+      timeoutMinutes: critterType.timeoutMinutes,
+      critterType: critterType.name,
+    });
+
     const tracker = this.getTracker(critterType);
     const isReviewType = critterType.name === "review";
     const workDirPrefix = isReviewType ? "review-" : "";
@@ -453,7 +466,7 @@ export class UnifiedSpawner {
         const outputFile = `${workDir}/.critter-output-${phaseTag}.json`;
         const costMonitorInterval = setInterval(() => {
           const currentPhaseCost = cliAdapter.readPartialCost(outputFile);
-          const completedPhaseCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
+          const completedPhaseCost = aggregatePhaseResults(phaseResults).totalCost;
           const totalCost = completedPhaseCost + currentPhaseCost;
           // Update active detail for dashboard
           const activeDetail = this.activeCritterMap.get(task.id);
@@ -479,7 +492,7 @@ export class UnifiedSpawner {
         phaseResults.push(phaseResult.spawn);
 
         // Update accumulated cost on detail for dashboard accuracy between phases
-        const accumulatedCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
+        const accumulatedCost = aggregatePhaseResults(phaseResults).totalCost;
         const phaseDetail = this.activeCritterMap.get(task.id);
         if (phaseDetail) phaseDetail.costUsd = accumulatedCost;
         phaseDataList.push(phaseResult.data);
@@ -523,7 +536,7 @@ export class UnifiedSpawner {
 
         // Cost threshold check
         if (!costAlertSent && this.config.limits.costAlertThreshold != null) {
-          const accumulatedCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
+          const accumulatedCost = aggregatePhaseResults(phaseResults).totalCost;
           if (accumulatedCost > this.config.limits.costAlertThreshold) {
             costAlertSent = true;
             logTask(task.identifier, `Cost alert: ${task.identifier} has spent $${accumulatedCost.toFixed(2)} (threshold: $${this.config.limits.costAlertThreshold.toFixed(2)})`);
@@ -537,7 +550,7 @@ export class UnifiedSpawner {
 
         // Between-phase cost budget check
         if (effectiveCostBudget != null && !costBudgetExceeded) {
-          const accumulatedCost = phaseResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
+          const accumulatedCost = aggregatePhaseResults(phaseResults).totalCost;
           if (accumulatedCost > effectiveCostBudget) {
             costBudgetExceeded = true;
             costBudgetSpent = accumulatedCost;
@@ -634,6 +647,13 @@ export class UnifiedSpawner {
         try {
           await tracker.comment(task.id, `Transient failure detected (will auto-retry): ${error}`);
         } catch { /* best effort */ }
+        return { success: false, error };
+      }
+
+      // Graceful shutdown: don't run failure handling (which would flip the
+      // issue to a FAILED status and defeat claimStatus-based orphan recovery
+      // on the next startup). Mirror the auto-retry early return above.
+      if (this.stopped) {
         return { success: false, error };
       }
 

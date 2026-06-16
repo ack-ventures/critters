@@ -37,7 +37,19 @@ export interface DaemonContext {
   updateRefs: (updates: { config: Config; trackers: Map<string, IssueTracker>; slackNotifier: SlackNotifier }) => void;
 }
 
-const immutableFields = ["workDir", "healthPort", "tmuxSession", "dashboardToken", "metricsRetentionDays"] as const;
+/**
+ * Fields that cannot change at runtime. Each lists its flat top-level key and
+ * the grouped path the runtime actually reads (e.g. `config.daemon.workDir`).
+ * loadConfig populates both copies, so both must be reverted to the running
+ * values — reverting only the flat copy let the change silently take effect.
+ */
+const immutableFields = [
+  { flat: "workDir", group: "daemon", key: "workDir" },
+  { flat: "healthPort", group: "daemon", key: "healthPort" },
+  { flat: "tmuxSession", group: "daemon", key: "tmuxSession" },
+  { flat: "dashboardToken", group: "daemon", key: "dashboardToken" },
+  { flat: "metricsRetentionDays", group: "limits", key: "metricsRetentionDays" },
+] as const;
 
 export function createConfigReloadHandler(ctx: DaemonContext): (newConfig: Config) => void {
   return (newConfig: Config) => {
@@ -45,12 +57,16 @@ export function createConfigReloadHandler(ctx: DaemonContext): (newConfig: Confi
     newConfig.noTmux = ctx.config.noTmux;
     newConfig.daemon.noTmux = ctx.config.daemon.noTmux;
 
-    // Override immutable fields with current values, warn if changed
-    for (const field of immutableFields) {
-      if (newConfig[field] !== ctx.config[field]) {
-        log(`Warning: '${field}' cannot be changed at runtime (ignoring ${JSON.stringify(ctx.config[field])} → ${JSON.stringify(newConfig[field])})`);
-        (newConfig as unknown as Record<string, unknown>)[field] = ctx.config[field];
+    // Override immutable fields with current values, warn if changed. Revert
+    // both the flat copy and the grouped copy the runtime reads.
+    for (const { flat, group, key } of immutableFields) {
+      const currentGrouped = (ctx.config[group] as unknown as Record<string, unknown>)[key];
+      const newGrouped = (newConfig[group] as unknown as Record<string, unknown>)[key];
+      if (newConfig[flat] !== ctx.config[flat] || newGrouped !== currentGrouped) {
+        log(`Warning: '${flat}' cannot be changed at runtime (ignoring ${JSON.stringify(ctx.config[flat])} → ${JSON.stringify(newConfig[flat] ?? newGrouped)})`);
       }
+      (newConfig as unknown as Record<string, unknown>)[flat] = ctx.config[flat];
+      (newConfig[group] as unknown as Record<string, unknown>)[key] = currentGrouped;
     }
 
     // Tunnel config is immutable at runtime (ngrok is a long-lived subprocess)
