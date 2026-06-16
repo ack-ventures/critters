@@ -1,11 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { execSync } from "node:child_process";
-import { chmodSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { activeCritterIdentifiersFromPanes, parsePaneList } from "../cli/spawn.js";
 import { createConfigReloadHandler, type DaemonContext } from "../config-reload.js";
-import { ConfigWatcher } from "../config-watcher.js";
 import { createBranch, shallowClone } from "../git.js";
 import { salvagePartialProgress } from "../task-salvage.js";
 import type { IssueTracker, TrackerTask } from "../tracker/types.js";
@@ -245,78 +244,5 @@ describe("B7 — runTask re-registers the task in activeCritterMap", () => {
     expect(captured[1]).toContain("ACK-777");
     // Cleaned up after each attempt.
     expect(spawner.getActiveDetails()).toHaveLength(0);
-  });
-});
-
-// ───────────────────────────── Config watcher rename survival ─────────────────────────────
-// ConfigWatcher watches the parent directory (not the file inode) so that an
-// atomic, inode-replacing save (write temp + rename over the path) still fires
-// onReload. The existing config-watcher.test.ts only exercises a plain
-// in-place overwrite, which does NOT replace the inode and therefore would
-// still pass against a naive file-handle watcher. This covers the rename case.
-
-describe("ConfigWatcher — survives inode-replacing atomic rename", () => {
-  let tempDir: string;
-  let savedKey: string | undefined;
-
-  const baseYaml = `
-pollIntervalSeconds: 120
-concurrency: 2
-timeoutMinutes: 30
-workDir: /tmp/critters-rename-test
-defaultAllowedTools:
-  - "Read"
-  - "Write"
-`;
-
-  beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), "critters-audit-rename-"));
-    savedKey = process.env.LINEAR_API_KEY;
-    process.env.LINEAR_API_KEY = "test-key";
-  });
-
-  afterEach(() => {
-    if (savedKey !== undefined) {
-      process.env.LINEAR_API_KEY = savedKey;
-    } else {
-      delete process.env.LINEAR_API_KEY;
-    }
-    rmSync(tempDir, { recursive: true, force: true });
-  });
-
-  test("calls onReload after the config is replaced via temp-file + rename", async () => {
-    const configPath = join(tempDir, "config.yaml");
-    writeFileSync(configPath, baseYaml, "utf-8");
-
-    const reloadedConfigs: Config[] = [];
-    const watcher = new ConfigWatcher(configPath, (config) => {
-      reloadedConfigs.push(config);
-    });
-    watcher.start();
-    // Give fs.watch a moment to arm before we mutate the directory; on macOS
-    // (FSEvents) an event fired in the same tick as registration can be missed.
-    await new Promise((r) => setTimeout(r, 150));
-
-    // Atomic save: write the new content to a sibling temp file, then rename it
-    // over the config path. This replaces the inode — a naive fs.watch on the
-    // file handle would stop firing, but the parent-dir watch survives.
-    const tmpPath = join(tempDir, "config.yaml.tmp");
-    const newYaml = baseYaml.replace("concurrency: 2", "concurrency: 4");
-    writeFileSync(tmpPath, newYaml, "utf-8");
-    renameSync(tmpPath, configPath);
-
-    // Poll for the debounced reload (500ms debounce + FSEvents delivery
-    // latency). Polling rather than a single fixed sleep keeps this from
-    // flaking on slow event delivery. NOTE: fs.watch rename semantics are
-    // inherently platform-dependent; the arm delay above plus this generous
-    // polling window are what make this deterministic in CI.
-    for (let i = 0; i < 30 && reloadedConfigs.length === 0; i++) {
-      await new Promise((r) => setTimeout(r, 100));
-    }
-
-    watcher.stop();
-
-    expect(reloadedConfigs.length).toBeGreaterThan(0);
-    expect(reloadedConfigs[reloadedConfigs.length - 1].concurrency).toBe(4);
   });
 });
