@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { LinearClient } from "@linear/sdk";
 import { loadWorkDir } from "./config.js";
 import { STREAM_FILTER } from "./jq-filter.js";
-import { findWorkDirs, phaseFileTag, renderReadableLines, resolveCliAdapterForLog } from "./log-resolver.js";
+import { findWorkDirs, newestDir, phaseFileTag, renderReadableLines, resolveCliAdapterForLog } from "./log-resolver.js";
 
 const IDENTIFIER_RE = /^[A-Z]+-\d+$/;
 const FILTER_TMP_PATH = "/tmp/critters-logs-filter.jq";
@@ -57,15 +57,6 @@ function parseArgs(args: string[]): ParsedArgs {
   }
 
   return { identifier, phase, follow, configPath };
-}
-
-function extractTimestamp(dirName: string): number {
-  const parts = dirName.split("-");
-  return parseInt(parts[parts.length - 1], 10);
-}
-
-function newestDir(dirs: string[]): string {
-  return dirs.sort((a, b) => extractTimestamp(b) - extractTimestamp(a))[0];
 }
 
 function writeFilterFile(): void {
@@ -154,7 +145,11 @@ async function followLogs(logFile: string): Promise<void> {
   }
 
   writeFilterFile();
-  const proc = Bun.spawn(["sh", "-c", `tail -n +1 -f ${JSON.stringify(logFile)} | jq -cr --unbuffered --arg tool_color '\\x1b[36m' -f ${JSON.stringify(FILTER_TMP_PATH)}`], {
+  // Interpolate a real ESC byte (not the literal text "\x1b[36m") so jq receives
+  // an actual ANSI color code. A raw ESC inside sh single quotes is passed through
+  // verbatim, matching what displayWithJq does via --arg tool_color "\x1b[36m".
+  const toolColor = "\x1b[36m";
+  const proc = Bun.spawn(["sh", "-c", `tail -n +1 -f ${JSON.stringify(logFile)} | jq -cr --unbuffered --arg tool_color '${toolColor}' -f ${JSON.stringify(FILTER_TMP_PATH)}`], {
     stdout: "inherit",
     stderr: "inherit",
   });
