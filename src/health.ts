@@ -344,7 +344,12 @@ export function startHealthServer(
                 const stillActive = currentStatus.activeCritterDetails.some((d) => d.identifier === identifier);
                 if (!stillActive) {
                   send(JSON.stringify({ event: "done" }));
+                  // Producer-side close: flip `closed` and tear down BOTH timers.
+                  // `cancel()` only fires on consumer cancel, so without this the
+                  // 15s heartbeat would keep firing forever after the critter ends.
+                  closed = true;
                   clearInterval(pollTimer);
+                  clearInterval(heartbeatTimer);
                   try { controller.close(); } catch {}
                 }
               }, 500);
