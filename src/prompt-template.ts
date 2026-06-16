@@ -3,14 +3,49 @@ import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { PhaseConfig } from "./critter-type.js";
 import { ToolPreset } from "./enums.js";
+import { logWarn } from "./logger.js";
 import {
   getExecutionAllowedTools,
   getPlanningAllowedTools,
+  stripBranchLine,
+  stripRepoLine,
 } from "./prompt.js";
 import type { PerRepoConfig } from "./repo-config.js";
 import { getReviewAllowedTools } from "./review-prompt.js";
 import type { TrackerTask } from "./tracker/types.js";
 import type { Config } from "./types.js";
+
+/**
+ * Single-pass {{var}} substitution.
+ *
+ * Each `{{token}}` is replaced at most once in one scan, so:
+ * - a value that itself contains another variable's `{{token}}` cannot be
+ *   re-substituted on a subsequent pass (B15), and
+ * - replacement values are inserted literally — special replacement patterns
+ *   like `$&`, `` $` ``, `$'`, `$$` in untrusted issue text are NOT interpreted
+ *   (B10), because we use a replacer function rather than string replacement.
+ *
+ * Unknown tokens are left intact and reported separately (F7).
+ */
+function substitute(content: string, vars: Record<string, string>): string {
+  return content.replace(/\{\{(\w+)\}\}/g, (match, key: string) =>
+    Object.hasOwn(vars, key) ? vars[key] : match,
+  );
+}
+
+/**
+ * Warn (without throwing) about any residual `{{token}}` left after
+ * substitution — typically a typo or an undefined variable (F7).
+ */
+function warnResidualTokens(content: string, source: string): void {
+  const residual = content.match(/\{\{\w+\}\}/g);
+  if (residual && residual.length > 0) {
+    const unique = [...new Set(residual)];
+    logWarn(
+      `Unresolved template token(s) in ${source}: ${unique.join(", ")} — left intact`,
+    );
+  }
+}
 
 /**
  * Resolve a prompt reference to actual prompt text.
@@ -34,13 +69,8 @@ export function resolvePrompt(
     throw new Error(`Prompt file not found: ${filePath}`);
   }
 
-  let content = readFileSync(filePath, "utf-8");
-
-  // Apply {{var}} substitution
-  for (const [key, value] of Object.entries(vars)) {
-    content = content.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value);
-  }
-
+  const content = substitute(readFileSync(filePath, "utf-8"), vars);
+  warnResidualTokens(content, `prompt file ${basename(filePath)}`);
   return content;
 }
 
@@ -55,7 +85,11 @@ export function buildPromptVars(
   return {
     identifier: task.identifier,
     title: task.title,
-    description: task.description,
+    // Clean {{description}} the same way builtin planning/review do, so custom
+    // prompts get the repo/branch directive lines stripped (B16). The raw,
+    // unmodified description is still available via {{descriptionRaw}}.
+    description: stripBranchLine(stripRepoLine(task.description)),
+    descriptionRaw: task.description,
     branch,
     baseBranch: task.baseBranch ?? "",
     repoUrl: task.repoUrl,
@@ -126,12 +160,8 @@ export function resolveSkills(
       throw new Error(`Skill file not found: ${filePath}`);
     }
 
-    let content = readFileSync(filePath, "utf-8");
-
-    // Apply {{var}} substitution
-    for (const [key, value] of Object.entries(vars)) {
-      content = content.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value);
-    }
+    const content = substitute(readFileSync(filePath, "utf-8"), vars);
+    warnResidualTokens(content, `skill file ${basename(filePath)}`);
 
     const skillName = basename(filePath).replace(/\.[^.]+$/, "");
     parts.push(`---\n\n## Skill: ${skillName}\n\n${content.trim()}`);
