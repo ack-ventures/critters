@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { homedir } from "node:os";
 import { ClaudeCodeAdapter } from "../cli/claude.js";
 import { CodexAdapter } from "../cli/codex.js";
 import { resolvePhaseMcpConfig } from "../cli/mcp.js";
@@ -25,7 +26,7 @@ describe("resolvePhaseMcpConfig", () => {
       } as Config,
     );
 
-    expect(result.mcpConfig).toEqual([`${process.env.HOME}/.critters/review-mcp.json`]);
+    expect(result.mcpConfig).toEqual([`${homedir()}/.critters/review-mcp.json`]);
     expect(result.strictMcpConfig).toBe(true);
   });
 
