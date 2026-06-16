@@ -568,7 +568,7 @@ export class UnifiedSpawner {
       const totalDuration = formatDuration(Date.now() - taskStart);
       logTask(task.identifier, `Completed in ${totalDuration}`);
 
-      await applyOutcome(critterType.outcomes.success, task, critterType, tracker);
+      await this.applySuccessOutcome(critterType.outcomes.success, task, critterType, tracker);
 
       // Upload report from the last phase (generic runner writes .critter-report.md)
       const lastPhaseData = phaseDataList.length > 0 ? phaseDataList[phaseDataList.length - 1] : null;
@@ -844,6 +844,27 @@ export class UnifiedSpawner {
     return lastResult ?? { success: false, error: "Auto-retry did not produce a task result" };
   }
 
+  /**
+   * Apply a terminal *success* outcome (status transition + optional label removal)
+   * defensively. A status-update failure on a genuinely successful task (API 5xx,
+   * rate limit, network blip) must never propagate: otherwise the outer catch would
+   * demote a real success into the FAILURE path — wrong status, a misleading "failed"
+   * comment, lost success comment/metrics, and (for transient errors) a wasteful full
+   * re-run of an already-created PR. The failure path already swallows these; mirror it.
+   */
+  private async applySuccessOutcome(
+    outcome: Parameters<typeof applyOutcome>[0],
+    task: TrackerTask,
+    critterType: CritterTypeConfig,
+    tracker: IssueTracker,
+  ): Promise<void> {
+    try {
+      await applyOutcome(outcome, task, critterType, tracker);
+    } catch (err) {
+      logTaskError(task.identifier, `Failed to apply success status transition (continuing — task succeeded): ${formatError(err)}`);
+    }
+  }
+
   private async handleCreateSuccess(
     task: TrackerTask,
     critterType: CritterTypeConfig,
@@ -855,7 +876,7 @@ export class UnifiedSpawner {
     taskStart: number,
     tracker: IssueTracker,
   ): Promise<TaskResult> {
-    await applyOutcome(critterType.outcomes.prCreated ?? critterType.outcomes.success, task, critterType, tracker);
+    await this.applySuccessOutcome(critterType.outcomes.prCreated ?? critterType.outcomes.success, task, critterType, tracker);
 
     try {
       await updatePrWithPlan(workDir, prUrl, task.identifier, allPhaseStats);
@@ -926,7 +947,7 @@ export class UnifiedSpawner {
     const totalDuration = formatDuration(Date.now() - taskStart);
 
     if (decision === "merged" || data.alreadyMerged) {
-      await applyOutcome(critterType.outcomes.merged, task, critterType, tracker);
+      await this.applySuccessOutcome(critterType.outcomes.merged, task, critterType, tracker);
       if (data.alreadyMerged) {
         await tracker.comment(task.id, "PR was already merged");
         logTask(task.identifier, "Review complete — PR was already merged");
@@ -974,7 +995,7 @@ export class UnifiedSpawner {
     }
 
     if (decision === "needs_changes") {
-      await applyOutcome(critterType.outcomes.needsChanges, task, critterType, tracker);
+      await this.applySuccessOutcome(critterType.outcomes.needsChanges, task, critterType, tracker);
       await tracker.comment(task.id, `Review critter (${critterType.phases[0].model}) requested changes: ${reason}`);
       await this.slackNotifier.notify(
         task.id,

@@ -20,10 +20,20 @@ export function renderDashboard(
   _dashboardToken?: string,
   identifier?: string,
 ): string {
+  // Escape characters that could break out of the inline <script> below. JSON.stringify
+  // does NOT escape "</script>", "<", ">", "&", or the JS line separators, so an
+  // attacker-controlled `identifier` (the raw URL path segment, reflected here) could
+  // otherwise terminate the script tag and inject live HTML — reflected XSS on the
+  // unauthenticated /dashboard/<id> route. Escaping to \uXXXX keeps the JSON valid.
   const bootstrap = JSON.stringify({
     typeFilter: typeFilter ?? null,
     identifier: identifier ?? null,
-  });
+  })
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
 
   const title = identifier ? `${escapeHtml(identifier)} - Critters`
     : typeFilter ? `Critters \u00b7 ${escapeHtml(typeFilter)}`

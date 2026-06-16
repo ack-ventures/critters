@@ -5,6 +5,7 @@ import { logTask, logTaskError, logTaskWarn } from "../logger.js";
 import { buildExecutionPrompt, getExecutionAllowedTools } from "../prompt.js";
 import { buildPromptVars, resolveSkills, resolveTools } from "../prompt-template.js";
 import { withRetry } from "../retry.js";
+import { salvagePartialProgress } from "../task-salvage.js";
 import { formatDuration, runCommand } from "../utils.js";
 import { VERSION } from "../version.js";
 import type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
@@ -52,10 +53,15 @@ export class ExecutionPhaseRunner implements PhaseRunner {
       return { spawn, data: { prUrl: null } };
     }
 
-    // Only look for a PR if the branch was pushed to the remote
+    // If the branch isn't on the remote, the agent committed locally but never pushed
+    // (ran out of turns, or `git push` failed while the CLI still exited 0). The work dir
+    // is the ONLY copy of those commits, and the spawner deletes it on the success path —
+    // so salvage the work (push + open a draft PR) instead of silently dropping it.
     const { stdout: remoteOut } = await runCommand("git", ["ls-remote", "--heads", "origin", branch], { cwd: workDir });
     if (!remoteOut.trim()) {
-      return { spawn, data: { prUrl: null } };
+      logTaskWarn(task.identifier, "Branch has local commits but was never pushed — salvaging to a draft PR to avoid data loss");
+      const salvage = await salvagePartialProgress(workDir, branch, task.identifier, task.title, task.repoUrl, task.baseBranch);
+      return { spawn, data: { prUrl: salvage.prUrl ?? null } };
     }
 
     // Detect PR
