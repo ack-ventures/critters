@@ -1,7 +1,11 @@
 import type { TriggerConfig } from "../critter-type.js";
 import { log, logError, logTaskError } from "../logger.js";
 import { withRetry } from "../retry.js";
+import { isTransientTaskError } from "../task-retry.js";
 import type { CreatedIssue, CreateIssueInput, IssueTracker, IssueTrackerIssue, TrackerTask, TrackerTeam } from "./types.js";
+
+/** Cap on the number of issues paginated through in a single findIssues call. */
+const MAX_PAGINATED_ISSUES = 200;
 
 /**
  * Jira Cloud tracker implementation using REST API v3.
@@ -40,30 +44,54 @@ export class JiraTracker implements IssueTracker {
           const assigneeValue = trigger.assignee === "me" ? "currentUser()" : `"${trigger.assignee}"`;
           jql += ` AND assignee = ${assigneeValue}`;
         }
-        const resp = await this.request("/search/jql", {
-          method: "POST",
-          body: JSON.stringify({
-            jql,
-            fields: ["summary", "description", "labels", "project", "issuelinks", "updated"],
-            expand: "renderedFields",
-          }),
-        });
-        const data = (await resp.json()) as JiraSearchResponse;
+        // Stable ordering so pagination is deterministic across pages.
+        jql += " ORDER BY created ASC";
+
+        // Page through results via nextPageToken until isLast or the cap is hit.
+        const issues: JiraIssue[] = [];
+        let nextPageToken: string | undefined;
+        let cappedOut = false;
+        do {
+          const resp = await this.request("/search/jql", {
+            method: "POST",
+            body: JSON.stringify({
+              jql,
+              fields: ["summary", "description", "labels", "project", "issuelinks", "updated"],
+              expand: "renderedFields",
+              maxResults: 100,
+              ...(nextPageToken ? { nextPageToken } : {}),
+            }),
+          });
+          const data = (await resp.json()) as JiraSearchResponse;
+          for (const issue of data.issues ?? []) issues.push(issue);
+          nextPageToken = data.isLast ? undefined : data.nextPageToken;
+          if (issues.length >= MAX_PAGINATED_ISSUES) {
+            cappedOut = true;
+            break;
+          }
+        } while (nextPageToken);
+
+        if (cappedOut) {
+          log(`Warning: hit pagination cap of ${MAX_PAGINATED_ISSUES} Jira issues — some issues may be skipped`);
+        }
 
         const tasks: TrackerTask[] = [];
-        for (const issue of data.issues ?? []) {
+        for (const issue of issues) {
           const description = extractPlainText(issue.renderedFields?.description ?? "") ||
             adfToPlainText(issue.fields.description);
 
-          // Find blockers from issue links
+          // Find blockers from issue links. Gate on the Jira statusCategory
+          // ("new" | "indeterminate" | "done") rather than the human-readable
+          // status name, so custom "done" status names don't starve dependents.
+          // Mirrors LinearTracker's canonical state-type check.
           const blockedBy: { identifier: string; status: string }[] = [];
           for (const link of issue.fields.issuelinks ?? []) {
             if (link.type.inward === "is blocked by" && link.inwardIssue) {
-              const blockerStatus = link.inwardIssue.fields?.status?.name;
-              if (blockerStatus && blockerStatus !== "Done" && blockerStatus !== "Closed" && blockerStatus !== "Resolved") {
+              const blockerStatus = link.inwardIssue.fields?.status;
+              if (blockerStatus && blockerStatus.statusCategory?.key !== "done") {
                 blockedBy.push({
                   identifier: link.inwardIssue.key,
-                  status: blockerStatus,
+                  status: blockerStatus.name,
                 });
               }
             }
@@ -90,6 +118,9 @@ export class JiraTracker implements IssueTracker {
       {
         maxRetries: 3,
         baseDelayMs: 2000,
+        // Only retry transient failures — non-retryable 4xx (auth, bad JQL)
+        // should fail fast instead of burning the full retry budget.
+        shouldRetry: (error) => isTransientTaskError(error instanceof Error ? error.message : String(error)),
         onRetry: (_error, attempt, delayMs) => {
           log(`findIssues (Jira) failed, retrying in ${Math.round(delayMs)}ms... (attempt ${attempt + 1}/3)`);
         },
@@ -108,7 +139,11 @@ export class JiraTracker implements IssueTracker {
         identifier: issue.key,
         title: issue.fields.summary,
         description,
-        statusName: issue.fields.status?.name ?? "Unknown",
+        // Reverse-map the raw Jira status name back to the internal critter
+        // status so the webhook compare (issueMatchesTrigger → statusName ===
+        // trigger.status) agrees with the poll path, which queries by the
+        // forward-mapped name. Both directions use the same statusMap.
+        statusName: this.reverseMapStatusName(issue.fields.status?.name ?? "Unknown"),
         labels: issue.fields.labels ?? [],
         group: issue.fields.project.name,
         groupId: issue.fields.project.key,
@@ -286,6 +321,18 @@ export class JiraTracker implements IssueTracker {
     return this.statusMap[name] ?? name;
   }
 
+  /**
+   * Reverse of {@link mapStatusName}: map a raw Jira status name back to the
+   * internal critter status name. Used so issues fetched by identifier report
+   * statuses in the same vocabulary the poll path queries with.
+   */
+  private reverseMapStatusName(jiraName: string): string {
+    for (const [internal, jira] of Object.entries(this.statusMap)) {
+      if (jira === jiraName) return internal;
+    }
+    return jiraName;
+  }
+
   private async request(path: string, init?: RequestInit): Promise<Response> {
     const resp = await fetch(`${this.baseUrl}${path}`, {
       ...init,
@@ -310,7 +357,11 @@ export class JiraTracker implements IssueTracker {
 
 interface JiraSearchResponse {
   issues: JiraIssue[];
-  total: number;
+  total?: number;
+  /** Cursor for the next page in Jira's enhanced search (/search/jql). */
+  nextPageToken?: string;
+  /** True when this is the final page of results. */
+  isLast?: boolean;
 }
 
 interface JiraIssue {
@@ -330,10 +381,15 @@ interface JiraIssue {
   };
 }
 
+interface JiraLinkedStatus {
+  name: string;
+  statusCategory?: { key: string };
+}
+
 interface JiraIssueLink {
   type: { name: string; inward: string; outward: string };
-  inwardIssue?: { key: string; fields?: { status?: { name: string } } };
-  outwardIssue?: { key: string; fields?: { status?: { name: string } } };
+  inwardIssue?: { key: string; fields?: { status?: JiraLinkedStatus } };
+  outwardIssue?: { key: string; fields?: { status?: JiraLinkedStatus } };
 }
 
 interface JiraTransition {
