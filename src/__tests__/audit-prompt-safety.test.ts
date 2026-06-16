@@ -76,6 +76,28 @@ describe("prompt substitution safety", () => {
       console.warn = original;
     }
   });
+
+  test("F7: a value containing a literal {{token}} does NOT warn", () => {
+    // The title's VALUE legitimately contains the text "{{description}}" (the
+    // B15 scenario). Because unknown tokens are detected during the single
+    // substitution scan — not by re-scanning the output — the inserted
+    // "{{description}}" must NOT be mistaken for an unresolved token.
+    const warnings: string[] = [];
+    const original = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
+      const out = resolveWith("Header: {{title}}\nBody: {{description}}", {
+        title: "see {{description}}",
+        description: "SECRET-BODY",
+      });
+      expect(out).toBe("Header: see {{description}}\nBody: SECRET-BODY");
+      expect(warnings.length).toBe(0);
+    } finally {
+      console.warn = original;
+    }
+  });
 });
 
 describe("buildPromptVars description cleaning (B16)", () => {

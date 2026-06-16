@@ -26,23 +26,35 @@ import type { Config } from "./types.js";
  *   (B10), because we use a replacer function rather than string replacement.
  *
  * Unknown tokens are left intact and reported separately (F7).
+ *
+ * Unknown tokens are detected DURING this single scan — only `{{token}}`s for
+ * which no variable exists are collected. A `{{token}}` that appears because it
+ * was part of an inserted replacement value is never re-scanned, so it cannot
+ * be mistaken for an unresolved token (avoids the B15 false positive).
  */
-function substitute(content: string, vars: Record<string, string>): string {
-  return content.replace(/\{\{(\w+)\}\}/g, (match, key: string) =>
-    Object.hasOwn(vars, key) ? vars[key] : match,
-  );
+function substitute(
+  content: string,
+  vars: Record<string, string>,
+): { result: string; unknownTokens: string[] } {
+  const unknown = new Set<string>();
+  const result = content.replace(/\{\{(\w+)\}\}/g, (match, key: string) => {
+    if (Object.hasOwn(vars, key)) {
+      return vars[key];
+    }
+    unknown.add(match);
+    return match;
+  });
+  return { result, unknownTokens: [...unknown] };
 }
 
 /**
- * Warn (without throwing) about any residual `{{token}}` left after
+ * Warn (without throwing) about any unknown `{{token}}` found during
  * substitution — typically a typo or an undefined variable (F7).
  */
-function warnResidualTokens(content: string, source: string): void {
-  const residual = content.match(/\{\{\w+\}\}/g);
-  if (residual && residual.length > 0) {
-    const unique = [...new Set(residual)];
+function warnUnknownTokens(tokens: string[], source: string): void {
+  if (tokens.length > 0) {
     logWarn(
-      `Unresolved template token(s) in ${source}: ${unique.join(", ")} — left intact`,
+      `Unresolved template token(s) in ${source}: ${tokens.join(", ")} — left intact`,
     );
   }
 }
@@ -69,9 +81,12 @@ export function resolvePrompt(
     throw new Error(`Prompt file not found: ${filePath}`);
   }
 
-  const content = substitute(readFileSync(filePath, "utf-8"), vars);
-  warnResidualTokens(content, `prompt file ${basename(filePath)}`);
-  return content;
+  const { result, unknownTokens } = substitute(
+    readFileSync(filePath, "utf-8"),
+    vars,
+  );
+  warnUnknownTokens(unknownTokens, `prompt file ${basename(filePath)}`);
+  return result;
 }
 
 /**
@@ -85,9 +100,11 @@ export function buildPromptVars(
   return {
     identifier: task.identifier,
     title: task.title,
-    // Clean {{description}} the same way builtin planning/review do, so custom
-    // prompts get the repo/branch directive lines stripped (B16). The raw,
-    // unmodified description is still available via {{descriptionRaw}}.
+    // Clean {{description}} the same way builtin planning/review do, stripping
+    // the repo/branch directive lines (B16). These vars feed every prompt path
+    // — builtin skills, custom prompts, and cli-prompt-render — so all of them
+    // see the cleaned text. The raw, unmodified description is still available
+    // via {{descriptionRaw}}.
     description: stripBranchLine(stripRepoLine(task.description)),
     descriptionRaw: task.description,
     branch,
@@ -160,11 +177,14 @@ export function resolveSkills(
       throw new Error(`Skill file not found: ${filePath}`);
     }
 
-    const content = substitute(readFileSync(filePath, "utf-8"), vars);
-    warnResidualTokens(content, `skill file ${basename(filePath)}`);
+    const { result, unknownTokens } = substitute(
+      readFileSync(filePath, "utf-8"),
+      vars,
+    );
+    warnUnknownTokens(unknownTokens, `skill file ${basename(filePath)}`);
 
     const skillName = basename(filePath).replace(/\.[^.]+$/, "");
-    parts.push(`---\n\n## Skill: ${skillName}\n\n${content.trim()}`);
+    parts.push(`---\n\n## Skill: ${skillName}\n\n${result.trim()}`);
   }
 
   return "\n\n" + parts.join("\n\n");
