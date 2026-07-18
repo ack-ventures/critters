@@ -146,33 +146,45 @@ export async function sendSlackNotification(
   }
 }
 
+/**
+ * Escape text for Slack mrkdwn. Per Slack's rules only `&`, `<` and `>` must be
+ * encoded (in that order — `&` first). This neutralizes injection of control
+ * sequences like `<!channel>`, `<@U123>` and `<url|text>` via untrusted
+ * free-text fields (issue titles, error messages, reasons). URL fields are left
+ * verbatim: escaping `&` to `&amp;` would corrupt query strings and break
+ * Slack's auto-linking.
+ */
+export function escapeSlackText(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 export function formatSuccess(identifier: string, title: string, prUrl: string, duration?: string): string {
   const durationSuffix = duration ? ` (completed in ${duration})` : "";
-  return `*${identifier}* — ${title}\nPR created: ${prUrl}${durationSuffix}`;
+  return `*${escapeSlackText(identifier)}* — ${escapeSlackText(title)}\nPR created: ${prUrl}${durationSuffix}`;
 }
 
 export function formatFailure(identifier: string, title: string, error: string, duration?: string): string {
   const durationPrefix = duration ? ` after ${duration}` : "";
-  return `*${identifier}* — ${title}\nFailed${durationPrefix}: ${error}`;
+  return `*${escapeSlackText(identifier)}* — ${escapeSlackText(title)}\nFailed${durationPrefix}: ${escapeSlackText(error)}`;
 }
 
 export function formatReviewMerged(identifier: string, title: string, prUrl: string, duration?: string): string {
   const durationSuffix = duration ? ` (reviewed in ${duration})` : "";
-  return `*${identifier}* — ${title}\nPR merged: ${prUrl}${durationSuffix}`;
+  return `*${escapeSlackText(identifier)}* — ${escapeSlackText(title)}\nPR merged: ${prUrl}${durationSuffix}`;
 }
 
 export function formatReviewNeedsChanges(identifier: string, title: string, reason: string, duration?: string): string {
   const durationSuffix = duration ? ` (reviewed in ${duration})` : "";
-  return `*${identifier}* — ${title}\nNeeds changes: ${reason}${durationSuffix}`;
+  return `*${escapeSlackText(identifier)}* — ${escapeSlackText(title)}\nNeeds changes: ${escapeSlackText(reason)}${durationSuffix}`;
 }
 
 export function formatReviewFailure(identifier: string, title: string, error: string, duration?: string): string {
   const durationPrefix = duration ? ` after ${duration}` : "";
-  return `*${identifier}* — ${title}\nReview failed${durationPrefix}: ${error}`;
+  return `*${escapeSlackText(identifier)}* — ${escapeSlackText(title)}\nReview failed${durationPrefix}: ${escapeSlackText(error)}`;
 }
 
 export function formatTaskPickedUp(identifier: string, title: string, repoUrl: string): string {
-  return `*${identifier}* — ${title}\nPicked up — cloning ${repoUrl}...`;
+  return `*${escapeSlackText(identifier)}* — ${escapeSlackText(title)}\nPicked up — cloning ${repoUrl}...`;
 }
 
 export function formatPlanningComplete(
@@ -185,11 +197,11 @@ export function formatPlanningComplete(
   if (numTurns != null) stats.push(`${numTurns} turns`);
   if (costUsd != null) stats.push(`$${costUsd.toFixed(2)}`);
   const suffix = stats.length > 0 ? ` (${stats.join(", ")})` : "";
-  return `*${identifier}* — ${title}\nPlanning complete${suffix} — executing...`;
+  return `*${escapeSlackText(identifier)}* — ${escapeSlackText(title)}\nPlanning complete${suffix} — executing...`;
 }
 
 export function formatReviewStarted(identifier: string, title: string, prUrl: string): string {
-  return `*${identifier}* — ${title}\nReview started: ${prUrl}`;
+  return `*${escapeSlackText(identifier)}* — ${escapeSlackText(title)}\nReview started: ${prUrl}`;
 }
 
 export function formatTimeoutWarning(
@@ -198,7 +210,7 @@ export function formatTimeoutWarning(
   elapsedMinutes: number,
   timeoutMinutes: number,
 ): string {
-  return `*${identifier}* — ${title}\n⚠️ Running for ${elapsedMinutes}/${timeoutMinutes} minutes`;
+  return `*${escapeSlackText(identifier)}* — ${escapeSlackText(title)}\n⚠️ Running for ${elapsedMinutes}/${timeoutMinutes} minutes`;
 }
 
 export function formatCostBudgetExceeded(
@@ -208,7 +220,7 @@ export function formatCostBudgetExceeded(
   budget: number,
   currentPhase: string,
 ): string {
-  return `*${identifier}* — ${title}\n:no_entry: Killed: cost budget exceeded ($${costUsd.toFixed(2)} spent, $${budget.toFixed(2)} budget) — killed during phase: ${currentPhase}`;
+  return `*${escapeSlackText(identifier)}* — ${escapeSlackText(title)}\n:no_entry: Killed: cost budget exceeded ($${costUsd.toFixed(2)} spent, $${budget.toFixed(2)} budget) — killed during phase: ${escapeSlackText(currentPhase)}`;
 }
 
 export function formatCostAlert(
@@ -218,5 +230,5 @@ export function formatCostAlert(
   threshold: number,
   currentPhase: string,
 ): string {
-  return `*${identifier}* — ${title}\n⚠️ Cost alert: spent *$${costUsd.toFixed(2)}* (threshold: $${threshold.toFixed(2)}) — currently in phase: ${currentPhase}`;
+  return `*${escapeSlackText(identifier)}* — ${escapeSlackText(title)}\n⚠️ Cost alert: spent *$${costUsd.toFixed(2)}* (threshold: $${threshold.toFixed(2)}) — currently in phase: ${escapeSlackText(currentPhase)}`;
 }

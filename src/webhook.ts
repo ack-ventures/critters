@@ -19,10 +19,29 @@ export interface LinearWebhookPayload {
   };
 }
 
+/**
+ * Verify an HMAC-SHA256 signature in constant time.
+ *
+ * Comparison happens on the decoded *bytes*, not the hex strings, and never
+ * throws: a malformed (e.g. odd-length or multi-byte) header decodes to a
+ * different byte length and is rejected cleanly with `false` instead of letting
+ * `timingSafeEqual` raise a RangeError (which would surface as an HTTP 500
+ * rather than a clean 401). A `sha256=` prefix is stripped (Jira sends one,
+ * Linear does not).
+ */
+export function verifyHmacSignature(body: string, header: string, secret: string): boolean {
+  const expected = Buffer.from(createHmac("sha256", secret).update(body).digest("hex"), "hex");
+  const providedHex = header.replace(/^sha256=/, "");
+  // `Buffer.from(..., "hex")` never throws in Bun — malformed/odd-length hex is
+  // silently truncated, so the byte-length compare below is what rejects bad
+  // input. The decoded byte lengths must match before timingSafeEqual runs.
+  const provided = Buffer.from(providedHex, "hex");
+  if (provided.length !== expected.length) return false;
+  return timingSafeEqual(provided, expected);
+}
+
 export function verifyLinearSignature(body: string, signature: string, secret: string): boolean {
-  const expected = createHmac("sha256", secret).update(body).digest("hex");
-  if (expected.length !== signature.length) return false;
-  return timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+  return verifyHmacSignature(body, signature, secret);
 }
 
 export function extractLinearWebhookTrigger(
@@ -83,10 +102,7 @@ export interface JiraWebhookPayload {
 }
 
 export function verifyJiraSignature(body: string, signatureHeader: string, secret: string): boolean {
-  const expected = createHmac("sha256", secret).update(body).digest("hex");
-  const provided = signatureHeader.replace(/^sha256=/, "");
-  if (expected.length !== provided.length) return false;
-  return timingSafeEqual(Buffer.from(expected), Buffer.from(provided));
+  return verifyHmacSignature(body, signatureHeader, secret);
 }
 
 export function extractJiraWebhookTrigger(
