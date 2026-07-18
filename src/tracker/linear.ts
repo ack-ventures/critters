@@ -2,7 +2,7 @@ import { LinearClient } from "@linear/sdk";
 import type { TriggerConfig } from "../critter-type.js";
 import { log, logError, logTaskError } from "../logger.js";
 import { withRetry } from "../retry.js";
-import { isTransientTaskError } from "../task-retry.js";
+import { isPermanentTrackerError } from "../task-retry.js";
 import type { CreatedIssue, CreateIssueInput, IssueTracker, IssueTrackerIssue, TrackerTask, TrackerTeam } from "./types.js";
 
 const MAX_PAGINATED_ISSUES = 200;
@@ -127,9 +127,9 @@ export class LinearTracker implements IssueTracker {
       {
         maxRetries: 3,
         baseDelayMs: 2000,
-        // Only retry transient failures — non-retryable 4xx (auth, bad request)
-        // should fail fast instead of burning the full retry budget.
-        shouldRetry: (error) => isTransientTaskError(error instanceof Error ? error.message : String(error)),
+        // Fail fast only on definitive client errors (auth, bad request);
+        // retry everything else (network failures, 429, 5xx).
+        shouldRetry: (error) => !isPermanentTrackerError(error instanceof Error ? error.message : String(error)),
         onRetry: (_error, attempt, delayMs) => {
           log(`findIssues failed, retrying in ${Math.round(delayMs)}ms... (attempt ${attempt + 1}/3)`);
         },

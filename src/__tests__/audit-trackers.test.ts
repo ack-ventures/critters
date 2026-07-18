@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { isPermanentTrackerError } from "../task-retry.js";
 import { JiraTracker } from "../tracker/jira.js";
 import type { IssueTracker, IssueTrackerIssue, TrackerTask } from "../tracker/types.js";
 
@@ -209,6 +210,46 @@ describe("4xx fast-fail — findIssues does not retry non-transient errors", () 
     await expect(tracker.findIssues({ label: "Critter", status: "To Do" })).rejects.toThrow();
     // No retries: exactly one HTTP call.
     expect(mockFetchFn).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── retry predicate: blacklist 4xx, retry everything else ────────────────────
+// Regression guard: the predicate must not whitelist "transient-looking"
+// messages — real network errors and Linear 5xx messages look nothing like the
+// git/subprocess error shapes and must still be retried.
+describe("isPermanentTrackerError — only definitive client errors fail fast", () => {
+  test.each([
+    // Bun fetch failure (connection refused / DNS)
+    "Unable to connect. Is the computer able to access the url?",
+    // Node/undici fetch failure
+    "fetch failed",
+    // Linear SDK 5xx / rate-limit message shapes
+    "Graphql error (code: 502)",
+    "Graphql error (code: 500)",
+    "Graphql error (Code: 429)",
+    // Jira 5xx / rate-limit message shapes
+    "Jira API error: 502 Bad Gateway",
+    "Jira API error: 503 Service Unavailable",
+    "Jira API error: 429 Too Many Requests",
+    "Jira API error: 500 Internal Server Error",
+    // Numeric red herrings that must NOT trip the 4xx matcher
+    "Jira API error: 503 Service Unavailable (request id 40401)",
+    "connect ECONNREFUSED 10.0.0.1:443",
+  ])("retries: %s", (message) => {
+    expect(isPermanentTrackerError(message)).toBe(false);
+  });
+
+  test.each([
+    "Jira API error: 400 Bad Request",
+    "Graphql error (code: 400)",
+    "Graphql error (code: 401)",
+    "Jira API error: 401 Unauthorized",
+    "Jira API error: 403 Forbidden",
+    "Graphql error (code: 403)",
+    "Jira API error: 404 Not Found",
+    "Jira API error: 422 Unprocessable Entity",
+  ])("fails fast: %s", (message) => {
+    expect(isPermanentTrackerError(message)).toBe(true);
   });
 });
 

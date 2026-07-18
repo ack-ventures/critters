@@ -4,6 +4,16 @@ export function isTransientTaskError(error: string): boolean {
   return TRANSIENT_ERROR_RE.test(error);
 }
 
+// Tracker fetch errors are the inverse problem from task errors: there is no
+// reliable whitelist of transient message shapes (Bun/undici network failures
+// and Linear SDK 5xx messages look nothing like git errors), so fail fast only
+// on definitive client errors and retry everything else.
+const PERMANENT_TRACKER_ERROR_RE = /\b(400|401|403|404|422)\b/;
+
+export function isPermanentTrackerError(error: string): boolean {
+  return PERMANENT_TRACKER_ERROR_RE.test(error);
+}
+
 export function withCappedJitter(baseDelayMs: number, maxDelayMs: number, jitter = true): number {
   const base = Math.min(baseDelayMs, maxDelayMs);
   if (!jitter) return base;
