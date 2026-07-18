@@ -10,21 +10,10 @@ export function getReviewAllowedTools(): string[] {
   ];
 }
 
-export function buildReviewPrompt(task: ReviewTask, adapter?: CliAdapter | PerRepoConfig | null, repoConfig?: PerRepoConfig | null): string {
-  // Support old signature: buildReviewPrompt(task, repoConfig)
-  let actualAdapter: CliAdapter | undefined;
-  let actualRepoConfig: PerRepoConfig | null | undefined;
-  if (adapter && typeof adapter === "object" && "name" in adapter && "binary" in adapter) {
-    actualAdapter = adapter as CliAdapter;
-    actualRepoConfig = repoConfig;
-  } else {
-    actualAdapter = undefined;
-    actualRepoConfig = adapter as PerRepoConfig | null | undefined;
-  }
-
+export function buildReviewPrompt(task: ReviewTask, adapter?: CliAdapter | null, repoConfig?: PerRepoConfig | null): string {
   const cleanedDescription = stripBranchLine(stripRepoLine(task.description));
-  const readingGuidance = actualAdapter?.promptGuidance() ?? "## Reading Large Files\nThe Read tool supports `offset` and `limit` parameters \u2014 use these to read large files in chunks rather than attempting to read the entire file at once.";
-  const strictToolRestrictions = actualAdapter?.capabilities.toolRestrictions !== false;
+  const readingGuidance = adapter?.promptGuidance() ?? "## Reading Large Files\nThe Read tool supports `offset` and `limit` parameters \u2014 use these to read large files in chunks rather than attempting to read the entire file at once.";
+  const strictToolRestrictions = adapter?.capabilities.toolRestrictions !== false;
   const toolRestrictionGuidance = strictToolRestrictions
     ? "Only the requested read-only review tools and Bash commands are available."
     : "Stay within the requested read-only review workflow and commands even if the CLI sandbox technically allows more.";
@@ -98,8 +87,8 @@ ${readingGuidance}`;
     prompt += `\n\n## Additional Context\n${custom}`;
   }
 
-  if (actualRepoConfig?.reviewPrompt) {
-    prompt += `\n\n## Repo-Specific Instructions\n${actualRepoConfig.reviewPrompt.trim()}`;
+  if (repoConfig?.reviewPrompt) {
+    prompt += `\n\n## Repo-Specific Instructions\n${repoConfig.reviewPrompt.trim()}`;
   }
 
   return prompt;

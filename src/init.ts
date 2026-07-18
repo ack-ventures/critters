@@ -285,11 +285,18 @@ function printSummary(): void {
   console.log(`\nRun 'critters' to start the daemon.`);
 }
 
-const stdinReader = Bun.stdin.stream().getReader();
 const decoder = new TextDecoder();
 
 async function readLine(): Promise<string> {
-  const result = await stdinReader.read();
-  if (result.value) return decoder.decode(result.value).trim();
-  return "";
+  // Acquire the stdin reader lazily so importing this module (which happens for
+  // every subcommand) does not lock stdin process-wide. Release it after each
+  // read so other consumers can use stdin once setup is done.
+  const reader = Bun.stdin.stream().getReader();
+  try {
+    const result = await reader.read();
+    if (result.value) return decoder.decode(result.value).trim();
+    return "";
+  } finally {
+    reader.releaseLock();
+  }
 }
