@@ -32,30 +32,77 @@ function formatSize(bytes: number): string {
   return `${bytes} B`;
 }
 
-async function getActiveWorkDirs(healthPort: number): Promise<Set<string>> {
-  const active = new Set<string>();
+type ActiveWorkDirsResult = {
+  /** true only when /healthz answered 200 and we have an authoritative active set. */
+  reachable: boolean;
+  /** true when something is (or may be) listening — a daemon could be running. */
+  daemonMaybeAlive: boolean;
+  workDirs: Set<string>;
+};
+
+/**
+ * A refused connection means nothing is listening on the port → the daemon is down,
+ * so its panes/work dirs are genuinely orphaned and safe to clean. Any other failure
+ * (timeout, reset, non-2xx) means a daemon may be alive but unresponsive — unsafe.
+ */
+export function isConnectionRefused(err: unknown): boolean {
+  const e = err as { message?: string; code?: string };
+  const code = String(e?.code ?? "").toLowerCase();
+  if (code === "connectionrefused" || code === "econnrefused") return true;
+  const msg = String(e?.message ?? err).toLowerCase();
+  // A timeout/abort means something may be there but is slow/wedged — NOT a refusal.
+  if (msg.includes("timeout") || msg.includes("timed out") || msg.includes("aborted")) return false;
+  return msg.includes("refused") || msg.includes("econnrefused") ||
+    msg.includes("connectionrefused") || msg.includes("unable to connect") ||
+    msg.includes("failed to connect");
+}
+
+async function getActiveWorkDirs(healthPort: number): Promise<ActiveWorkDirsResult> {
+  const workDirs = new Set<string>();
   try {
     const resp = await fetch(`http://localhost:${healthPort}/healthz`, { signal: AbortSignal.timeout(3000) });
     if (resp.ok) {
       const data = await resp.json() as { activeCritterDetails?: Array<{ workDir?: string | null }> };
       for (const d of data.activeCritterDetails ?? []) {
-        if (d.workDir) active.add(d.workDir);
+        if (d.workDir) workDirs.add(d.workDir);
       }
+      return { reachable: true, daemonMaybeAlive: true, workDirs };
     }
-  } catch {
-    // Daemon not running or unreachable — no protection available
+    // Something answered but not 200 — likely the daemon with a momentarily unhealthy probe.
+    return { reachable: false, daemonMaybeAlive: true, workDirs };
+  } catch (err) {
+    // Connection refused → daemon down (safe). Timeout/other → daemon may be alive (unsafe).
+    return { reachable: false, daemonMaybeAlive: !isConnectionRefused(err), workDirs };
   }
-  return active;
+}
+
+/**
+ * Resolve the active work dirs to protect during cleanup, or null when cleaning is
+ * UNSAFE: a daemon may be alive but its /healthz didn't answer cleanly, so we cannot tell
+ * which critters are live. Proceeding would fail open and could kill/delete live work.
+ */
+async function resolveActiveWorkDirs(healthPort: number): Promise<Set<string> | null> {
+  if (healthPort <= 0) return new Set();
+  const health = await getActiveWorkDirs(healthPort);
+  if (!health.reachable && health.daemonMaybeAlive) return null;
+  return health.workDirs;
 }
 
 async function cleanStaleTmuxPanes(configPath: string | undefined, dryRun: boolean): Promise<void> {
   const cleanConfig = loadCleanConfig(configPath);
   const tmuxSession = cleanConfig.tmuxSession;
 
-  // Get active work dirs from the daemon's health endpoint (if running)
-  const activeWorkDirs = cleanConfig.healthPort > 0
-    ? await getActiveWorkDirs(cleanConfig.healthPort)
-    : new Set<string>();
+  // Determine which critters are live so we never kill an active pane. If a daemon may be
+  // alive but its health endpoint didn't answer cleanly, we can't tell — fail closed.
+  const activeWorkDirs = await resolveActiveWorkDirs(cleanConfig.healthPort);
+  if (activeWorkDirs === null) {
+    console.error(
+      `Refusing to clean tmux panes: the daemon health endpoint on port ${cleanConfig.healthPort} ` +
+      `did not respond cleanly, but something appears to be listening. A daemon may be running — ` +
+      `cleaning now could kill live critter panes. Stop the daemon (or fix healthPort) and retry.`,
+    );
+    return;
+  }
 
   const stalePanes = await cleanupStalePanes(tmuxSession, activeWorkDirs);
 
@@ -114,10 +161,17 @@ export async function runClean(args: string[]): Promise<void> {
   let totalFreed = 0;
   let cleanedCount = 0;
 
-  // Query the daemon's health endpoint for active work directories
-  const activeWorkDirs = cleanConfig.healthPort > 0
-    ? await getActiveWorkDirs(cleanConfig.healthPort)
-    : new Set<string>();
+  // Query the daemon's health endpoint for active work directories. If a daemon may be
+  // alive but health didn't answer cleanly, fail closed rather than risk deleting live work.
+  const activeWorkDirs = await resolveActiveWorkDirs(cleanConfig.healthPort);
+  if (activeWorkDirs === null) {
+    console.error(
+      `Refusing to clean work directories: the daemon health endpoint on port ${cleanConfig.healthPort} ` +
+      `did not respond cleanly, but something appears to be listening. A daemon may be running — ` +
+      `cleaning now could delete in-use work dirs. Stop the daemon (or fix healthPort) and retry.`,
+    );
+    return;
+  }
 
   const dirs: { name: string; ageMs: number; size: number; stale: boolean; active: boolean }[] = [];
 

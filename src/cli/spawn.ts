@@ -31,6 +31,20 @@ function buildPaneLabel(identifier: string, title: string, phase: string, repoSh
   return base;
 }
 
+/**
+ * Build the colored banner `echo` line for a critter's tmux pane.
+ *
+ * `windowName` embeds the untrusted issue title, so it MUST be single-quoted via
+ * shellEscape: interpolating it into the double-quoted `echo -e "…"` directly (as
+ * the old `.replace(/"/g, …)` did) lets `$(…)` / backticks in a title execute as
+ * shell when the generated script runs — i.e. arbitrary RCE on the daemon host.
+ * The color codes are build-time constants and stay inside the double quotes so
+ * `echo -e` still interprets their escape sequences.
+ */
+export function buildPaneBanner(colorLabel: string, windowName: string, reset: string): string {
+  return `echo -e "${colorLabel}━━━ "${shellEscape(windowName)}" ━━━${reset}"`;
+}
+
 async function spawnInTmux(
   adapter: CliAdapter,
   prompt: string,
@@ -99,7 +113,7 @@ async function spawnInTmux(
 set -o pipefail
 export PATH="$HOME/.bun/bin:$HOME/.local/bin:${currentPath}"
 ${cmd.env ? Object.entries(cmd.env).map(([k, v]) => v === undefined ? `unset ${k}` : `export ${k}=${shellEscape(v)}`).join("\n") : ""}
-echo -e "${color.label}\u2501\u2501\u2501 ${windowName.replace(/"/g, '\\"')} \u2501\u2501\u2501${reset}"
+${buildPaneBanner(color.label, windowName, reset)}
 echo ""
 cd ${shellEscape(workDir)}
 ${cmd.script} \\
@@ -121,7 +135,7 @@ sleep 5
 set -o pipefail
 export PATH="$HOME/.bun/bin:$HOME/.local/bin:${currentPath}"
 ${cmd.env ? Object.entries(cmd.env).map(([k, v]) => v === undefined ? `unset ${k}` : `export ${k}=${shellEscape(v)}`).join("\n") : ""}
-echo -e "${color.label}\u2501\u2501\u2501 ${windowName.replace(/"/g, '\\"')} \u2501\u2501\u2501${reset}"
+${buildPaneBanner(color.label, windowName, reset)}
 echo ""
 cd ${shellEscape(workDir)}
 ${cmd.script} \\
