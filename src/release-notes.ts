@@ -1,5 +1,23 @@
 export const RELEASE_NOTES: Array<{ tag: string; date: string; name: string; body: string }> = [
   {
+    "tag": "v1.9.0",
+    "date": "2026-04-26",
+    "name": "v1.9.0",
+    "body": "## What's Changed\n* Add Codex CLI support to Docker image by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/360\n* ACK-329 Pass auto mode to Codex by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/361\n* [ACK-326] Recover orphaned in-progress issues on daemon startup by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/344\n* Fix Codex dashboard logs from uploaded attachments by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/363\n* Bump version to v1.9.0 by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/364\n\n\n**Full Changelog**: https://github.com/ack-ventures/critters/compare/v1.8.2...v1.9.0"
+  },
+  {
+    "tag": "v1.8.2",
+    "date": "2026-04-26",
+    "name": "v1.8.2",
+    "body": "## What's Changed\n* Improve daemon hardening paths by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/357\n* Fix Codex connector daemon compatibility by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/358\n* Bump version to v1.8.2 by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/359\n\n\n**Full Changelog**: https://github.com/ack-ventures/critters/compare/v1.8.1...v1.8.2"
+  },
+  {
+    "tag": "v1.8.1",
+    "date": "2026-04-20",
+    "name": "v1.8.1",
+    "body": "## What's Changed\n* Multi-page dashboard: 11 new routes, grouped sidebar, config-backed pages by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/354\n* Bump version to v1.8.1 by @andrewklingelhofer in https://github.com/ack-ventures/critters/pull/355\n\n\n**Full Changelog**: https://github.com/ack-ventures/critters/compare/v1.8.0...v1.8.1"
+  },
+  {
     "tag": "v1.8.0",
     "date": "2026-04-19",
     "name": "v1.8.0",
