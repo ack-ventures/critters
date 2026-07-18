@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { parse as parseYaml } from "yaml";
 import { assertValidCliAdapterName } from "./cli/adapter-names.js";
-import { type CritterTypeConfig, parseCritterTypes as parseCritterTypesFromYaml, synthesizeDefaultTypes, validateCritterType } from "./critter-type.js";
+import { type CritterTypeConfig, parseCritterTypes as parseCritterTypesFromYaml, synthesizeDefaultTypes } from "./critter-type.js";
 import { log } from "./logger.js";
 import type { AutoRetryConfig, AutoUpdateConfig, CircuitBreakerConfig, Config, RepoConfig, TunnelConfig } from "./types.js";
 
@@ -75,7 +75,9 @@ export function resolveConfigPath(configPath?: string): string {
 export function loadConfig(configPath?: string): Config {
   const resolved = resolveConfigPath(configPath);
   const raw = readFileSync(resolved, "utf-8");
-  const yaml = parseYaml(raw) as Record<string, unknown>;
+  // parseYaml returns null for an empty/comment-only file; coalesce to {} so the
+  // field reads below produce sensible defaults instead of a cryptic TypeError.
+  const yaml = (parseYaml(raw) ?? {}) as Record<string, unknown>;
 
   const linearApiKey = process.env.LINEAR_API_KEY || undefined;
   const jiraHost = process.env.JIRA_HOST || undefined;
@@ -295,7 +297,7 @@ export function loadWorkDir(configPath?: string): string {
   }
 
   const raw = readFileSync(resolved, "utf-8");
-  const yaml = parseYaml(raw) as Record<string, unknown>;
+  const yaml = (parseYaml(raw) ?? {}) as Record<string, unknown>;
   const workDir = (yaml.workDir as string) ?? "/tmp/critters-work";
   validateWorkDir(workDir);
 
@@ -314,7 +316,7 @@ export function loadCleanConfig(configPath?: string): { workDir: string; cleanup
     return { workDir: "/tmp/critters-work", healthPort: 3847, tmuxSession: "critters" };
   }
   const raw = readFileSync(resolved, "utf-8");
-  const yaml = parseYaml(raw) as Record<string, unknown>;
+  const yaml = (parseYaml(raw) ?? {}) as Record<string, unknown>;
   const workDir = (yaml.workDir as string) ?? "/tmp/critters-work";
   validateWorkDir(workDir);
   const tmuxSession = (yaml.tmuxSession as string) ?? "critters";
@@ -344,11 +346,10 @@ function parseCritterTypes(yaml: Record<string, unknown>, config: Config): Critt
 
   const types: CritterTypeConfig[] = [];
   for (const [name, raw] of Object.entries(rawTypes)) {
+    // parseCritterTypesFromYaml → parseCritterType already validates each type,
+    // so no separate validateCritterType pass is needed here.
     const expanded = parseCritterTypesFromYaml(name, raw);
-    for (const ct of expanded) {
-      validateCritterType(ct);
-      types.push(ct);
-    }
+    types.push(...expanded);
   }
 
   if (types.length === 0) {

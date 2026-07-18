@@ -52,8 +52,9 @@ export function startAutoUpdater(
       if (!result || !result.available) return;
 
       const activeCount = spawner.getActiveCount();
-      if (activeCount > 0) {
-        log(`Auto-update: v${result.currentVersion} → v${result.latestVersion} available but deferred — ${activeCount} critter(s) active`);
+      const queueSize = spawner.getQueueSize();
+      if (activeCount > 0 || queueSize > 0) {
+        log(`Auto-update: v${result.currentVersion} → v${result.latestVersion} available but deferred — ${activeCount} critter(s) active, ${queueSize} queued`);
         return;
       }
 
@@ -65,8 +66,21 @@ export function startAutoUpdater(
         );
       }
 
-      await checkForUpdate(version);
-      restartFn();
+      // Only restart when the binary was actually replaced. checkForUpdate
+      // returns false on any failure (download/verify/rename), so a failed apply
+      // no longer triggers a futile restart loop onto an unchanged version.
+      const applied = await checkForUpdate(version, { requireChecksum: true });
+      if (applied) {
+        restartFn();
+      } else {
+        log(`Auto-update: apply failed — staying on v${result.currentVersion}, will retry next interval`);
+        if (slackNotifier.isConfigured) {
+          await slackNotifier.notify(
+            "__auto_update__",
+            `⚠️ Auto-update to v${result.latestVersion} failed — staying on v${result.currentVersion}. Will retry on the next check.`,
+          );
+        }
+      }
     } catch (err) {
       log(`Auto-update: check failed — ${formatError(err)}`);
     }

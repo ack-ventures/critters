@@ -176,11 +176,21 @@ async function downloadWithProgress(
   return Buffer.from(result);
 }
 
+/**
+ * Download and apply the latest release over the running binary.
+ * Returns true ONLY when the renameSync over process.execPath actually
+ * succeeded (i.e. a new binary is now in place). Every failure or no-op
+ * (already up to date, download/verify error, etc.) returns false so callers
+ * like the auto-updater don't restart onto an unchanged version.
+ */
 export async function checkForUpdate(
   currentVersion: string,
-  opts?: { force?: boolean },
-): Promise<void> {
+  opts?: { force?: boolean; requireChecksum?: boolean },
+): Promise<boolean> {
   const force = opts?.force ?? false;
+  // Auto-update opts in to strict verification: a missing checksum asset becomes
+  // a hard failure so we never rename in a binary we couldn't verify.
+  const requireChecksum = opts?.requireChecksum ?? false;
   const print = force ? console.log.bind(console) : log;
   const printError = force ? console.error.bind(console) : logError;
 
@@ -191,17 +201,17 @@ export async function checkForUpdate(
   const execName = process.execPath.split("/").pop() ?? "";
   if (execName === "bun" || execName === "bun.exe") {
     if (force) printError("Cannot update: running via bun, not as a compiled binary. Use install.sh to install.");
-    return;
+    return false;
   }
 
   if (currentVersion === "dev") {
     if (force) printError("Cannot check for updates: running a dev build.");
-    return;
+    return false;
   }
 
   if (!isAllowedApiUrl(RELEASES_URL)) {
     printError(`Update aborted: releases URL points to unexpected domain`);
-    return;
+    return false;
   }
 
   const tempPath = `${process.execPath}.update`;
@@ -217,7 +227,7 @@ export async function checkForUpdate(
 
     if (!response.ok) {
       printError(`Update check failed: GitHub API returned ${response.status}`);
-      return;
+      return false;
     }
 
     const data = await response.json();
@@ -225,14 +235,14 @@ export async function checkForUpdate(
 
     if (typeof tag_name !== "string" || !Array.isArray(assets)) {
       printError("Update check failed: unexpected API response format");
-      return;
+      return false;
     }
 
     const latestVersion = tag_name.replace(/^v/, "").replace(/-.*$/, "");
 
     if (compareSemver(latestVersion, currentVersion) <= 0) {
       if (force) print(`Already up to date (v${currentVersion})`);
-      return;
+      return false;
     }
 
     print(`Update available: v${currentVersion} → v${latestVersion}`);
@@ -244,14 +254,14 @@ export async function checkForUpdate(
 
     if (!asset || typeof asset.browser_download_url !== "string") {
       printError(`Update: no valid binary asset found for ${process.platform}-${process.arch}`);
-      return;
+      return false;
     }
 
     if (!isAllowedDownloadUrl(asset.browser_download_url)) {
       let hostname = "unknown";
       try { hostname = new URL(asset.browser_download_url).hostname; } catch {}
       printError(`Update aborted: download URL points to unexpected domain: ${hostname}`);
-      return;
+      return false;
     }
 
     const downloadResponse = await fetch(asset.browser_download_url, {
@@ -260,10 +270,19 @@ export async function checkForUpdate(
 
     if (!downloadResponse.ok) {
       printError(`Update download failed: HTTP ${downloadResponse.status}`);
-      return;
+      return false;
     }
 
     const buffer = await downloadWithProgress(downloadResponse, force);
+
+    // Reject a truncated download: if the server advertised a Content-Length and
+    // the received bytes don't match, the binary is incomplete — never install it.
+    const contentLengthHeader = downloadResponse.headers.get("Content-Length");
+    const expectedBytes = contentLengthHeader !== null ? Number.parseInt(contentLengthHeader, 10) : null;
+    if (expectedBytes !== null && !Number.isNaN(expectedBytes) && buffer.length !== expectedBytes) {
+      printError(`Update aborted: download truncated (${buffer.length} of ${expectedBytes} bytes)`);
+      return false;
+    }
 
     // Checksum verification
     const checksumAsset = assets.find(
@@ -275,7 +294,7 @@ export async function checkForUpdate(
         let hostname = "unknown";
         try { hostname = new URL(checksumAsset.browser_download_url).hostname; } catch {}
         printError(`Update aborted: checksum URL points to unexpected domain: ${hostname}`);
-        return;
+        return false;
       }
 
       const checksumResponse = await fetch(checksumAsset.browser_download_url, {
@@ -284,7 +303,7 @@ export async function checkForUpdate(
 
       if (!checksumResponse.ok) {
         printError(`Update: failed to download checksum file (HTTP ${checksumResponse.status}), aborting update`);
-        return;
+        return false;
       }
 
       const checksumContent = await checksumResponse.text();
@@ -293,15 +312,19 @@ export async function checkForUpdate(
 
       if (!expectedHash) {
         printError(`Update: checksum for ${expectedName} not found in checksums-sha256.txt, aborting update`);
-        return;
+        return false;
       }
 
       if (!verifyChecksum(buffer, expectedHash)) {
         printError("Update: SHA-256 checksum mismatch, aborting update (possible tampering or corruption)");
-        return;
+        return false;
       }
 
       print("Checksum verified (SHA-256)");
+    } else if (requireChecksum) {
+      // Auto-update must never rename in a binary it could not verify.
+      printError("Update aborted: checksums-sha256.txt not found in release, cannot verify binary for auto-update");
+      return false;
     } else {
       print("Update: checksums-sha256.txt not found in release, skipping verification");
     }
@@ -313,6 +336,7 @@ export async function checkForUpdate(
     print(`Backup saved to ${backupPath}`);
     renameSync(tempPath, process.execPath);
     print(`Update applied (v${currentVersion} → v${latestVersion}). Restart the daemon manually to use the new version.`);
+    return true;
   } catch (err) {
     try {
       if (existsSync(tempPath)) {
@@ -334,5 +358,6 @@ export async function checkForUpdate(
     }
 
     printError(`Update failed: ${formatError(err)}`);
+    return false;
   }
 }

@@ -6,18 +6,40 @@ import type { Config, SpawnResult } from "./types.js";
 export function runCommand(
   command: string,
   args: string[],
-  options?: { cwd?: string },
+  options?: { cwd?: string; timeoutMs?: number },
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     const proc = spawn(command, args, options?.cwd ? { cwd: options.cwd } : undefined);
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const finish = (result: { code: number; stdout: string; stderr: string }) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(result);
+    };
+
     proc.stdout?.on("data", (d) => (stdout += d));
     proc.stderr?.on("data", (d) => (stderr += d));
     proc.on("error", (err) => {
-      resolve({ code: 1, stdout, stderr: stderr ? `${stderr}\n${err.message}` : err.message });
+      finish({ code: 1, stdout, stderr: stderr ? `${stderr}\n${err.message}` : err.message });
     });
-    proc.on("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
+    proc.on("close", (code) => finish({ code: code ?? 1, stdout, stderr }));
+
+    // Optional timeout: default behavior (no timeout) is preserved when timeoutMs is undefined.
+    if (options?.timeoutMs != null && options.timeoutMs > 0) {
+      timer = setTimeout(() => {
+        try { proc.kill("SIGKILL"); } catch {}
+        finish({
+          code: 1,
+          stdout,
+          stderr: stderr ? `${stderr}\nCommand timed out after ${options.timeoutMs}ms` : `Command timed out after ${options.timeoutMs}ms`,
+        });
+      }, options.timeoutMs);
+    }
   });
 }
 

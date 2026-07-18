@@ -21,13 +21,17 @@ export function stripAnsi(text: string): string {
   return text.replace(ANSI_RE, "");
 }
 
-function extractTimestamp(dirName: string): number {
+export function extractTimestamp(dirName: string): number {
   const parts = dirName.split("-");
   return parseInt(parts[parts.length - 1], 10);
 }
 
-function newestDir(dirs: string[]): string {
+export function newestDir(dirs: string[]): string {
   return dirs.sort((a, b) => extractTimestamp(b) - extractTimestamp(a))[0];
+}
+
+export function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export function findWorkDirs(workDir: string, identifier: string): { critterDirs: string[]; reviewDirs: string[] } {
@@ -35,7 +39,7 @@ export function findWorkDirs(workDir: string, identifier: string): { critterDirs
     return { critterDirs: [], reviewDirs: [] };
   }
 
-  const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escaped = escapeRegExp(identifier);
   const critterDirPattern = new RegExp(`^${escaped}-\\d+$`);
   const reviewDirPattern = new RegExp(`^review-${escaped}-\\d+$`);
 
@@ -330,10 +334,6 @@ export function renderReadableLines(jsonLines: string[], adapter: CliAdapter): s
 
 function extractReadableContent(jsonLines: string[], adapter: CliAdapter): string {
   return renderReadableLines(jsonLines, adapter).join("\n");
-}
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export function resolvePhasesFromAttachments(
