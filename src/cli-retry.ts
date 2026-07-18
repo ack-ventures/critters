@@ -4,7 +4,7 @@ import { loadConfig } from "./config.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import { formatError } from "./logger.js";
 import { createTracker } from "./tracker/index.js";
-import type { IssueTracker, TrackerTask } from "./tracker/types.js";
+import type { IssueTracker, IssueTrackerIssue, TrackerTask } from "./tracker/types.js";
 
 function loadEnv(): void {
   const cwdEnv = "./.env";
@@ -30,40 +30,73 @@ export async function runRetry(identifier: string, force: boolean): Promise<void
 
   const config = loadConfig();
 
-  // Find which provider handles this identifier's trigger label.
-  // For retry, we need to figure out which tracker to use. We'll try the default
-  // provider first since we don't know which critter type this issue belongs to.
-  const tracker = createTracker({
-    type: config.provider,
-    apiKey: config.linear.apiKey,
-    host: config.jira.host,
-    email: config.jira.email,
-    apiToken: config.jira.apiToken,
-    statusMap: config.jira.statusMap,
-  });
+  // Build at most one tracker per provider used by the configured critter
+  // types (mirrors runRetryAllFailed). We don't know which critter type owns
+  // this issue up front, so look it up per provider and match by trigger label.
+  const trackerMap = new Map<string, IssueTracker>();
+  const getTracker = (provider: string): IssueTracker => {
+    let tracker = trackerMap.get(provider);
+    if (!tracker) {
+      tracker = createTracker({
+        type: provider as "linear" | "jira",
+        apiKey: config.linear.apiKey,
+        host: config.jira.host,
+        email: config.jira.email,
+        apiToken: config.jira.apiToken,
+        statusMap: config.jira.statusMap,
+      });
+      trackerMap.set(provider, tracker);
+    }
+    return tracker;
+  };
 
-  const issue = await tracker.findIssueByIdentifier(identifier);
-  if (!issue) {
+  // Cache issue lookups per provider so we never re-fetch the same provider.
+  const issueByProvider = new Map<string, IssueTrackerIssue | null>();
+  const lookupIssue = async (provider: string, tracker: IssueTracker): Promise<IssueTrackerIssue | null> => {
+    if (!issueByProvider.has(provider)) {
+      issueByProvider.set(provider, await tracker.findIssueByIdentifier(identifier));
+    }
+    return issueByProvider.get(provider) ?? null;
+  };
+
+  // Find the critter type whose trigger label this issue carries, using that
+  // type's provider. This keeps retry config-aware: the matched type drives the
+  // retry target status and the recognized failure status.
+  let matched: { type: CritterTypeConfig; tracker: IssueTracker; issue: IssueTrackerIssue } | null = null;
+  let foundIssue: IssueTrackerIssue | null = null;
+  for (const ct of config.critterTypes) {
+    const provider = ct.provider ?? config.provider;
+    const tracker = getTracker(provider);
+    const issue = await lookupIssue(provider, tracker);
+    if (!issue) continue;
+    foundIssue = issue;
+    if (issue.labels.includes(ct.trigger.label)) {
+      matched = { type: ct, tracker, issue };
+      break;
+    }
+  }
+
+  if (!foundIssue) {
     console.error(`Error: Issue ${identifier} not found.`);
     process.exit(1);
   }
 
-  // Check that the issue has at least one trigger label from the configured critter types
-  const triggerLabels = new Set(config.critterTypes.map((ct) => ct.trigger.label));
-  const hasTriggerLabel = issue.labels.some((l) => triggerLabels.has(l));
-  if (!hasTriggerLabel) {
-    const labelList = [...triggerLabels].map((l) => `"${l}"`).join(" or ");
+  if (!matched) {
+    const labelList = config.critterTypes.map((ct) => `"${ct.trigger.label}"`).join(" or ");
     console.error(
       `Error: ${identifier} isn't a critter task (missing ${labelList} label).`,
     );
     process.exit(1);
   }
 
+  const { type, tracker, issue } = matched;
+  const retryStatus = type.trigger.status;
+  const failureStatus = type.outcomes.failure?.status ?? "Critter Failed";
   const statusName = issue.statusName;
 
-  if (statusName === "Todo") {
+  if (statusName === retryStatus) {
     console.log(
-      `${identifier} is already in Todo — it will be picked up on the next poll.`,
+      `${identifier} is already in ${retryStatus} — it will be picked up on the next poll.`,
     );
     return;
   }
@@ -73,7 +106,7 @@ export async function runRetry(identifier: string, force: boolean): Promise<void
     process.exit(1);
   }
 
-  if (statusName === "Critter Failed") {
+  if (statusName === failureStatus) {
     // Always allowed — no force needed
   } else if (statusName === "Human Review") {
     if (!force) {
@@ -96,11 +129,11 @@ export async function runRetry(identifier: string, force: boolean): Promise<void
     }
   }
 
-  await tracker.updateStatus(issue.id, "Todo", issue.groupId);
+  await tracker.updateStatus(issue.id, retryStatus, issue.groupId);
   await tracker.comment(issue.id, "Retry triggered via CLI");
 
   console.log(
-    `Retried ${identifier} — status set to Todo. The daemon will pick it up on the next poll cycle.`,
+    `Retried ${identifier} — status set to ${retryStatus}. The daemon will pick it up on the next poll cycle.`,
   );
 }
 
