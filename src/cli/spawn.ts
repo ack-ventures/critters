@@ -379,7 +379,9 @@ export async function spawnForPhase(
 // ── Stale pane cleanup ───────────────────────────────────────────────────────
 
 /** Regex to detect critter-titled tmux panes. Captures the issue identifier. */
-const CRITTER_PANE_TITLE_RE = /^([A-Z]+-\d+): .+ \/ (plan|exec|review|[\w-]+)/;
+// Issue key: an uppercase letter followed by uppercase letters/digits, a dash,
+// then digits (e.g. ACK-12, ABC2-123 for Jira keys that contain digits).
+const CRITTER_PANE_TITLE_RE = /^([A-Z][A-Z0-9]*-\d+): .+ \/ (plan|exec|review|[\w-]+)/;
 
 interface ParsedPane {
   paneId: string;
@@ -473,7 +475,7 @@ export async function cleanupStalePanes(
   const activeIdentifiers = new Set<string>();
   for (const dir of activeWorkDirs) {
     const basename = dir.split("/").pop() ?? "";
-    const match = basename.replace(/^review-/, "").match(/^([A-Z]+-\d+)/);
+    const match = basename.replace(/^review-/, "").match(/^([A-Z][A-Z0-9]*-\d+)/);
     if (match) activeIdentifiers.add(match[1]);
   }
   for (const identifier of activePaneIdentifiers) {

@@ -41,7 +41,16 @@ export async function salvagePartialProgress(
       try {
         const prs = JSON.parse(listResult.stdout);
         if (prs.length > 0) {
-          return { prUrl: prs[0].url, branchPushed: true };
+          // A PR already exists, but a resumed attempt (or the auto-commit
+          // above) may have produced commits that were never pushed. Push
+          // before returning so cleanupWorkDir doesn't delete unpushed work.
+          // The push is an idempotent fast-forward when origin is already
+          // up to date.
+          const pushResult = await runCommand("git", ["push", "origin", branch], { cwd: workDir });
+          if (pushResult.code !== 0) {
+            logTaskError(identifier, `Salvage: push to existing PR branch failed: ${pushResult.stderr}`);
+          }
+          return { prUrl: prs[0].url, branchPushed: pushResult.code === 0 };
         }
       } catch {
         // JSON parse failed
