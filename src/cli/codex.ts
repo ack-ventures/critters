@@ -161,9 +161,14 @@ export class CodexAdapter implements CliAdapter {
   }
 
   extractFinalResponse(logFile: string, lastMessageFile: string): string | null {
-    if (existsSync(lastMessageFile)) {
-      const text = readFileSync(lastMessageFile, "utf-8").trim();
-      if (text) return text;
+    try {
+      if (existsSync(lastMessageFile)) {
+        const text = readFileSync(lastMessageFile, "utf-8").trim();
+        if (text) return text;
+      }
+    } catch {
+      // IO race (file removed/locked between existsSync and read) — fall through
+      // to the stream-json log instead of throwing out of result handling.
     }
 
     const texts = this.extractTextFromLog(logFile);

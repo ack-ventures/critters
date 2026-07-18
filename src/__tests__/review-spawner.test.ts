@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
-import { hasNewPrFeedback, parseReviewOutcome } from "../runner/review.js";
+import { ClaudeCodeAdapter } from "../cli/claude.js";
+import { hasNewPrFeedback } from "../runner/review.js";
 import { createTempDir } from "./helpers.js";
 
 let tempDir: string;
@@ -16,7 +17,12 @@ afterEach(() => {
   cleanup();
 });
 
-describe("parseReviewOutcome", () => {
+// Production review parsing flows through ClaudeCodeAdapter.extractReviewDecision;
+// these exercise that path directly (the former parseReviewOutcome helper was a
+// thin wrapper around it and has been removed).
+describe("ClaudeCodeAdapter.extractReviewDecision", () => {
+  const adapter = new ClaudeCodeAdapter();
+
   test("parses REVIEW_RESULT:MERGED from stream-json log", () => {
     const logFile = `${tempDir}/output.json`;
     writeFileSync(logFile, [
@@ -24,7 +30,7 @@ describe("parseReviewOutcome", () => {
       JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "REVIEW_RESULT:MERGED" }] } }),
     ].join("\n"));
 
-    const outcome = parseReviewOutcome(logFile);
+    const outcome = adapter.extractReviewDecision(logFile, "");
     expect(outcome.decision).toBe("merged");
   });
 
@@ -34,7 +40,7 @@ describe("parseReviewOutcome", () => {
       JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "REVIEW_RESULT:NEEDS_CHANGES:Missing error handling in API call" }] } }),
     ].join("\n"));
 
-    const outcome = parseReviewOutcome(logFile);
+    const outcome = adapter.extractReviewDecision(logFile, "");
     expect(outcome.decision).toBe("needs_changes");
     expect(outcome.reason).toBe("Missing error handling in API call");
   });
@@ -45,12 +51,12 @@ describe("parseReviewOutcome", () => {
       JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Some review text" }] } }),
     ].join("\n"));
 
-    const outcome = parseReviewOutcome(logFile);
+    const outcome = adapter.extractReviewDecision(logFile, "");
     expect(outcome.decision).toBe("unknown");
   });
 
   test("returns unknown when log file does not exist", () => {
-    const outcome = parseReviewOutcome(`${tempDir}/nonexistent.json`);
+    const outcome = adapter.extractReviewDecision(`${tempDir}/nonexistent.json`, "");
     expect(outcome.decision).toBe("unknown");
   });
 
@@ -62,7 +68,7 @@ describe("parseReviewOutcome", () => {
       JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "REVIEW_RESULT:MERGED" }] } }),
     ].join("\n"));
 
-    const outcome = parseReviewOutcome(logFile);
+    const outcome = adapter.extractReviewDecision(logFile, "");
     expect(outcome.decision).toBe("merged");
   });
 
@@ -72,7 +78,7 @@ describe("parseReviewOutcome", () => {
       JSON.stringify({ type: "result", result: "Done. REVIEW_RESULT:NEEDS_CHANGES:CI checks failed" }),
     ].join("\n"));
 
-    const outcome = parseReviewOutcome(logFile);
+    const outcome = adapter.extractReviewDecision(logFile, "");
     expect(outcome.decision).toBe("needs_changes");
     expect(outcome.reason).toBe("CI checks failed");
   });
@@ -83,7 +89,7 @@ describe("parseReviewOutcome", () => {
       JSON.stringify({ type: "assistant", message: { content: "All good. REVIEW_RESULT:MERGED" } }),
     ].join("\n"));
 
-    const outcome = parseReviewOutcome(logFile);
+    const outcome = adapter.extractReviewDecision(logFile, "");
     expect(outcome.decision).toBe("merged");
   });
 });

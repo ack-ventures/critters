@@ -1,4 +1,3 @@
-import { ClaudeCodeAdapter } from "../cli/claude.js";
 import { spawnForPhase } from "../cli/spawn.js";
 import { logTask } from "../logger.js";
 import { buildPromptVars, resolveSkills } from "../prompt-template.js";
@@ -7,19 +6,9 @@ import { runCommand } from "../utils.js";
 import type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
 import { validatePhaseResult } from "./validate.js";
 
-export interface ReviewOutcome {
-  decision: "merged" | "needs_changes" | "unknown";
-  reason?: string;
-}
-
 export interface PrFeedbackSnapshot {
   commentIds: Set<string>;
   reviewIds: Set<string>;
-}
-
-export function parseReviewOutcome(logFilePath: string, lastMessageFile?: string): ReviewOutcome {
-  const adapter = new ClaudeCodeAdapter();
-  return adapter.extractReviewDecision(logFilePath, lastMessageFile ?? "");
 }
 
 export function hasNewPrFeedback(before: PrFeedbackSnapshot, after: PrFeedbackSnapshot): boolean {
@@ -86,7 +75,16 @@ export class ReviewPhaseRunner implements PhaseRunner {
         ["pr", "view", String(task.prNumber), "--json", "headRefName", "--jq", ".headRefName"],
         { cwd: workDir },
       );
-      task.prBranch = branchResult.stdout.trim();
+      // Fail loudly if branch resolution failed: a silent empty result would leave
+      // prBranch unset and cause the review to run against the BASE branch (which
+      // the agent could then approve/merge).
+      const resolvedBranch = branchResult.stdout.trim();
+      if (branchResult.code !== 0 || !resolvedBranch) {
+        throw new Error(
+          `Failed to resolve PR branch for #${task.prNumber}: ${branchResult.stderr.trim() || "empty headRefName"}`,
+        );
+      }
+      task.prBranch = resolvedBranch;
     }
 
     if (task.prBranch) {
@@ -144,14 +142,29 @@ export class ReviewPhaseRunner implements PhaseRunner {
     const lastMessageFile = `${workDir}/.critter-last-message-review.txt`;
     const outcome = ctx.cliAdapter.extractReviewDecision(jsonLogFile, lastMessageFile);
 
-    // Fallback: if no sentinel, check if PR was actually merged
-    if (outcome.decision === "unknown" && task.prNumber) {
-      const fallbackState = await runCommand(
+    // Reconcile the sentinel decision against the PR's actual GitHub state with a
+    // single query. This guards against a hallucinated REVIEW_RESULT:MERGED (agent
+    // claims a merge that never happened) and also recovers a real merge that the
+    // agent performed without emitting the sentinel.
+    if ((outcome.decision === "merged" || outcome.decision === "unknown") && task.prNumber) {
+      const prStateResult = await runCommand(
         "gh",
         ["pr", "view", String(task.prNumber), "--json", "state", "--jq", ".state"],
         { cwd: workDir },
       );
-      if (fallbackState.stdout.trim() === "MERGED") {
+      const prState = prStateResult.stdout.trim();
+
+      if (outcome.decision === "merged" && prState !== "MERGED") {
+        // Downgrade to "unknown" so the task fails loudly instead of moving the
+        // issue to Done with an open PR.
+        logTask(
+          task.identifier,
+          `Review reported MERGED but PR #${task.prNumber} state is ${prState || "unknown"} — downgrading`,
+        );
+        outcome.decision = "unknown";
+        outcome.reason = "Review reported merged but the PR is not actually merged on GitHub";
+      } else if (outcome.decision === "unknown" && prState === "MERGED") {
+        // Fallback: the agent merged the PR without emitting the sentinel.
         outcome.decision = "merged";
       }
     }
