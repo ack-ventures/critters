@@ -228,7 +228,7 @@ interface HooksResponse {
 }
 
 export function buildHooksResponse(
-  webhookConfig: { linearWebhookSecret?: string; jiraWebhookSecret?: string } | undefined,
+  webhookConfig: { linearWebhookSecret?: string; jiraWebhookSecret?: string; githubWebhookSecret?: string } | undefined,
   rawConfigHooks?: Record<string, string>,
   tunnelDomain?: string,
 ): HooksResponse {
@@ -249,6 +249,7 @@ export function buildHooksResponse(
   const webhooks = [
     { provider: "linear", endpoint: "/webhook/linear", secretSet: Boolean(webhookConfig?.linearWebhookSecret) },
     { provider: "jira", endpoint: "/webhook/jira", secretSet: Boolean(webhookConfig?.jiraWebhookSecret) },
+    { provider: "github", endpoint: "/webhook/github", secretSet: Boolean(webhookConfig?.githubWebhookSecret) },
   ];
   return {
     hooks,
@@ -273,6 +274,7 @@ const KNOWN_ENV_VARS: Array<{ key: string; category: string }> = [
   { key: "CLAUDE_CODE_OAUTH_TOKEN", category: "claude" },
   { key: "ANTHROPIC_API_KEY", category: "claude" },
   { key: "GITHUB_TOKEN", category: "github" },
+  { key: "GITHUB_WEBHOOK_SECRET", category: "github" },
   { key: "SLACK_BOT_TOKEN", category: "slack" },
   { key: "SLACK_CHANNEL", category: "slack" },
   { key: "SLACK_WEBHOOK_URL", category: "slack" },

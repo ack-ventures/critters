@@ -27,7 +27,8 @@ When the config file changes, a diff summary is logged showing what was updated.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `provider` | `"linear"` \| `"jira"` | `"linear"` | Default issue tracker provider |
+| `provider` | `"linear"` \| `"jira"` \| `"github"` | `"linear"` | Default issue tracker provider |
+| `github` | object | — | GitHub Issues settings: `repos` (required list of `"owner/repo"`), `statusField` (default `"Status"`), `statusMap`, `statusTypes` — see the README "GitHub Issues as a ticket source" section |
 | `pollIntervalSeconds` | number | 120 | How often to poll for issues (minimum 5) |
 | `concurrency` | number | 2 | Max parallel critters (minimum 1) |
 | `timeoutMinutes` | number | 30 | Total timeout per task in minutes |
@@ -99,6 +100,8 @@ repos:
 | `JIRA_HOST` | When using `provider: jira` | Jira Cloud hostname (e.g., `mycompany.atlassian.net`) |
 | `JIRA_EMAIL` | When using `provider: jira` | Jira user email |
 | `JIRA_API_TOKEN` | When using `provider: jira` | Jira API token (from https://id.atlassian.com) |
+| `GITHUB_TOKEN` | When using `provider: github` | GitHub token with repo/issues read-write on the configured repos |
+| `GITHUB_WEBHOOK_SECRET` | No | Enables the `POST /webhook/github` endpoint |
 | `SLACK_WEBHOOK_URL` | No | Slack webhook URL for basic notifications |
 | `SLACK_BOT_TOKEN` | No | Slack bot token (`xoxb-...`) for threaded notifications |
 | `SLACK_CHANNEL` | With `SLACK_BOT_TOKEN` | Slack channel ID (required when bot token is set) |
@@ -139,10 +142,10 @@ critterTypes:
 
 | Field | Required | Default | Description |
 |---|---|---|---|
-| `provider` | No | Top-level `provider` | `"linear"`, `"jira"`, or an array like `[linear, jira]` to poll both providers |
+| `provider` | No | Top-level `provider` | `"linear"`, `"jira"`, `"github"`, or an array like `[linear, jira]` to poll multiple providers |
 | `trigger.label` | Yes | — | Label that triggers this type |
 | `trigger.status` | Yes | — | Status name to match (e.g., `"Todo"`, `"In Review"`) |
-| `trigger.statusType` | No | — | Linear status type to match (e.g., `"unstarted"`). More reliable than name matching. Linear-only |
+| `trigger.statusType` | No | — | Status type to match (e.g., `"unstarted"`). More reliable than name matching. Native to Linear; for GitHub it matches against the `github.statusTypes` buckets (exact status-name fallback when unconfigured); Jira-only via `jiraStatusMap` names |
 | `trigger.assignee` | No | — | Only pick up issues assigned to this user. Email address, or `"me"` for the authenticated user |
 | `repo.clone` | No | `true` | Whether to shallow-clone the repo |
 | `repo.branch` | No | — | Whether to create a feature branch (needed for PR-creating types) |
@@ -322,7 +325,7 @@ PR-related hooks (`onPrCreated`, `onReviewStarted`, `onMerged`, `onNeedsChanges`
 
 Hooks time out after 30 seconds. Failures are logged as warnings but never fail the task.
 
-## Multi-provider setup (Linear + Jira)
+## Multi-provider setup (Linear + Jira + GitHub)
 
 ### Setting the provider
 

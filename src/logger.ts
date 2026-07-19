@@ -97,8 +97,8 @@ function colorizeForConsole(level: string, message: string, args: unknown[]): st
     result += `${YELLOW}WARN:${RESET} `;
   }
 
-  // Extract task identifier from level (e.g., "[ACK-130] " or "[ACK-130] WARN: ")
-  const identifierMatch = level.match(/^\[([A-Z]+-\d+)\]/);
+  // Extract task identifier from level (e.g., "[ACK-130] ", "[owner/repo#42] WARN: ")
+  const identifierMatch = level.match(/^\[([A-Z]+-\d+|[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+)\]/);
   if (identifierMatch) {
     result = `${DIM}[${ts}]${RESET} ${BOLD_CYAN}[${identifierMatch[1]}]${RESET} `;
     // Re-add WARN/ERROR prefix after identifier if present
@@ -130,7 +130,7 @@ function colorizeForConsole(level: string, message: string, args: unknown[]): st
 
 export function formatJsonLogEntry(level: string, message: string, args: unknown[]): string {
   const suffix = args.length > 0 ? ` ${args.map(String).join(" ")}` : "";
-  const identifierMatch = level.match(/^\[([A-Z]+-\d+)\]/);
+  const identifierMatch = level.match(/^\[([A-Z]+-\d+|[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+)\]/);
   const identifier = identifierMatch ? identifierMatch[1] : undefined;
   const logLevel = level.includes("ERROR") ? "error" : level.includes("WARN") ? "warn" : "info";
   const entry: Record<string, string> = {

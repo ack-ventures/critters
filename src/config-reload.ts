@@ -6,6 +6,7 @@ import { resetMetadataCache } from "./health.js";
 import { disableJsonLogs, enableJsonLogs, isJsonMode, log, logError } from "./logger.js";
 import type { SlackNotifier } from "./slack.js";
 import { createTracker } from "./tracker/index.js";
+import { buildProviderConfig } from "./tracker/provider-config.js";
 import type { IssueTracker } from "./tracker/types.js";
 import type { Config } from "./types.js";
 import type { UnifiedSpawner } from "./unified-spawner.js";
@@ -28,6 +29,8 @@ export interface DaemonContext {
   webhookConfig: {
     linearWebhookSecret?: string;
     jiraWebhookSecret?: string;
+    githubWebhookSecret?: string;
+    githubRepos?: string[];
     critterTypes: CritterTypeConfig[];
   };
   autoUpdater: { updateConfig: (c: Config) => void; stop: () => void } | null;
@@ -89,11 +92,7 @@ export function createConfigReloadHandler(ctx: DaemonContext): (newConfig: Confi
     const trackersToInit: IssueTracker[] = [];
     for (const provider of neededProviders) {
       if (!newTrackers.has(provider)) {
-        const tracker = createTracker(
-          provider === "jira"
-            ? { type: "jira", host: newConfig.jira.host, email: newConfig.jira.email, apiToken: newConfig.jira.apiToken, statusMap: newConfig.jira.statusMap }
-            : { type: "linear", apiKey: newConfig.linear.apiKey },
-        );
+        const tracker = createTracker(buildProviderConfig(newConfig, provider));
         newTrackers.set(provider, tracker);
         trackersToInit.push(tracker);
       }
@@ -144,6 +143,8 @@ export function createConfigReloadHandler(ctx: DaemonContext): (newConfig: Confi
       ctx.healthContext.teamRepos = newConfig.teamRepos;
       ctx.webhookConfig.linearWebhookSecret = newConfig.linear.webhookSecret;
       ctx.webhookConfig.jiraWebhookSecret = newConfig.jira.webhookSecret;
+      ctx.webhookConfig.githubWebhookSecret = newConfig.github.webhookSecret;
+      ctx.webhookConfig.githubRepos = newConfig.github.repos;
       ctx.webhookConfig.critterTypes = newConfig.critterTypes;
       resetMetadataCache();
       // Hot-reload jsonLogs (CLI flag always takes precedence)

@@ -134,3 +134,62 @@ export function extractJiraWebhookTrigger(
 
   return null;
 }
+
+// ── GitHub Webhooks ──────────────────────────────────────────────────────────
+
+export interface GitHubWebhookPayload {
+  action?: string;
+  issue?: {
+    number: number;
+    state?: string;
+    labels?: Array<{ name: string }>;
+  };
+  repository?: {
+    full_name: string; // "owner/repo"
+  };
+}
+
+/**
+ * GitHub signs with `X-Hub-Signature-256: sha256=<hex hmac>` — the shared
+ * verifier already strips the `sha256=` prefix.
+ */
+export function verifyGithubSignature(body: string, signatureHeader: string, secret: string): boolean {
+  return verifyHmacSignature(body, signatureHeader, secret);
+}
+
+/**
+ * `issues`-event actions that can change whether an issue matches a trigger.
+ * Everything else (`closed`, `assigned`, `deleted`, ...) is ignored. Note that
+ * issue-field-value changes emit no webhook event — field-mode status changes
+ * made by humans are discovered by regular polling, not webhooks.
+ */
+const GITHUB_TRIGGER_ACTIONS = new Set(["opened", "labeled", "unlabeled", "reopened", "edited"]);
+
+export function extractGithubWebhookTrigger(
+  payload: GitHubWebhookPayload,
+  critterTypes: CritterTypeConfig[],
+  configuredRepos: string[],
+): string | null {
+  if (!payload.action || !GITHUB_TRIGGER_ACTIONS.has(payload.action)) return null;
+
+  const fullName = payload.repository?.full_name;
+  const issueNumber = payload.issue?.number;
+  if (!fullName || issueNumber == null) return null;
+
+  // Closing a GitHub issue doesn't strip labels or field values, so a closed
+  // issue can still "match" a trigger — never dispatch on it. (`reopened`
+  // events arrive with state "open" and pass.)
+  if (payload.issue?.state === "closed") return null;
+
+  // Org-wide webhooks deliver events for every repo — only configured ones
+  // may trigger polls (case-insensitive: GitHub repo names are).
+  const configured = new Set(configuredRepos.map((r) => r.toLowerCase()));
+  if (!configured.has(fullName.toLowerCase())) return null;
+
+  const labelNames = new Set((payload.issue?.labels ?? []).map((l) => l.name));
+  const triggerLabels = new Set(critterTypes.map((ct) => ct.trigger.label));
+  for (const label of labelNames) {
+    if (triggerLabels.has(label)) return `${fullName}#${issueNumber}`;
+  }
+  return null;
+}

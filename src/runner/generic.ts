@@ -2,6 +2,7 @@ import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import { spawnForPhase } from "../cli/spawn.js";
 import { logTask, logTaskWarn } from "../logger.js";
 import { buildPromptVars, resolvePrompt, resolveSkills, resolveTools } from "../prompt-template.js";
+import { sanitizeIdentifier } from "../utils.js";
 import type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
 import { validatePhaseResult } from "./validate.js";
 
@@ -64,7 +65,7 @@ export class GenericPhaseRunner implements PhaseRunner {
       responseText = reportContent;
       logTask(task.identifier, `Report file found: ${REPORT_FILE} (${responseText.length} chars)`);
       // Also copy to the plans directory so builtin:execution can find it
-      const planPath = `${workDir}/critters/plans/${task.identifier}.md`;
+      const planPath = `${workDir}/critters/plans/${sanitizeIdentifier(task.identifier)}.md`;
       if (!existsSync(planPath)) {
         copyFileSync(reportPath, planPath);
       }

@@ -64,6 +64,19 @@ export interface LinearConfig {
   webhookSecret?: string;
 }
 
+export interface GitHubConfig {
+  token?: string;
+  /** Ticket-source repos ("owner/repo"). Required when the github provider is used. */
+  repos: string[];
+  /** Org issue field used for statuses (field mode). Default "Status". */
+  statusField: string;
+  /** Internal critter status name -> GitHub option/label name. */
+  statusMap?: Record<string, string>;
+  /** Critter statusType ("unstarted" | "started" | ...) -> GitHub option/label names. */
+  statusTypes?: Record<string, string[]>;
+  webhookSecret?: string;
+}
+
 export interface DaemonConfig {
   workDir: string;
   tmuxSession: string;
@@ -104,6 +117,7 @@ export interface Config {
   slack: SlackConfig;
   jira: JiraConfig;
   linear: LinearConfig;
+  github: GitHubConfig;
   daemon: DaemonConfig;
   limits: LimitsConfig;
   defaults: DefaultTypeConfig;
@@ -166,7 +180,8 @@ export interface Config {
   strictMcpConfig?: boolean;
   linearWebhookSecret?: string;
   jiraWebhookSecret?: string;
-  provider: "linear" | "jira";
+  githubWebhookSecret?: string;
+  provider: "linear" | "jira" | "github";
   critterTypes: CritterTypeConfig[];
   cli: string;
 }

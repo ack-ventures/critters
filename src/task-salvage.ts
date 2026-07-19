@@ -5,7 +5,7 @@ import {
   hasUncommittedChanges,
 } from "./git.js";
 import { logTaskError } from "./logger.js";
-import { extractOwnerRepo, runCommand } from "./utils.js";
+import { extractOwnerRepo, runCommand, sanitizeIdentifier } from "./utils.js";
 
 export async function salvagePartialProgress(
   workDir: string,
@@ -114,17 +114,20 @@ export function buildLogFileList(
   identifier: string,
   phases: Array<{ name: string }>,
 ): Array<{ path: string; name: string }> {
+  // Sanitized: matches the work dir / plan file names actually on disk for
+  // identifiers like "owner/repo#42" (and is a no-op for "ABC-123").
+  const safe = sanitizeIdentifier(identifier);
   const logFiles: Array<{ path: string; name: string }> = [];
   for (const phase of phases) {
     const phaseTag = phase.name === "planning" ? "plan" : phase.name === "execution" ? "exec" : phase.name;
     logFiles.push(
-      { path: `${workDir}/.critter-output-${phaseTag}.json`, name: `${identifier}-${phaseTag}-output.txt` },
-      { path: `${workDir}/.critter-err-${phaseTag}.log`, name: `${identifier}-${phaseTag}-stderr.txt` },
+      { path: `${workDir}/.critter-output-${phaseTag}.json`, name: `${safe}-${phaseTag}-output.txt` },
+      { path: `${workDir}/.critter-err-${phaseTag}.log`, name: `${safe}-${phaseTag}-stderr.txt` },
     );
   }
   logFiles.push(
-    { path: `${workDir}/critters/plans/${identifier}.md`, name: `${identifier}-plan.md` },
-    { path: `${workDir}/critters/plans/${identifier}.checkpoint.md`, name: `${identifier}-checkpoint.md` },
+    { path: `${workDir}/critters/plans/${safe}.md`, name: `${safe}-plan.md` },
+    { path: `${workDir}/critters/plans/${safe}.checkpoint.md`, name: `${safe}-checkpoint.md` },
   );
   return logFiles;
 }

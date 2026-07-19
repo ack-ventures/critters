@@ -401,3 +401,125 @@ defaultAllowedTools:
     });
   });
 });
+
+describe("GitHub provider config", () => {
+  let savedGithubToken: string | undefined;
+  let savedGithubSecret: string | undefined;
+
+  beforeEach(() => {
+    savedGithubToken = process.env.GITHUB_TOKEN;
+    savedGithubSecret = process.env.GITHUB_WEBHOOK_SECRET;
+    delete process.env.GITHUB_TOKEN;
+    delete process.env.GITHUB_WEBHOOK_SECRET;
+    delete process.env.LINEAR_API_KEY;
+  });
+
+  afterEach(() => {
+    if (savedGithubToken !== undefined) {
+      process.env.GITHUB_TOKEN = savedGithubToken;
+    } else {
+      delete process.env.GITHUB_TOKEN;
+    }
+    if (savedGithubSecret !== undefined) {
+      process.env.GITHUB_WEBHOOK_SECRET = savedGithubSecret;
+    } else {
+      delete process.env.GITHUB_WEBHOOK_SECRET;
+    }
+    process.env.LINEAR_API_KEY = "test-key";
+  });
+
+  test("parses the github block and GITHUB_TOKEN", () => {
+    process.env.GITHUB_TOKEN = "gh-tok";
+    const yaml = `
+provider: github
+defaultAllowedTools:
+  - "Read"
+github:
+  repos:
+    - myorg/api
+    - andrew/critters
+  statusField: State
+  statusMap:
+    "In Progress": "In progress"
+  statusTypes:
+    unstarted:
+      - Todo
+      - Backlog
+githubWebhookSecret: yaml-secret
+`;
+    const config = loadConfig(writeYaml(yaml));
+    expect(config.provider).toBe("github");
+    expect(config.github.token).toBe("gh-tok");
+    expect(config.github.repos).toEqual(["myorg/api", "andrew/critters"]);
+    expect(config.github.statusField).toBe("State");
+    expect(config.github.statusMap).toEqual({ "In Progress": "In progress" });
+    expect(config.github.statusTypes).toEqual({ unstarted: ["Todo", "Backlog"] });
+    expect(config.github.webhookSecret).toBe("yaml-secret");
+    expect(config.githubWebhookSecret).toBe("yaml-secret");
+  });
+
+  test("defaults statusField to Status; webhook secret falls back to env", () => {
+    process.env.GITHUB_TOKEN = "gh-tok";
+    process.env.GITHUB_WEBHOOK_SECRET = "env-secret";
+    const yaml = `
+provider: github
+defaultAllowedTools:
+  - "Read"
+github:
+  repos:
+    - myorg/api
+`;
+    const config = loadConfig(writeYaml(yaml));
+    expect(config.github.statusField).toBe("Status");
+    expect(config.github.webhookSecret).toBe("env-secret");
+  });
+
+  test("throws when GITHUB_TOKEN is not set for the github provider", () => {
+    const yaml = `
+provider: github
+defaultAllowedTools:
+  - "Read"
+github:
+  repos:
+    - myorg/api
+`;
+    expect(() => loadConfig(writeYaml(yaml))).toThrow("GITHUB_TOKEN not set");
+  });
+
+  test("throws when github.repos is empty for the github provider", () => {
+    process.env.GITHUB_TOKEN = "gh-tok";
+    const yaml = `
+provider: github
+defaultAllowedTools:
+  - "Read"
+`;
+    expect(() => loadConfig(writeYaml(yaml))).toThrow("github.repos is empty");
+  });
+
+  test("throws on malformed repo entries", () => {
+    process.env.GITHUB_TOKEN = "gh-tok";
+    const yaml = `
+provider: github
+defaultAllowedTools:
+  - "Read"
+github:
+  repos:
+    - justowner
+`;
+    expect(() => loadConfig(writeYaml(yaml))).toThrow('Invalid github.repos entry "justowner"');
+  });
+
+  test("throws on case-insensitive duplicate repos", () => {
+    process.env.GITHUB_TOKEN = "gh-tok";
+    const yaml = `
+provider: github
+defaultAllowedTools:
+  - "Read"
+github:
+  repos:
+    - Owner/A
+    - owner/a
+`;
+    expect(() => loadConfig(writeYaml(yaml))).toThrow("Duplicate github.repos entry");
+  });
+});

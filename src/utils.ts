@@ -51,8 +51,17 @@ export function slugify(text: string): string {
     .slice(0, 50);
 }
 
+/**
+ * Make an issue identifier safe for branch names, file paths, and URL segments.
+ * No-op for Linear/Jira identifiers ("ABC-123"); turns "owner/repo#42" into
+ * "owner-repo-42" (a raw "#" breaks branch-in-URL API calls, "/" nests paths).
+ */
+export function sanitizeIdentifier(identifier: string): string {
+  return identifier.replace(/[^A-Za-z0-9-]/g, "-");
+}
+
 export function branchName(identifier: string, title: string, prefix: string = "critter"): string {
-  return `${prefix}/${identifier}-${slugify(title)}`;
+  return `${prefix}/${sanitizeIdentifier(identifier)}-${slugify(title)}`;
 }
 
 export function sleep(ms: number): Promise<void> {

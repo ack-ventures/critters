@@ -315,11 +315,14 @@ export function validateConfigFile(configPath?: string): { errors: string[]; war
 
   // Check provider credentials
   const provider = (yaml.provider as string) ?? "linear";
+  const githubRaw = (yaml.github as Record<string, unknown> | undefined) ?? {};
   const credErrors = checkProviderCredentials(critterTypes, provider, {
     linearApiKey: process.env.LINEAR_API_KEY || undefined,
     jiraHost: process.env.JIRA_HOST || undefined,
     jiraEmail: process.env.JIRA_EMAIL || undefined,
     jiraApiToken: process.env.JIRA_API_TOKEN || undefined,
+    githubToken: process.env.GITHUB_TOKEN || undefined,
+    githubRepos: (githubRaw.repos as string[]) ?? [],
   });
   errors.push(...credErrors);
 

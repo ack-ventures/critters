@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { CliAdapter } from "./cli/types.js";
 import type { PerRepoConfig } from "./repo-config.js";
 import type { Config, CritterTask } from "./types.js";
+import { sanitizeIdentifier } from "./utils.js";
 
 const REPO_LINE_RE = /^repo:\s*(.+)$/mi;
 const BRANCH_LINE_RE = /^branch:\s*(.+)$/mi;
@@ -128,6 +129,8 @@ If a command is blocked or requires approval, do NOT retry it — move on and fi
 
 export function buildPlanningPrompt(task: CritterTask, adapter?: CliAdapter, repoConfig?: PerRepoConfig | null): string {
   const cleanedDescription = stripBranchLine(stripRepoLine(task.description));
+  // Sanitized: identifiers like "owner/repo#42" must not become nested paths.
+  const planFile = `critters/plans/${sanitizeIdentifier(task.identifier)}.md`;
 
   const tools = adapter?.toolNames() ?? { read: "Read", write: "Write", edit: "Edit", bash: "Bash", glob: "Glob", grep: "Grep", task: "Task" };
   const hasSubagents = adapter?.capabilities.subagents ?? true;
@@ -135,7 +138,7 @@ export function buildPlanningPrompt(task: CritterTask, adapter?: CliAdapter, rep
   let reviewerSteps: string;
   if (hasSubagents && tools.task) {
     reviewerSteps = `4. Spawn a reviewer subagent using the ${tools.task} tool with this prompt:
-   "Review the implementation plan in critters/plans/${task.identifier}.md for the task: ${task.title}. Read the plan and the relevant source files it references. Check for: completeness, correctness, potential issues, missing edge cases, and whether it aligns with the codebase's patterns.
+   "Review the implementation plan in ${planFile} for the task: ${task.title}. Read the plan and the relevant source files it references. Check for: completeness, correctness, potential issues, missing edge cases, and whether it aligns with the codebase's patterns.
 
    Output your review in this exact format:
 
@@ -179,7 +182,7 @@ ${cleanedDescription}
 ## Your Workflow
 1. Explore the codebase thoroughly — understand the project structure, patterns, and conventions
 2. Design an implementation plan for this task
-3. Write your plan to critters/plans/${task.identifier}.md (the directory already exists — do not create it)
+3. Write your plan to ${planFile} (the directory already exists — do not create it)
 ${reviewerSteps}
 
 ## Plan Format
@@ -221,10 +224,13 @@ export function buildExecutionPrompt(task: CritterTask, allowedTools: string[], 
   const resuming = options?.resuming ?? false;
   const adapter = options?.cliAdapter;
   const guidance = adapter?.promptGuidance();
+  // Sanitized: identifiers like "owner/repo#42" must not become nested paths.
+  const planFile = `critters/plans/${sanitizeIdentifier(task.identifier)}.md`;
+  const checkpointFile = `critters/plans/${sanitizeIdentifier(task.identifier)}.checkpoint.md`;
 
   const resumePreamble = resuming
     ? `## Resuming from checkpoint
-This is a RETRY of a previously failed attempt. A checkpoint file exists at \`critters/plans/${task.identifier}.checkpoint.md\`.
+This is a RETRY of a previously failed attempt. A checkpoint file exists at \`${checkpointFile}\`.
 Read it first to see which steps were already completed. Skip completed steps and continue from where the previous attempt left off.
 Review the existing code changes on this branch to confirm the completed steps are actually done before skipping them.
 
@@ -237,7 +243,7 @@ Review the existing code changes on this branch to confirm the completed steps a
 
   let prompt = `${resumePreamble}You are working on issue ${task.identifier}: ${task.title}
 
-Read critters/plans/${task.identifier}.md — it contains an approved implementation plan.
+Read ${planFile} — it contains an approved implementation plan.
 ${planInstruction} Then:
 - Commit your changes with a message referencing ${task.identifier}
 - Push your branch
@@ -251,7 +257,7 @@ ${guidance ?? `## Editing Files
 The Read tool supports \`offset\` and \`limit\` parameters \u2014 use these to read large files in chunks rather than attempting to read the entire file at once.`}
 
 ## Checkpointing
-After completing each major section/step of the plan, update a checkpoint file at \`critters/plans/${task.identifier}.checkpoint.md\`.
+After completing each major section/step of the plan, update a checkpoint file at \`${checkpointFile}\`.
 The file should be a checklist mirroring the plan's sections, e.g.:
 \`\`\`
 - [x] Step 1: Set up the retry utility

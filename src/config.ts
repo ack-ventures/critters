@@ -89,6 +89,8 @@ export function loadConfig(configPath?: string): Config {
   const dashboardToken = (yaml.dashboardToken as string) ?? process.env.DASHBOARD_TOKEN ?? undefined;
   const linearWebhookSecret = (yaml.linearWebhookSecret as string) ?? process.env.LINEAR_WEBHOOK_SECRET ?? undefined;
   const jiraWebhookSecret = (yaml.jiraWebhookSecret as string) ?? process.env.JIRA_WEBHOOK_SECRET ?? undefined;
+  const githubToken = process.env.GITHUB_TOKEN || undefined;
+  const githubWebhookSecret = (yaml.githubWebhookSecret as string) ?? process.env.GITHUB_WEBHOOK_SECRET ?? undefined;
 
   const repos: Record<string, RepoConfig> = {};
   if (yaml.repos && typeof yaml.repos === "object") {
@@ -145,7 +147,7 @@ export function loadConfig(configPath?: string): Config {
       }
     : undefined;
 
-  const provider = ((yaml.provider as string) ?? "linear") as "linear" | "jira";
+  const provider = ((yaml.provider as string) ?? "linear") as "linear" | "jira" | "github";
 
   const pollIntervalSeconds = (yaml.pollIntervalSeconds as number) ?? 30;
   const triggerLabel = (yaml.triggerLabel as string) ?? "Critter";
@@ -172,6 +174,8 @@ export function loadConfig(configPath?: string): Config {
   const costBudget = (yaml.costBudget as number) ?? undefined;
   const jiraStatusMap = (yaml.jiraStatusMap as Record<string, string>) ?? undefined;
 
+  const githubRaw = (yaml.github as Record<string, unknown> | undefined) ?? {};
+
   const config: Config = {
     // Grouped properties
     polling: {
@@ -193,6 +197,14 @@ export function loadConfig(configPath?: string): Config {
     linear: {
       apiKey: linearApiKey,
       webhookSecret: linearWebhookSecret,
+    },
+    github: {
+      token: githubToken,
+      repos: (githubRaw.repos as string[]) ?? [],
+      statusField: (githubRaw.statusField as string) ?? "Status",
+      statusMap: (githubRaw.statusMap as Record<string, string>) ?? undefined,
+      statusTypes: (githubRaw.statusTypes as Record<string, string[]>) ?? undefined,
+      webhookSecret: githubWebhookSecret,
     },
     daemon: {
       workDir: resolvedWorkDir,
@@ -275,6 +287,7 @@ export function loadConfig(configPath?: string): Config {
     strictMcpConfig: (yaml.strictMcpConfig as boolean) ?? undefined,
     linearWebhookSecret,
     jiraWebhookSecret,
+    githubWebhookSecret,
     provider,
     critterTypes: [], // populated below
     cli: (yaml.cli as string) ?? "claude",
@@ -377,7 +390,7 @@ export function validateRepoUrls(repos: Record<string, { url: string }>, teamRep
 export function checkProviderCredentials(
   critterTypes: CritterTypeConfig[],
   defaultProvider: string,
-  env: { linearApiKey?: string; jiraHost?: string; jiraEmail?: string; jiraApiToken?: string },
+  env: { linearApiKey?: string; jiraHost?: string; jiraEmail?: string; jiraApiToken?: string; githubToken?: string; githubRepos?: string[] },
 ): string[] {
   const errors: string[] = [];
   const neededProviders = new Set<string>();
@@ -396,6 +409,27 @@ export function checkProviderCredentials(
     if (!env.jiraApiToken) missing.push("JIRA_API_TOKEN");
     if (missing.length > 0) {
       errors.push(`${missing.join(", ")} not set in environment or .env (required by at least one critter type using the Jira provider)`);
+    }
+  }
+
+  if (neededProviders.has("github")) {
+    if (!env.githubToken) {
+      errors.push("GITHUB_TOKEN not set in environment or .env (required by at least one critter type using the GitHub provider)");
+    }
+    const repos = env.githubRepos ?? [];
+    if (repos.length === 0) {
+      errors.push('github.repos is empty or missing (required by the GitHub provider — list at least one "owner/repo")');
+    }
+    const seen = new Set<string>();
+    for (const entry of repos) {
+      if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(entry)) {
+        errors.push(`Invalid github.repos entry "${entry}" — must match "owner/repo"`);
+      }
+      const lower = entry.toLowerCase();
+      if (seen.has(lower)) {
+        errors.push(`Duplicate github.repos entry "${entry}" (GitHub repo names are case-insensitive)`);
+      }
+      seen.add(lower);
     }
   }
 
@@ -502,8 +536,19 @@ function validateConfig(config: Config): void {
     jiraHost: config.jira.host,
     jiraEmail: config.jira.email,
     jiraApiToken: config.jira.apiToken,
+    githubToken: config.github.token,
+    githubRepos: config.github.repos,
   });
   if (credErrors.length > 0) {
     throw new Error(credErrors[0]);
+  }
+
+  // statusType triggers need github.statusTypes buckets to mean anything;
+  // without them matching silently degrades to exact status names.
+  const githubNeedsBuckets = config.critterTypes.some(
+    (ct) => (ct.provider ?? config.provider) === "github" && ct.trigger.statusType,
+  );
+  if (githubNeedsBuckets && Object.keys(config.github.statusTypes ?? {}).length === 0) {
+    log("Warning: one or more GitHub critter types use trigger.statusType, but github.statusTypes is not configured — falling back to exact status-name matching");
   }
 }

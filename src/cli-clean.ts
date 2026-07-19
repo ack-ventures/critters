@@ -6,8 +6,9 @@ import { loadEnvFallback } from "./env.js";
 import { deleteRemoteBranch } from "./git.js";
 import { formatError } from "./logger.js";
 import { createTracker } from "./tracker/index.js";
+import { buildProviderConfig, type ProviderConfigSource } from "./tracker/provider-config.js";
 import type { IssueTracker } from "./tracker/types.js";
-import { extractOwnerRepo, formatDuration, runCommand } from "./utils.js";
+import { extractOwnerRepo, formatDuration, runCommand, sanitizeIdentifier } from "./utils.js";
 
 function getDirSize(dirPath: string): number {
   let total = 0;
@@ -243,6 +244,10 @@ interface BranchCleanConfig {
   branchPrefix: string;
   provider: string;
   jiraStatusMap?: Record<string, string>;
+  githubRepos?: string[];
+  githubStatusField?: string;
+  githubStatusMap?: Record<string, string>;
+  githubStatusTypes?: Record<string, string[]>;
 }
 
 function loadBranchCleanConfig(configPath?: string): BranchCleanConfig {
@@ -265,29 +270,52 @@ function loadBranchCleanConfig(configPath?: string): BranchCleanConfig {
     }
   }
 
+  const githubRaw = (yaml.github as Record<string, unknown> | undefined) ?? {};
+
   return {
     repos,
     teamRepos,
     branchPrefix: (yaml.branchPrefix as string) ?? "critter",
     provider: (yaml.provider as string) ?? "linear",
     jiraStatusMap: (yaml.jiraStatusMap as Record<string, string>) ?? undefined,
+    githubRepos: (githubRaw.repos as string[]) ?? undefined,
+    githubStatusField: (githubRaw.statusField as string) ?? undefined,
+    githubStatusMap: (githubRaw.statusMap as Record<string, string>) ?? undefined,
+    githubStatusTypes: (githubRaw.statusTypes as Record<string, string[]>) ?? undefined,
   };
 }
 
-function buildTerminalStates(jiraStatusMap?: Record<string, string>): Set<string> {
+function buildTerminalStates(jiraStatusMap?: Record<string, string>, githubStatusMap?: Record<string, string>): Set<string> {
   const states = new Set(TERMINAL_STATES);
-  if (jiraStatusMap) {
-    for (const [internal, jiraName] of Object.entries(jiraStatusMap)) {
+  // Expand with the provider-mapped names of internal terminal statuses.
+  for (const statusMap of [jiraStatusMap, githubStatusMap]) {
+    if (!statusMap) continue;
+    for (const [internal, mappedName] of Object.entries(statusMap)) {
       if (TERMINAL_STATES.has(internal)) {
-        states.add(jiraName);
+        states.add(mappedName);
       }
     }
   }
   return states;
 }
 
-function extractIdentifier(branch: string, prefix: string): string | null {
+export function extractIdentifier(branch: string, prefix: string, githubRepos?: string[]): string | null {
   const afterPrefix = branch.slice(prefix.length + 1); // e.g. "ACK-123-fix-login-bug"
+
+  // GitHub branches embed the sanitized repo: "owner-repo-42-title" → "owner/repo#42".
+  // Longest sanitized prefix first: a repo ending in digits ("owner/repo-42")
+  // must win over its prefix ("owner/repo"), and the digit anchor keeps
+  // non-digit prefixes ("owner-repo" vs "owner-repo-two") from mismatching.
+  const byPrefixLength = [...(githubRepos ?? [])].sort(
+    (a, b) => sanitizeIdentifier(b).length - sanitizeIdentifier(a).length,
+  );
+  for (const fullName of byPrefixLength) {
+    const sanitized = sanitizeIdentifier(fullName);
+    if (!afterPrefix.startsWith(`${sanitized}-`)) continue;
+    const numMatch = afterPrefix.slice(sanitized.length + 1).match(/^(\d+)/);
+    if (numMatch) return `${fullName}#${numMatch[1]}`;
+  }
+
   const match = afterPrefix.match(/^([A-Za-z][A-Za-z0-9]*-\d+)/);
   return match ? match[1] : null;
 }
@@ -295,19 +323,25 @@ function extractIdentifier(branch: string, prefix: string): string | null {
 async function initTracker(config: BranchCleanConfig): Promise<IssueTracker | null> {
   loadEnvFallback();
   try {
-    const providerConfig = config.provider === "jira"
-      ? {
-          type: "jira" as const,
-          host: process.env.JIRA_HOST,
-          email: process.env.JIRA_EMAIL,
-          apiToken: process.env.JIRA_API_TOKEN,
-          statusMap: config.jiraStatusMap,
-        }
-      : {
-          type: "linear" as const,
-          apiKey: process.env.LINEAR_API_KEY,
-        };
-    const tracker = createTracker(providerConfig);
+    const source: ProviderConfigSource = {
+      linear: { apiKey: process.env.LINEAR_API_KEY },
+      jira: {
+        host: process.env.JIRA_HOST,
+        email: process.env.JIRA_EMAIL,
+        apiToken: process.env.JIRA_API_TOKEN,
+        statusMap: config.jiraStatusMap,
+      },
+      github: {
+        token: process.env.GITHUB_TOKEN,
+        repos: config.githubRepos ?? [],
+        statusField: config.githubStatusField,
+        statusMap: config.githubStatusMap,
+        statusTypes: config.githubStatusTypes,
+      },
+    };
+    // Single construction point — previously any non-"jira" provider (incl.
+    // "github") silently built a Linear tracker here.
+    const tracker = createTracker(buildProviderConfig(source, config.provider));
     await tracker.init();
     return tracker;
   } catch (err) {
@@ -319,7 +353,7 @@ async function initTracker(config: BranchCleanConfig): Promise<IssueTracker | nu
 async function cleanStaleBranches(configPath: string | undefined, dryRun: boolean): Promise<void> {
   const config = loadBranchCleanConfig(configPath);
   const tracker = await initTracker(config);
-  const terminalStates = buildTerminalStates(config.jiraStatusMap);
+  const terminalStates = buildTerminalStates(config.jiraStatusMap, config.githubStatusMap);
 
   // Collect unique repo URLs
   const repoUrls = new Set<string>();
@@ -364,7 +398,7 @@ async function cleanStaleBranches(configPath: string | undefined, dryRun: boolea
       if (!ref) continue;
       const branchName = ref.replace("refs/heads/", "");
       if (!branchName.startsWith(`${branchPrefix}/`)) continue;
-      const identifier = extractIdentifier(branchName, branchPrefix);
+      const identifier = extractIdentifier(branchName, branchPrefix, config.githubRepos);
       if (!identifier) continue;
       critterBranches.push({ sha, branchName, identifier });
     }

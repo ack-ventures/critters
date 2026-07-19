@@ -1,6 +1,6 @@
 # Critters
 
-TypeScript daemon that watches issue trackers (Linear/Jira) for labeled issues, spawns Claude Code CLI instances to work on them, and produces draft PRs.
+TypeScript daemon that watches issue trackers (Linear/Jira/GitHub Issues) for labeled issues, spawns Claude Code CLI instances to work on them, and produces draft PRs.
 
 ## Stack
 - Runtime: Bun
@@ -67,6 +67,8 @@ Each phase runs `claude -p` with `--output-format stream-json` in a tmux pane, p
 | `src/tracker/types.ts` | IssueTracker interface, TrackerTask |
 | `src/tracker/linear.ts` | LinearTracker (wraps Linear SDK) |
 | `src/tracker/jira.ts` | JiraTracker (Jira Cloud REST API) |
+| `src/tracker/github.ts` | GitHubTracker (GitHub Issues REST; dual-mode statuses: org issue field or status:* labels) |
+| `src/tracker/provider-config.ts` | buildProviderConfig() — single ProviderConfig construction point |
 | `src/runner/types.ts` | PhaseRunner interface, PhaseContext |
 | `src/runner/planning.ts` | Planning phase (plan + reviewer loop) |
 | `src/runner/execution.ts` | Execution phase (implement, commit, push, PR) |
