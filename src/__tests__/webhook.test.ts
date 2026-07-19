@@ -2,10 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { createHmac } from "node:crypto";
 import type { CritterTypeConfig } from "../critter-type.js";
 import {
+  extractGithubWebhookTrigger,
   extractJiraWebhookTrigger,
   extractLinearWebhookTrigger,
+  type GitHubWebhookPayload,
   type JiraWebhookPayload,
   type LinearWebhookPayload,
+  verifyGithubSignature,
   verifyJiraSignature,
   verifyLinearSignature,
 } from "../webhook.js";
@@ -286,5 +289,98 @@ describe("extractJiraWebhookTrigger", () => {
       },
     };
     expect(extractJiraWebhookTrigger(payload, types)).toBeNull();
+  });
+});
+
+// ── GitHub signature verification ────────────────────────────────────────────
+
+describe("verifyGithubSignature", () => {
+  const secret = "github-secret";
+
+  test("accepts valid signature with sha256= prefix (X-Hub-Signature-256 format)", () => {
+    const body = '{"action":"opened"}';
+    const sig = `sha256=${sign(body, secret)}`;
+    expect(verifyGithubSignature(body, sig, secret)).toBe(true);
+  });
+
+  test("accepts bare hex", () => {
+    const body = '{"action":"opened"}';
+    expect(verifyGithubSignature(body, sign(body, secret), secret)).toBe(true);
+  });
+
+  test("rejects tampered body, wrong secret, and short signatures", () => {
+    const body = '{"action":"opened"}';
+    const sig = `sha256=${sign(body, secret)}`;
+    expect(verifyGithubSignature(`${body} `, sig, secret)).toBe(false);
+    expect(verifyGithubSignature(body, `sha256=${sign(body, "other")}`, secret)).toBe(false);
+    expect(verifyGithubSignature(body, "sha256=abcd", secret)).toBe(false);
+  });
+});
+
+// ── GitHub trigger extraction ────────────────────────────────────────────────
+
+describe("extractGithubWebhookTrigger", () => {
+  const types = [makeTestCritterType({ trigger: { label: "Critter", status: "Todo" } })];
+  const repos = ["myorg/api", "andrew/critters"];
+
+  function payload(overrides: Record<string, unknown> = {}): GitHubWebhookPayload {
+    return {
+      action: "labeled",
+      issue: { number: 42, state: "open", labels: [{ name: "Critter" }] },
+      repository: { full_name: "myorg/api" },
+      ...overrides,
+    } as GitHubWebhookPayload;
+  }
+
+  test("trigger actions on configured repos return owner/repo#N", () => {
+    for (const action of ["opened", "labeled", "unlabeled", "reopened", "edited"]) {
+      expect(extractGithubWebhookTrigger(payload({ action }), types, repos)).toBe("myorg/api#42");
+    }
+  });
+
+  test("non-trigger actions return null", () => {
+    for (const action of ["closed", "assigned", "deleted", "pinned"]) {
+      expect(extractGithubWebhookTrigger(payload({ action }), types, repos)).toBeNull();
+    }
+  });
+
+  test("unconfigured repo returns null, case-insensitively configured repo matches", () => {
+    expect(extractGithubWebhookTrigger(payload({ repository: { full_name: "other/repo" } }), types, repos)).toBeNull();
+    expect(extractGithubWebhookTrigger(payload({ repository: { full_name: "MyOrg/API" } }), types, repos)).toBe("MyOrg/API#42");
+  });
+
+  test("missing trigger label returns null", () => {
+    expect(
+      extractGithubWebhookTrigger(payload({ issue: { number: 42, labels: [{ name: "bug" }] } }), types, repos),
+    ).toBeNull();
+  });
+
+  test("missing issue/repository/action returns null", () => {
+    expect(extractGithubWebhookTrigger({ action: "opened" }, types, repos)).toBeNull();
+    expect(extractGithubWebhookTrigger({ repository: { full_name: "myorg/api" } }, types, repos)).toBeNull();
+    expect(extractGithubWebhookTrigger({}, types, repos)).toBeNull();
+  });
+});
+
+describe("extractGithubWebhookTrigger closed-state guard", () => {
+  const types = [makeTestCritterType({ trigger: { label: "Critter", status: "Todo" } })];
+  const repos = ["myorg/api"];
+
+  test("closed issues never trigger (labels/fields survive closing)", () => {
+    const payload = {
+      action: "edited",
+      issue: { number: 42, state: "closed", labels: [{ name: "Critter" }] },
+      repository: { full_name: "myorg/api" },
+    } as GitHubWebhookPayload;
+    expect(extractGithubWebhookTrigger(payload, types, repos)).toBeNull();
+  });
+
+  test("reopened issues (state open) still trigger", () => {
+    const payload = {
+      action: "reopened",
+      issue: { number: 42, state: "open", labels: [{ name: "Critter" }] },
+      repository: { full_name: "myorg/api" },
+    } as GitHubWebhookPayload;
+    expect(extractGithubWebhookTrigger(payload, types, repos)).toBe("myorg/api#42");
   });
 });

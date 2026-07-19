@@ -17,6 +17,7 @@ import { checkPrerequisites } from "./prerequisites.js";
 import { recoverOrphanedIssues } from "./recovery.js";
 import { SlackNotifier } from "./slack.js";
 import { createTracker } from "./tracker/index.js";
+import { buildProviderConfig } from "./tracker/provider-config.js";
 import type { IssueTracker } from "./tracker/types.js";
 import type { TunnelHandle } from "./tunnel.js";
 import type { Config } from "./types.js";
@@ -288,6 +289,8 @@ export async function startDaemon(): Promise<void> {
   const webhookConfig = {
     linearWebhookSecret: config.linear.webhookSecret,
     jiraWebhookSecret: config.jira.webhookSecret,
+    githubWebhookSecret: config.github.webhookSecret,
+    githubRepos: config.github.repos,
     critterTypes: config.critterTypes,
   };
   let healthServer: { port: number; stop: () => void } | null = null;
@@ -491,23 +494,9 @@ function createTrackers(config: Config): Map<string, IssueTracker> {
   }
 
   for (const provider of neededProviders) {
-    switch (provider) {
-      case "linear":
-        trackers.set("linear", createTracker({
-          type: "linear",
-          apiKey: config.linear.apiKey,
-        }));
-        break;
-      case "jira":
-        trackers.set("jira", createTracker({
-          type: "jira",
-          host: config.jira.host,
-          email: config.jira.email,
-          apiToken: config.jira.apiToken,
-          statusMap: config.jira.statusMap,
-        }));
-        break;
-    }
+    // buildProviderConfig throws on unknown providers — previously a provider
+    // with no switch case here was silently skipped and failed later, confusingly.
+    trackers.set(provider, createTracker(buildProviderConfig(config, provider)));
   }
 
   return trackers;
@@ -533,19 +522,25 @@ async function ensureLabelsAndStatuses(config: Config, trackers: Map<string, Iss
       await tracker.ensureLabel(label);
     }
 
-    // Ensure workflow statuses (Linear-specific — Jira manages these in workflows)
+    // Statuses referenced by outcomes/claimStatus, ensured per provider below.
+    const statusesToEnsure = new Set<string>();
+    for (const ct of types) {
+      for (const outcome of Object.values(ct.outcomes)) {
+        if (outcome.status) statusesToEnsure.add(outcome.status);
+      }
+      if (ct.claimStatus) statusesToEnsure.add(ct.claimStatus);
+    }
+
+    const statusColor = (statusName: string) =>
+      statusName.includes("Failed") ? "#EF4444"
+        : statusName === "Human Review" ? "#F59E0B"
+        : "#8B5CF6";
+
+    // Linear: create missing workflow states per team (Jira manages these in workflows)
     const { LinearTracker } = await import("./tracker/linear.js");
     if (tracker instanceof LinearTracker) {
       const teamCache = tracker.getTeamStatusCache();
       const teamIds = Object.keys(teamCache);
-
-      const statusesToEnsure = new Set<string>();
-      for (const ct of types) {
-        for (const outcome of Object.values(ct.outcomes)) {
-          if (outcome.status) statusesToEnsure.add(outcome.status);
-        }
-        if (ct.claimStatus) statusesToEnsure.add(ct.claimStatus);
-      }
 
       const standardStatuses = new Set(["Done", "In Progress", "In Review", "Todo", "Backlog", "Canceled", "Cancelled"]);
 
@@ -554,10 +549,18 @@ async function ensureLabelsAndStatuses(config: Config, trackers: Map<string, Iss
           if (standardStatuses.has(statusName)) continue;
           if (teamCache[teamId]?.[statusName]) continue;
 
-          const color = statusName.includes("Failed") ? "#EF4444"
-            : statusName === "Human Review" ? "#F59E0B"
-            : "#8B5CF6";
-          await tracker.ensureStatus(teamId, statusName, "started", color);
+          await tracker.ensureStatus(teamId, statusName, "started", statusColor(statusName));
+        }
+      }
+    }
+
+    // GitHub: create missing status field options / status:* labels per repo.
+    // GitHubTracker.ensureStatus is idempotent and self-skips existing entries.
+    const { GitHubTracker } = await import("./tracker/github.js");
+    if (tracker instanceof GitHubTracker) {
+      for (const team of await tracker.listTeams()) {
+        for (const statusName of statusesToEnsure) {
+          await tracker.ensureStatus(team.id, statusName, "started", statusColor(statusName));
         }
       }
     }

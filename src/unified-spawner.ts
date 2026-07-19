@@ -35,7 +35,7 @@ import { isTransientTaskError, withCappedJitter } from "./task-retry.js";
 import { addPrTimeoutComment, buildLogFileList, salvagePartialProgress } from "./task-salvage.js";
 import type { IssueTracker, TrackerTask } from "./tracker/types.js";
 import type { ActiveCritterDetail, Config, QueuedCritterDetail, SpawnResult } from "./types.js";
-import { aggregatePhaseResults, branchName, formatDuration, formatPhaseStats, getTracker, runCommand, shortRepoName, tailLines, truncateComment } from "./utils.js";
+import { aggregatePhaseResults, branchName, formatDuration, formatPhaseStats, getTracker, runCommand, sanitizeIdentifier, shortRepoName, tailLines, truncateComment } from "./utils.js";
 import { VERSION } from "./version.js";
 
 interface QueuedTask {
@@ -273,7 +273,7 @@ export class UnifiedSpawner {
     const branch = critterType.repo.branch
       ? branchName(task.identifier, task.title, this.config.daemon.branchPrefix)
       : "";
-    const workDir = `${this.config.daemon.workDir}/${workDirPrefix}${task.identifier}-${Date.now()}`;
+    const workDir = `${this.config.daemon.workDir}/${workDirPrefix}${sanitizeIdentifier(task.identifier)}-${Date.now()}`;
     this.activeWorkDirs.add(workDir);
     const detail = this.activeCritterMap.get(task.id);
     if (detail) detail.workDir = workDir;
@@ -588,7 +588,7 @@ export class UnifiedSpawner {
       const responseText = lastPhaseData?.responseText as string | undefined;
       if (responseText) {
         // Upload as a .md attachment
-        const filename = `${task.identifier}-${critterType.name}.md`;
+        const filename = `${sanitizeIdentifier(task.identifier)}-${critterType.name}.md`;
         const mdContent = `# ${task.identifier}: ${task.title}\n\n**Type**: ${critterType.name}  \n**Duration**: ${totalDuration}\n\n---\n\n${responseText}`;
         const url = await tracker.uploadAttachment(
           task.id, filename, Buffer.from(mdContent), "text/markdown", task.identifier,
@@ -691,9 +691,9 @@ export class UnifiedSpawner {
       // Upload logs
       const { uploaded: attachmentUrls, fallbackExcerpts } = await this.uploadLogs(task, critterType, workDir, tracker);
 
-      // Read checkpoint file if it exists
+      // Read checkpoint file if it exists (sanitized — matches buildExecutionPrompt's path)
       let checkpointStatus = "";
-      const checkpointFile = `${workDir}/critters/plans/${task.identifier}.checkpoint.md`;
+      const checkpointFile = `${workDir}/critters/plans/${sanitizeIdentifier(task.identifier)}.checkpoint.md`;
       if (existsSync(checkpointFile)) {
         try {
           const checkpointContent = readFileSync(checkpointFile, "utf-8");

@@ -4,6 +4,7 @@ import { loadConfig } from "./config.js";
 import type { CritterTypeConfig } from "./critter-type.js";
 import { formatError } from "./logger.js";
 import { createTracker } from "./tracker/index.js";
+import { buildProviderConfig } from "./tracker/provider-config.js";
 import type { IssueTracker, IssueTrackerIssue, TrackerTask } from "./tracker/types.js";
 
 function loadEnv(): void {
@@ -37,14 +38,7 @@ export async function runRetry(identifier: string, force: boolean): Promise<void
   const getTracker = (provider: string): IssueTracker => {
     let tracker = trackerMap.get(provider);
     if (!tracker) {
-      tracker = createTracker({
-        type: provider as "linear" | "jira",
-        apiKey: config.linear.apiKey,
-        host: config.jira.host,
-        email: config.jira.email,
-        apiToken: config.jira.apiToken,
-        statusMap: config.jira.statusMap,
-      });
+      tracker = createTracker(buildProviderConfig(config, provider));
       trackerMap.set(provider, tracker);
     }
     return tracker;
@@ -188,14 +182,7 @@ export async function runRetryAllFailed(options: {
   for (const ct of typesToQuery) {
     const provider = ct.provider ?? config.provider;
     if (!trackerMap.has(provider)) {
-      trackerMap.set(provider, createTracker({
-        type: provider,
-        apiKey: config.linear.apiKey,
-        host: config.jira.host,
-        email: config.jira.email,
-        apiToken: config.jira.apiToken,
-        statusMap: config.jira.statusMap,
-      }));
+      trackerMap.set(provider, createTracker(buildProviderConfig(config, provider)));
     }
   }
 

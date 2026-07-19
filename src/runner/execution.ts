@@ -6,7 +6,7 @@ import { buildExecutionPrompt, getExecutionAllowedTools } from "../prompt.js";
 import { buildPromptVars, resolveSkills, resolveTools } from "../prompt-template.js";
 import { withRetry } from "../retry.js";
 import { salvagePartialProgress } from "../task-salvage.js";
-import { formatDuration, runCommand } from "../utils.js";
+import { formatDuration, runCommand, sanitizeIdentifier } from "../utils.js";
 import { VERSION } from "../version.js";
 import type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
 import { validatePhaseResult } from "./validate.js";
@@ -206,7 +206,7 @@ export async function updatePrWithPlan(
   identifier: string,
   phaseStats?: { name: string; durationMs: number; costUsd?: number }[],
 ): Promise<void> {
-  const planFile = `${workDir}/critters/plans/${identifier}.md`;
+  const planFile = `${workDir}/critters/plans/${sanitizeIdentifier(identifier)}.md`;
   let planContent = "";
   if (existsSync(planFile)) {
     planContent = readFileSync(planFile, "utf-8").trim();

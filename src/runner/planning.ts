@@ -4,6 +4,7 @@ import { commitFile } from "../git.js";
 import { logTask } from "../logger.js";
 import { buildPlanningPrompt, getPlanningAllowedTools } from "../prompt.js";
 import { buildPromptVars, resolveSkills } from "../prompt-template.js";
+import { sanitizeIdentifier } from "../utils.js";
 import type { PhaseContext, PhaseResult, PhaseRunner } from "./types.js";
 import { validatePhaseResult } from "./validate.js";
 
@@ -34,8 +35,8 @@ export class PlanningPhaseRunner implements PhaseRunner {
 
     validatePhaseResult(spawn, "planning");
 
-    // Verify plan file exists
-    const planFile = `${workDir}/critters/plans/${task.identifier}.md`;
+    // Verify plan file exists (sanitized — must match the path buildPlanningPrompt gives the LLM)
+    const planFile = `${workDir}/critters/plans/${sanitizeIdentifier(task.identifier)}.md`;
     if (!existsSync(planFile)) {
       throw new Error("Planning failed to produce a plan file");
     }
@@ -44,7 +45,7 @@ export class PlanningPhaseRunner implements PhaseRunner {
     if (ctx.critterType.repo.commitPlans) {
       await commitFile(
         workDir,
-        `critters/plans/${task.identifier}.md`,
+        `critters/plans/${sanitizeIdentifier(task.identifier)}.md`,
         `[${task.identifier}] Add implementation plan`,
         task.identifier,
       );

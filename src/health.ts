@@ -19,10 +19,10 @@ import type { IssueTracker, TrackerTeam } from "./tracker/types.js";
 import type { ActiveCritterDetail, QueuedCritterDetail } from "./types.js";
 import type { KillResult } from "./unified-spawner.js";
 import { getDisplayVersion } from "./updater.js";
-import { formatDuration } from "./utils.js";
+import { formatDuration, sanitizeIdentifier } from "./utils.js";
 import { VERSION } from "./version.js";
-import type { JiraWebhookPayload, LinearWebhookPayload } from "./webhook.js";
-import { extractJiraWebhookTrigger, extractLinearWebhookTrigger, verifyJiraSignature, verifyLinearSignature } from "./webhook.js";
+import type { GitHubWebhookPayload, JiraWebhookPayload, LinearWebhookPayload } from "./webhook.js";
+import { extractGithubWebhookTrigger, extractJiraWebhookTrigger, extractLinearWebhookTrigger, verifyGithubSignature, verifyJiraSignature, verifyLinearSignature } from "./webhook.js";
 
 export interface HealthStatus {
   activeCritters: number;
@@ -87,6 +87,8 @@ export function startHealthServer(
   webhookConfig?: {
     linearWebhookSecret?: string;
     jiraWebhookSecret?: string;
+    githubWebhookSecret?: string;
+    githubRepos?: string[];
     critterTypes: CritterTypeConfig[];
   },
 ): { port: number; stop: () => void } {
@@ -268,13 +270,14 @@ export function startHealthServer(
 
       // API: GET /api/logs/<identifier> — returns processed log tail as plain text
       if (url.pathname.startsWith("/api/logs/")) {
-        const parts = url.pathname.split("/").filter(Boolean); // ["api", "logs", identifier, ..."stream"]
-        const identifier = parts[2];
+        // Slice-after-prefix + decode: identifiers like "owner/repo#42" arrive
+        // percent-encoded as ONE segment; split("/") would leave them encoded.
+        const rest = url.pathname.slice("/api/logs/".length);
+        const isStream = rest.endsWith("/stream");
+        const identifier = decodeURIComponent(isStream ? rest.slice(0, -"/stream".length) : rest);
         if (!identifier) {
           return new Response("Missing identifier", { status: 400 });
         }
-
-        const isStream = parts[3] === "stream";
         const phase = url.searchParams.get("phase") ?? undefined;
         const tailCount = parseInt(url.searchParams.get("tail") ?? "50", 10);
 
@@ -424,17 +427,19 @@ export function startHealthServer(
         }
 
         // Determine which attachment to serve using the same naming convention as buildLogFileList()
+        // (which stores names with the sanitized identifier).
+        const safeIdentifier = sanitizeIdentifier(identifier);
         let attachmentUrl: string | null = null;
         if (phase) {
           const tag = phaseFileTag(phase);
-          const expectedName = `${identifier}-${tag}-output.txt`;
+          const expectedName = `${safeIdentifier}-${tag}-output.txt`;
           const match = attachments.find((a) => a.name === expectedName);
           attachmentUrl = match?.url ?? null;
         } else {
           // Auto-detect: review > execution > planning (same order as resolveLogFile)
           for (const p of ["review", "execution", "planning"]) {
             const tag = phaseFileTag(p);
-            const expectedName = `${identifier}-${tag}-output.txt`;
+            const expectedName = `${safeIdentifier}-${tag}-output.txt`;
             const match = attachments.find((a) => a.name === expectedName);
             if (match?.url) {
               attachmentUrl = match.url;
@@ -444,7 +449,7 @@ export function startHealthServer(
           // Also try any custom phase attachments
           if (!attachmentUrl) {
             const outputAttachment = attachments.find(
-              (a) => a.name.startsWith(`${identifier}-`) && a.name.endsWith("-output.txt"),
+              (a) => a.name.startsWith(`${safeIdentifier}-`) && a.name.endsWith("-output.txt"),
             );
             attachmentUrl = outputAttachment?.url ?? null;
           }
@@ -735,6 +740,54 @@ export function startHealthServer(
         log(`Webhook: Jira event received — ${payload.webhookEvent}`);
 
         const identifier = extractJiraWebhookTrigger(payload, webhookConfig.critterTypes);
+        if (identifier) {
+          log(`Webhook: Triggering poll for ${identifier}`);
+          triggers?.triggerPollForIssue?.(identifier).catch((err) => {
+            logError(`Webhook poll failed for ${identifier}: ${err}`);
+          });
+          return Response.json({ ok: true, triggered: true, identifier });
+        }
+
+        return Response.json({ ok: true, triggered: false });
+      }
+
+      if (url.pathname === "/webhook/github") {
+        if (req.method !== "POST") {
+          return new Response("Method Not Allowed", { status: 405 });
+        }
+        if (!webhookConfig?.githubWebhookSecret) {
+          return Response.json({ error: "GitHub webhooks not configured" }, { status: 404 });
+        }
+
+        const rawBody = await req.text();
+        const signatureHeader = req.headers.get("X-Hub-Signature-256") ?? "";
+
+        if (!verifyGithubSignature(rawBody, signatureHeader, webhookConfig.githubWebhookSecret)) {
+          log("Webhook: GitHub signature verification failed");
+          return Response.json({ error: "Invalid signature" }, { status: 401 });
+        }
+
+        let payload: GitHubWebhookPayload;
+        try {
+          payload = JSON.parse(rawBody);
+        } catch {
+          return Response.json({ error: "Invalid JSON" }, { status: 400 });
+        }
+
+        const event = req.headers.get("X-GitHub-Event") ?? "";
+        log(`Webhook: GitHub event received — ${event}${payload.action ? `/${payload.action}` : ""}`);
+
+        // Only `issues` events can match a trigger; `ping` (sent on webhook
+        // creation) and everything else is a successful no-op.
+        if (event !== "issues") {
+          return Response.json({ ok: true, triggered: false });
+        }
+
+        const identifier = extractGithubWebhookTrigger(
+          payload,
+          webhookConfig.critterTypes,
+          webhookConfig.githubRepos ?? [],
+        );
         if (identifier) {
           log(`Webhook: Triggering poll for ${identifier}`);
           triggers?.triggerPollForIssue?.(identifier).catch((err) => {

@@ -1,6 +1,6 @@
 # Critters
 
-Critters is a TypeScript daemon that polls issue trackers ([Linear](https://linear.app) and [Jira](https://www.atlassian.com/software/jira)) for labeled issues and runs configurable agentic workflows on them using coding CLIs ([Claude Code](https://docs.anthropic.com/en/docs/claude-code) and/or Codex) — planning, execution, review, or fully custom phases. It runs on [Bun](https://bun.sh) and orchestrates everything through `tmux` panes.
+Critters is a TypeScript daemon that polls issue trackers ([Linear](https://linear.app), [Jira](https://www.atlassian.com/software/jira), and [GitHub Issues](https://github.com/features/issues)) for labeled issues and runs configurable agentic workflows on them using coding CLIs ([Claude Code](https://docs.anthropic.com/en/docs/claude-code) and/or Codex) — planning, execution, review, or fully custom phases. It runs on [Bun](https://bun.sh) and orchestrates everything through `tmux` panes.
 
 Inspired by [Stripe's Minions](https://stripe.dev/blog/minions-stripes-one-shot-end-to-end-coding-agents).
 
@@ -70,6 +70,7 @@ bun install
 # Configure
 cp .env.example .env
 # Edit .env and set LINEAR_API_KEY (for Linear) and/or JIRA_HOST, JIRA_EMAIL, JIRA_API_TOKEN (for Jira)
+# and/or GITHUB_TOKEN (for GitHub Issues)
 # Optionally set SLACK_WEBHOOK_URL for notifications, or SLACK_BOT_TOKEN + SLACK_CHANNEL for threaded notifications
 
 # Optionally tweak critters.config.yaml
@@ -144,7 +145,7 @@ Or build directly: `docker build --target prod .` (append `--build-arg CRITTERS_
 
 ## How it works
 
-1. **Watcher** polls your issue tracker (Linear and/or Jira) every 120 seconds for issues with the "Critter" label in "Todo" status.
+1. **Watcher** polls your issue tracker (Linear, Jira, and/or GitHub Issues) every 120 seconds for issues with the "Critter" label in "Todo" status.
 2. **Spawner** shallow-clones the target repo into a temp directory and creates a feature branch.
 3. **Phase 1 (Planning):** A configured coding CLI instance explores the codebase and writes an implementation plan.
 4. **Phase 2 (Execution):** A configured coding CLI instance implements the plan, commits, pushes, and opens a draft PR.
@@ -202,7 +203,7 @@ Settings live in `critters.config.yaml`:
 
 | Field | Default | Description |
 |---|---|---|
-| `provider` | "linear" | Default issue tracker: `"linear"` or `"jira"` |
+| `provider` | "linear" | Default issue tracker: `"linear"`, `"jira"`, or `"github"` |
 | `pollIntervalSeconds` | 120 | How often to poll for issues |
 | `concurrency` | 2 | Max parallel critters |
 | `timeoutMinutes` | 30 | Total timeout per task (both phases) |
@@ -225,6 +226,7 @@ Settings live in `critters.config.yaml`:
 | `cleanupStaleMinutes` | timeout + 30 | Age threshold (minutes) for considering work directories stale |
 | `minDiskSpaceMb` | 1024 | Minimum free disk space (MB) required before cloning a repo |
 | `jiraStatusMap` | {} | Map critter status names to Jira workflow status names |
+| `github` | — | GitHub Issues settings block: `repos` (list of `"owner/repo"`), `statusField` (default `"Status"`), `statusMap`, `statusTypes` — see "GitHub Issues as a ticket source" |
 | `hooks` | {} | Shell commands run on lifecycle events (see below) |
 | `costAlertThreshold` | — | Cost (USD) per task that triggers a Slack alert |
 | `costBudget` | — | Cost (USD) per task that triggers a kill |
@@ -245,6 +247,7 @@ Settings live in `critters.config.yaml`:
 | `tunnel` | — | Tunnel config: `{ enabled, auth, domain }` for ngrok remote access |
 | `linearWebhookSecret` | — | Linear webhook signing secret (env: `LINEAR_WEBHOOK_SECRET`) |
 | `jiraWebhookSecret` | — | Jira webhook secret (env: `JIRA_WEBHOOK_SECRET`) |
+| `githubWebhookSecret` | — | GitHub webhook secret (env: `GITHUB_WEBHOOK_SECRET`) |
 
 Per-repo tool overrides merge with the defaults:
 
@@ -370,19 +373,20 @@ The daemon runs an HTTP server on port 3847 (configurable via `healthPort`, set 
 | `/api/logs/<id>/stream` | GET | SSE stream of a critter's live log |
 | `/webhook/linear` | POST | Linear webhook endpoint (requires `linearWebhookSecret`) |
 | `/webhook/jira` | POST | Jira webhook endpoint (requires `jiraWebhookSecret`) |
+| `/webhook/github` | POST | GitHub webhook endpoint (requires `githubWebhookSecret`) |
 
 When `dashboardToken` is configured, POST endpoints require a bearer token. `critters status` queries the health endpoint to display a quick summary in the terminal.
 
 ### Webhooks
 
-Webhook endpoints provide near-instant issue pickup instead of waiting for the next poll. Webhooks are additive — polling continues as the fallback. Set `LINEAR_WEBHOOK_SECRET` and/or `JIRA_WEBHOOK_SECRET` to enable. The daemon must be reachable from the internet — use the `tunnel` config for ngrok or a reverse proxy.
+Webhook endpoints provide near-instant issue pickup instead of waiting for the next poll. Webhooks are additive — polling continues as the fallback. Set `LINEAR_WEBHOOK_SECRET`, `JIRA_WEBHOOK_SECRET`, and/or `GITHUB_WEBHOOK_SECRET` to enable. The daemon must be reachable from the internet — use the `tunnel` config for ngrok or a reverse proxy.
 
 ## Creating tickets
 
 Works with both Linear and Jira. For a critter to pick up an issue, it needs:
 
 - **Label:** "Critter" (exact match, configurable)
-- **Status:** "Todo" (Linear) or the mapped status via `jiraStatusMap` (Jira)
+- **Status:** "Todo" (Linear), the mapped status via `jiraStatusMap` (Jira), or the mapped Status field option / `status:Todo` label (GitHub, see below)
 - **Description:** must include `repo: git@github.com:org/repo.git` on its own line (unless a project or team mapping exists in the config)
 
 Optionally, assign the issue to the relevant project and include implementation guidance in the description -- the critter reads it as its task spec.
@@ -480,6 +484,32 @@ critterTypes:
 Only the env vars for providers you actually use are required. A Linear-only config doesn't need `JIRA_*` vars.
 
 See [CLAUDE.md](CLAUDE.md) for full multi-provider docs, Jira differences, and more config examples.
+
+## GitHub Issues as a ticket source
+
+The `github` provider polls GitHub issues in a configured list of repos. Issues are identified as `owner/repo#42` everywhere (logs, branches, CLI).
+
+```yaml
+provider: github
+github:
+  repos: ["myorg/api", "andrew/critters"]   # ticket-source repos (required)
+  statusField: "Status"                      # org issue field for statuses (default)
+  statusMap:                                 # optional: critter status → GitHub option/label name
+    "In Progress": "In progress"
+  statusTypes:                               # optional: statusType buckets for triggers
+    unstarted: ["Todo", "Backlog"]
+    started: ["In progress"]
+    completed: ["Done"]
+```
+
+Auth: `GITHUB_TOKEN` (repo read/write + issues read/write; org admin only needed for auto-creating status field options). Webhooks: set `GITHUB_WEBHOOK_SECRET` and point a repo/org webhook (events: `issues`) at `/webhook/github`.
+
+**Statuses are dual-mode, detected per repo at startup:**
+
+- **Field mode** — for repos in an organization, Critters uses the org's single-select [issue field](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/managing-issue-fields-in-your-organization) named by `statusField` (default `Status`). Create the field once as an org admin (Settings → Planning → Issue fields) with options like Todo / In Progress / In Review / Done; missing outcome options are auto-created when the token has org admin rights.
+- **Label mode** — personal repos (or orgs whose fields the token can't read) fall back to `status:<Name>` labels (`status:Todo`, `status:In Progress`, …), created and swapped automatically.
+
+**Limitations:** no attachment uploads (logs are posted as inline comment excerpts instead); status changes made by humans in field mode are discovered by polling, not webhooks (GitHub emits no event for field-value changes); api.github.com only (no Enterprise Server); `trigger.statusType` only works when `statusTypes` buckets are configured — otherwise triggers match the exact status name. If you use `teamRepos` to map issues to clone URLs, key it with the same casing as `github.repos` (lookup is case-sensitive).
 
 ## Documentation
 

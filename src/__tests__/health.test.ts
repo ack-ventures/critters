@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createHmac } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CritterTypeConfig } from "../critter-type.js";
 import { type HealthStatus, resetMetadataCache, resetMetricsSummaryCache, startHealthServer } from "../health.js";
@@ -561,5 +563,94 @@ describe("stop()", () => {
     } catch {
       // Expected - connection refused
     }
+  });
+});
+
+describe("POST /webhook/github", () => {
+  const secret = "gh-webhook-secret";
+
+  function signedRequest(body: string, event = "issues", sig?: string): RequestInit {
+    return {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-GitHub-Event": event,
+        "X-Hub-Signature-256": sig ?? `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`,
+      },
+      body,
+    };
+  }
+
+  function ghWebhookConfig() {
+    return {
+      githubWebhookSecret: secret,
+      githubRepos: ["myorg/api"],
+      critterTypes: [createMockCritterType()],
+    };
+  }
+
+  function issuesEventBody(fullName = "myorg/api", action = "labeled"): string {
+    return JSON.stringify({
+      action,
+      issue: { number: 42, state: "open", labels: [{ name: "Critter" }] },
+      repository: { full_name: fullName },
+    });
+  }
+
+  test("404 when github webhooks not configured", async () => {
+    const port = startServer(0, defaultStatus);
+    const res = await fetch(`http://localhost:${port}/webhook/github`, signedRequest("{}"));
+    expect(res.status).toBe(404);
+  });
+
+  test("401 on bad signature", async () => {
+    const port = startServer(0, defaultStatus, undefined, undefined, undefined, undefined, undefined, ghWebhookConfig());
+    const res = await fetch(`http://localhost:${port}/webhook/github`, signedRequest("{}", "issues", "sha256=deadbeef"));
+    expect(res.status).toBe(401);
+  });
+
+  test("400 on invalid JSON", async () => {
+    const port = startServer(0, defaultStatus, undefined, undefined, undefined, undefined, undefined, ghWebhookConfig());
+    const res = await fetch(`http://localhost:${port}/webhook/github`, signedRequest("not-json"));
+    expect(res.status).toBe(400);
+  });
+
+  test("ping event is a successful no-op", async () => {
+    const port = startServer(0, defaultStatus, undefined, undefined, undefined, undefined, undefined, ghWebhookConfig());
+    const res = await fetch(`http://localhost:${port}/webhook/github`, signedRequest('{"zen":"Keep it logically awesome."}', "ping"));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, triggered: false });
+  });
+
+  test("unconfigured repo does not trigger a poll", async () => {
+    const polls: string[] = [];
+    const triggers = { triggerPollForIssue: async (id: string) => { polls.push(id); return 1; } };
+    const port = startServer(0, defaultStatus, undefined, triggers, undefined, undefined, undefined, ghWebhookConfig());
+    const res = await fetch(`http://localhost:${port}/webhook/github`, signedRequest(issuesEventBody("other/repo")));
+    expect(await res.json()).toEqual({ ok: true, triggered: false });
+    expect(polls).toEqual([]);
+  });
+
+  test("valid labeled event triggers poll for owner/repo#N", async () => {
+    const polls: string[] = [];
+    const triggers = { triggerPollForIssue: async (id: string) => { polls.push(id); return 1; } };
+    const port = startServer(0, defaultStatus, undefined, triggers, undefined, undefined, undefined, ghWebhookConfig());
+    const res = await fetch(`http://localhost:${port}/webhook/github`, signedRequest(issuesEventBody()));
+    expect(await res.json()).toEqual({ ok: true, triggered: true, identifier: "myorg/api#42" });
+    expect(polls).toEqual(["myorg/api#42"]);
+  });
+});
+
+describe("GET /api/logs identifier decoding", () => {
+  test("percent-encoded github identifier is decoded before the workdir lookup", async () => {
+    // No activeCritterDetails — the lookup must go through findWorkDirs on
+    // disk, which matches the SANITIZED directory name.
+    const logDir = join(tempDir, "owner-repo-42-123");
+    mkdirSync(logDir, { recursive: true });
+    writeFileSync(join(logDir, ".critter-output-exec.json"), '{"type":"system","subtype":"init"}\n');
+    const port = startServer(0, defaultStatus, undefined, undefined, tempDir);
+    const res = await fetch(`http://localhost:${port}/api/logs/owner%2Frepo%2342`);
+    // 200 (log found via the decoded identifier) — an undecoded lookup 404s.
+    expect(res.status).toBe(200);
   });
 });

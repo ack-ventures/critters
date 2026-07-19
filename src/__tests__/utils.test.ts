@@ -13,6 +13,7 @@ import {
   formatDuration,
   formatPhaseStats,
   formatTokenCount,
+  sanitizeIdentifier,
   shortRepoName,
   slugify,
   tailLines,
@@ -93,6 +94,22 @@ describe("src/utils.ts", () => {
 
     test("default prefix is critter", () => {
       expect(branchName("ACK-1", "My Feature")).toBe("critter/ACK-1-my-feature");
+    });
+
+    test("github identifiers are sanitized (no # or extra / in the ref)", () => {
+      expect(branchName("owner/repo#42", "Fix bug")).toBe("critter/owner-repo-42-fix-bug");
+    });
+  });
+
+  describe("sanitizeIdentifier", () => {
+    test("no-op for Linear/Jira identifiers", () => {
+      expect(sanitizeIdentifier("ACK-123")).toBe("ACK-123");
+      expect(sanitizeIdentifier("PROJ-42")).toBe("PROJ-42");
+    });
+
+    test("replaces path/ref-hostile characters in github identifiers", () => {
+      expect(sanitizeIdentifier("owner/repo#42")).toBe("owner-repo-42");
+      expect(sanitizeIdentifier("a.b/c-d_e#7")).toBe("a-b-c-d-e-7");
     });
   });
 

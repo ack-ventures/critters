@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getCliAdapter, getCliAdapterByBinary } from "./cli/registry.js";
 import type { CliAdapter } from "./cli/types.js";
+import { sanitizeIdentifier } from "./utils.js";
 
 const PHASE_FILE_MAP: Record<string, string> = {
   planning: "plan",
@@ -39,7 +40,9 @@ export function findWorkDirs(workDir: string, identifier: string): { critterDirs
     return { critterDirs: [], reviewDirs: [] };
   }
 
-  const escaped = escapeRegExp(identifier);
+  // Work dirs are created with the sanitized identifier (see unified-spawner),
+  // so match on that form — no-op for Linear/Jira identifiers.
+  const escaped = escapeRegExp(sanitizeIdentifier(identifier));
   const critterDirPattern = new RegExp(`^${escaped}-\\d+$`);
   const reviewDirPattern = new RegExp(`^review-${escaped}-\\d+$`);
 
@@ -347,7 +350,8 @@ export function resolvePhasesFromAttachments(
   };
   const ORDER: Record<string, number> = { planning: 0, execution: 1, review: 2 };
 
-  const pattern = new RegExp(`^${escapeRegExp(identifier)}-(.+)-output\\.txt$`);
+  // Attachment names are written with the sanitized identifier (buildLogFileList).
+  const pattern = new RegExp(`^${escapeRegExp(sanitizeIdentifier(identifier))}-(.+)-output\\.txt$`);
   const seen = new Set<string>();
   const phases: Array<{ phase: string; url: string }> = [];
 

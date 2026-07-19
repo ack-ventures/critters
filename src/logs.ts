@@ -4,7 +4,7 @@ import { loadWorkDir } from "./config.js";
 import { STREAM_FILTER } from "./jq-filter.js";
 import { findWorkDirs, newestDir, phaseFileTag, renderReadableLines, resolveCliAdapterForLog } from "./log-resolver.js";
 
-const IDENTIFIER_RE = /^[A-Z]+-\d+$/;
+const IDENTIFIER_RE = /^([A-Z]+-\d+|[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+)$/;
 const FILTER_TMP_PATH = "/tmp/critters-logs-filter.jq";
 
 type Phase = "planning" | "execution" | "review";
@@ -52,7 +52,7 @@ function parseArgs(args: string[]): ParsedArgs {
   }
 
   if (!IDENTIFIER_RE.test(identifier)) {
-    console.error(`Invalid issue identifier: ${identifier}. Expected format: ABC-123`);
+    console.error(`Invalid issue identifier: ${identifier}. Expected format: ABC-123 or owner/repo#123`);
     process.exit(1);
   }
 

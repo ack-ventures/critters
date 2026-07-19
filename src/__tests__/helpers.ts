@@ -75,6 +75,14 @@ export function makeTestConfig(overrides?: Partial<Config>): Config {
       apiKey: base.linearApiKey,
       webhookSecret: base.linearWebhookSecret,
     },
+    github: {
+      token: undefined,
+      repos: [],
+      statusField: "Status",
+      statusMap: undefined,
+      statusTypes: undefined,
+      webhookSecret: base.githubWebhookSecret,
+    },
     daemon: {
       workDir: base.workDir,
       tmuxSession: base.tmuxSession,
