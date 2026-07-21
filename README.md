@@ -511,6 +511,8 @@ Auth: `GITHUB_TOKEN` (repo read/write + issues read/write; org admin only needed
 
 **Limitations:** no attachment uploads (logs are posted as inline comment excerpts instead); status changes made by humans in field mode are discovered by polling, not webhooks (GitHub emits no event for field-value changes); api.github.com only (no Enterprise Server); `trigger.statusType` only works when `statusTypes` buckets are configured — otherwise triggers match the exact status name. If you use `teamRepos` to map issues to clone URLs, key it with the same casing as `github.repos` (lookup is case-sensitive).
 
+**`gh` version:** use gh ≥ 2.96 (or at least newer than 2.45). Older releases — including the gh 2.45.0 shipped by Ubuntu 24.04 — fail `gh pr edit` with `GraphQL: Projects (classic) is being deprecated… (repository.pullRequest.projectCards)` on some repos, which silently disables Critters' plan/stats injection into PR bodies (logged as `Failed to update PR body with plan (non-fatal)`). Everything else still works.
+
 ## Documentation
 
 - [Self-Hosting Guide](docs/self-hosting.md) — deployment, systemd, remote access, monitoring
